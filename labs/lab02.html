@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>练习 02 · 命令行环境 · Missing Semester 2026</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="../assets/vz.css">
+<link rel="stylesheet" href="../assets/lab.css">
+<script>window.PAGE = { key: 'lab02', ch: 'ch02', type: 'lab', base: '../' };</script>
+<script src="../assets/course.js"></script>
+<script src="../assets/dg.js"></script>
+<script src="../assets/app.js"></script>
+<script src="data/lab02.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<header class="lab-head">
+  <div class="k">LAB 02 · 对应 <a href="../ch02.html">第 2 讲 · 命令行环境</a></div>
+  <h1>练习可视化笔记 · 命令行环境</h1>
+  <p class="lede">讲义第 2 讲一共 24 道练习，这里逐题讲。讲义按 8 个小节分组编号，这里改成连续编号。每题的标签里注明了“讲义小节 · 第几题”。每题先亮结论，再给真跑的代码和输出。接着打个比方讲原理，最后指出坑在哪。考点都写在代码注释里。官方不给答案，题解是笔记作者写的。<strong>所有输出都由脚本在本机真跑后自动收集</strong>。生成时间是 <b id="labGen">…</b>。</p>
+  <div class="lab-prog" id="labProg"><span class="t"></span><div class="bar"><div class="f"></div></div><button class="btn sm" id="labGo" type="button">定位到第一道未完成的题</button></div>
+  <div class="lab-legend">
+    <span><span class="wb gb">Git Bash 5.3 · Windows 本机</span> 真跑</span>
+    <span><span class="ec na">未实测</span> 本机没有对应环境，写明原因</span>
+    <span><span class="ann" style="display:inline-flex;margin:0;padding:1px 8px"><span class="ar">L3</span></span> 注释层（不可选中，复制不会带上）</span>
+  </div>
+</header>
+
+<h2 id="env" data-nav="环境检查">环境检查：本机是 Git Bash，没有 Linux 虚拟机</h2>
+<p class="lead">本页命令都在 Windows 的 Git Bash 里真跑。要用虚拟机或 tmux 的几条，标成了未实测。</p>
+<p>动手前先确认工具链。下面是生成本页时，在本机真跑的检查命令和输出：</p>
+<div data-env="gitbash"></div>
+<div class="callout warn"><div class="ct">本机限制与处理办法</div>
+<ul>
+<li><strong>没有 Linux 和虚拟机</strong>：Docker Desktop 启动不了。WSL 里也没有发行版。讲义“远程机器”那组练习要一台 Linux 虚拟机。凡是要 VM 上 sshd 的步骤，都标成了<strong>未实测</strong>。能在本机跑的部分照样真跑。比如生成密钥、解析 <code>~/.ssh/config</code>、模拟追加 authorized_keys。还有用 Python 写的转发器，演示端口转发的数据路径。最后是对示意配置文件跑加固脚本。</li>
+<li><strong>Git Bash 缺的工具</strong>：tmux、mosh、pgrep、pkill、sshd 都没有。练习 6 用 <code>/proc/&lt;PID&gt;/cmdline</code> 自己实现了 pgrep -lf 和 pkill -f。练习 9 和 23 未实测。</li>
+<li><strong>没有交互终端</strong>：本页命令由脚本批量执行，按不了 Ctrl-Z。所以用 <code>set -m</code> 打开作业控制，再用 <code>kill -TSTP %1</code> 代替 Ctrl-Z。你按 Ctrl-Z 时，终端驱动发的正是 SIGTSTP。需要交互式 shell 的地方，用 <code>bash -i &lt;&lt;'EOF'</code> 把命令从 stdin 喂进去。输出里会看到提示符 <code>bash-5.3$</code>。</li>
+<li><strong>隐私</strong>：每条命令都在一个全新的临时目录里跑。<code>HOME</code> 也指向这个沙箱。<strong>没有读写你真实的家目录、~/.ssh 和历史记录</strong>。输出里的 <code>/tmp/ms26-xxxxxxxx</code>，就是那次运行的沙箱目录。练习 3 要比较全部环境变量。为了不把本机环境打到页面上，先用 <code>env -i</code> 清空环境再做。</li>
+</ul></div>
+<div class="callout tip"><div class="ct">怎么用这一页</div>
+<p>代码块右上角有个“复制”。它复制的是源文件的原始字节，不带行号和注释层。“注释”按钮能隐藏或显示所有注释。每道题标题右边可以勾“完成”。想自己验证，就按<a href="#selfcheck">页尾“自查”</a>的方法重跑。</p></div>
+
+<!-- ======================= 1 ======================= -->
+<h2 id="ex01" data-nav="1 · -- 结束选项">练习 1 · <code>--</code> 之后的参数，一律不当选项 <label class="ex-done"><input type="checkbox" data-ex="ex01">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Arguments and Globs · 1</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：你可能见过 <code>cmd --flag -- --notaflag</code> 这样的命令。<code>--</code> 是个特殊参数，告诉程序停止解析选项。它之后的一切，都当作位置参数。这有什么用？试试 <code>touch -- -myfile</code>，然后不用 <code>--</code> 删掉它。</p>
+<p class="lead">答案是 <code>rm ./-myfile</code>。加个路径前缀，文件名就不以 <code>-</code> 开头了。程序不会再把它当选项。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>参数只是字符串，flag 是程序自己解析的约定。见<a href="../ch02.html#s2">第 2 讲第 2 节</a>。glob 在程序运行前展开，见<a href="../ch02.html#s3">第 3 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p>程序从左到右看参数。以 <code>-</code> 开头的当选项，其余当文件名。文件名本身以 <code>-</code> 开头时，就分不清了。<code>--</code> 是绝大多数程序都认的约定，getopt 系列解析库都支持。它之后的参数一律不当选项。另一个办法是给文件名加路径前缀，写成 <code>./-myfile</code>。这样它就不以 <code>-</code> 开头了。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex01-a"></div>
+<p>读输出：<code>rm -myfile</code> 被当成了选项 <code>-m -y …</code>。GNU rm 报 unknown option，还贴心地提示 <code>rm ./-myfile</code>。加上 <code>--</code> 之后 exit=0。最后 <code>ls | wc -l</code> 为 0，说明文件确实删掉了。题目要求“不用 <code>--</code> 删掉”，答案就是 <code>rm ./-myfile</code>。</p></div>
+<p class="like"><b>打个比方</b><code>--</code> 像检票口喊一声“后面的都是乘客”。之后哪怕有人举着“司机”的牌子，也只当他是乘客。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：glob 展开出一个“选项”</div>
+<p><code>--</code> 真正保命的是这种场景。目录里恰好有个叫 <code>-l</code> 的文件。</p>
+<div data-run="ex01-b"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div><code>ls *</code> 输出的是 a.txt 和 b.txt 的<strong>长格式</strong>。文件 <code>-l</code> 却不见了。</div></div>
+<div class="row"><b>原因</b><div>shell 把 <code>*</code> 展开成 <code>-l a.txt b.txt</code>，按字母序 <code>-</code> 排在前面。ls 收到的就是 <code>ls -l a.txt b.txt</code>。换成 <code>rm *</code>，目录里又有个叫 <code>-rf</code> 的文件，后果可想而知。</div></div>
+<div class="row good"><b>正确写法</b><div><code>ls -- *</code> 或 <code>rm ./*</code>。这样 -l 就被当作文件名列了出来。</div></div></div>
+<p>搜索内容以 <code>-</code> 开头时，道理一样：</p>
+<div data-run="ex01-c"></div>
+<p><code>grep -v notes.txt</code> 把 <code>-v</code> 当成了反向匹配选项。notes.txt 成了模式，grep 转去读 stdin。这里 stdin 是空的，于是返回 1。<code>grep -- -v notes.txt</code> 才是在 notes.txt 里找 -v。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>cmd --flag -- --notaflag   <span class="cm"># --notaflag 只是普通位置参数，不会被当成选项</span>
+                           <span class="cm"># -- 本身被解析库吃掉，不出现在位置参数里</span>
+rm ./-myfile               <span class="cm"># 不用 -- 也能删：加个路径前缀</span>
+grep -- -v notes.txt       <span class="cm"># 在文件里搜 -v，而不是打开反向匹配</span></pre></div>
+
+<!-- ======================= 2 ======================= -->
+<h2 id="ex02" data-nav="2 · ls 组合选项">练习 2 · 需求逐条翻成 flag：<code>ls -lath --color=auto</code> <label class="ex-done"><input type="checkbox" data-ex="ex02">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Arguments and Globs · 2</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：读 <a href="https://www.man7.org/linux/man-pages/man1/ls.1.html" target="_blank" rel="noopener">man ls</a>，写一条 ls 命令。要求是：包含所有文件，含隐藏文件。大小用人类可读格式，比如 454M 而不是 454279954。按修改时间排序。输出带颜色。样例输出见讲义。</p>
+<p class="lead">答案是 <code>ls -lath --color=auto</code>。单字母 flag 能合并，顺序随意。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<div class="tbl-wrap"><table class="tbl"><tr><th>需求</th><th>flag（man ls）</th></tr>
+<tr><td>列出所有文件，包括以 . 开头的</td><td><code>-a</code>，也就是 <code>--all</code></td></tr>
+<tr><td>大小人类可读</td><td><code>-h</code>，要配合长格式 <code>-l</code> 才看得到大小</td></tr>
+<tr><td>按修改时间排序，最新的在前</td><td><code>-t</code></td></tr>
+<tr><td>彩色</td><td><code>--color=auto</code>，输出到终端时才上色</td></tr>
+</table></div>
+<p>答案是 <code>ls -lath --color=auto</code>。讲义源码里注释掉的参考答案，就是这一条。单字母 flag 顺序随意，<code>-ltha</code> 也一样。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex02-a"></div>
+<p>读输出：准备步骤用 <code>touch -d</code> 设了文件时间，和讲义样例相近。<code>..</code> 是沙箱所在的临时目录，刚被修改过，所以排第一。<code>.hidden</code> 和 <code>baz</code> 时间相同。<code>1153434</code> 字节显示成 <code>1.2M</code>，因为 -h 向上取整。文件日期超过半年，ls 就显示年份，不显示时刻。</p></div>
+<p class="like"><b>打个比方</b>flag 像点奶茶的选项：大杯、少冰、加珍珠。每个字母管一件事，合在一张单子上写就行。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：管道里看不到颜色</div><div data-run="ex02-b"></div>
+<div class="pit-card"><div class="row"><b>现象</b><div><code>--color=auto</code> 接管道时，没有任何颜色代码。<code>--color=always</code> 才把转义序列写进输出。<code>cat -v</code> 把它显示成 <code>^[[01;34m</code>，01;34 是粗体蓝色。</div></div>
+<div class="row"><b>原因</b><div>auto 的意思是，stdout 是终端才上色。颜色码写进管道或文件，只会变成乱码。所以 auto 是正确的默认值。本页输出都是经管道收集的，只能用 <code>cat -v</code> 让你看见颜色码。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>ls -lath --color=auto        <span class="cm"># a 全部，l 长格式，t 按时间，h 人类可读</span>
+ls -lAth                     <span class="cm"># . 和 .. 也有修改时间，所以会参与排序。-A 去掉它们</span>
+ls --color=always | cat -v   <span class="cm"># 颜色码写进了管道，显示成 ^[[01;34m 这类乱码</span></pre></div>
+
+<!-- ======================= 3 ======================= -->
+<h2 id="ex03" data-nav="3 · printenv vs export">练习 3 · printenv 看子进程的环境，export 看 shell 的记录 <label class="ex-done"><input type="checkbox" data-ex="ex03">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Arguments and Globs · 3</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：进程替换 <code>&lt;(command)</code> 让你把命令输出当文件用。用 <code>diff</code> 加进程替换，比较 <code>printenv</code> 和 <code>export</code> 的输出。为什么不一样？提示：<code>diff &lt;(printenv | sort) &lt;(export | sort)</code>。</p>
+<p class="lead">环境变量是进程的一个属性。printenv 看的是<strong>子进程收到的</strong>环境。export 看的是 <strong>shell 自己记的</strong>导出表。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>进程替换和环境变量，见<a href="../ch02.html#s5">第 2 讲第 5 节</a>，有演示。</p></div>
+<div class="callout extra"><div class="ct">实测改动</div><p>直接在你的 shell 里跑，会把整个环境打出来。里面有 PATH、用户名和各种令牌。为了不把本机环境写进页面，先用 <code>env -i</code> 清空环境。只给 HOME 和 PATH，再启动一个干净的 bash 做比较。命令本身不变。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex03-a"></div>
+<p>读输出时，<code>&lt;</code> 是 printenv 的行，<code>&gt;</code> 是 export 的行：</p>
+<ul>
+<li><strong>格式不同</strong>：printenv 打印 <code>NAME=value</code>。export 不带参数时，打印能被 shell 重新读入的 <code>declare -x NAME="value"</code>。所以每一行都“不同”。</li>
+<li><strong>只在 export 里</strong>：<code>EMPTY</code>。它被标成导出，但从没赋值。shell 记得这个标记，可它不会进入子进程的环境。printenv 自然看不到。</li>
+<li><strong>只在 printenv 里</strong>：<code>_=/usr/bin/printenv</code>。bash 启动每个子进程前，会把 <code>$_</code> 设成该程序的路径。再把它放进<em>那个子进程的</em>环境。shell 自己的导出表里没有这一项。</li>
+<li><strong>两边都没有</strong>：<code>local_var</code>。它是没 export 的本地变量。</li>
+<li>Git Bash 特有：<code>MSYSTEM</code>、<code>SYSTEMROOT</code>、<code>WINDIR</code> 就算 <code>env -i</code> 也会被 MSYS 运行时补回来。OLDPWD 是 <code>cd /</code> 之前的沙箱目录。</li>
+</ul></div>
+<div data-run="ex03-b"></div>
+<p><code>declare -p local_var</code> 显示 <code>declare --</code>，没有 x 标记。对比 export 输出里的 <code>declare -x</code>，x 就是“导出”标记。</p>
+<p class="like"><b>打个比方</b>export 表像公司的对外公开名单。printenv 看的是新员工手里那份复印件。名单上挂了名、却没填内容的，复印件里就没有。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>diff &lt;(printenv | sort) &lt;(export | sort)   <span class="cm"># diff 要两个输入，stdin 却只有一个</span>
+                                           <span class="cm"># &lt;( ) 把两条命令的输出各变成一个文件名</span>
+                                           <span class="cm"># 本机实测是 /dev/fd/63 这类</span>
+export EMPTY                               <span class="cm"># 只标记导出、没赋值：export 里有，printenv 里没有</span>
+declare -p local_var                       <span class="cm"># declare -- 表示没导出，-x 才是导出</span></pre></div>
+
+<!-- ======================= 4 ======================= -->
+<h2 id="ex04" data-nav="4 · marco / polo">练习 4 · marco 和 polo 必须是函数，还得 source 进来 <label class="ex-done"><input type="checkbox" data-ex="ex04">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Environment Variables · 1</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：写 bash 函数 <code>marco</code> 和 <code>polo</code>。执行 marco 时，以某种方式保存当前工作目录。之后不管你在哪个目录，执行 polo 都要 cd 回去。回到的就是执行 marco 时的那个目录。可以把代码写进 <code>marco.sh</code>，用 <code>source marco.sh</code> 载入或重新载入。</p>
+<p class="lead">marco 把当前目录存进一个变量，polo 再 cd 回去。它们必须在当前 shell 里运行，所以要 source，不能 bash 一个脚本。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>变量与 export，见<a href="../ch02.html#s5">第 2 讲第 5 节</a>。cd 为什么必须是内建命令，见<a href="lab01.html#ex07">第 1 讲练习 7</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="ex04/marco.sh" data-new="1-15"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex04-a"></div>
+<p>在深层目录 marco，跳到 <code>/usr/bin</code>，polo 一下就回来了。</p></div>
+<p class="like"><b>打个比方</b>marco 像在地图上插面小旗，polo 是“导航回小旗”。旗子得插在你手里那张地图上。插在复印件上，你自己的地图没变化。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：把它当脚本运行</div><div data-run="ex04-b"></div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>bash marco.sh</code>，然后 <code>marco</code></div></div>
+<div class="row"><b>报错</b><div><code>marco: command not found</code>，exit=127</div></div>
+<div class="row"><b>原因</b><div><code>bash marco.sh</code> 在子进程里定义了两个函数。子进程一结束，函数跟着消失。就算函数还在，它在子进程里 cd，也改不了你的 shell。<code>source</code> 才让文件在<strong>当前</strong> shell 里逐行执行。</div></div>
+<div class="row good"><b>防御</b><div>没先运行 marco 就 polo 怎么办？第 10 行检查 MARCO 是不是空的，给出提示并 return 1。不检查的话，<code>cd ""</code> 在 bash 5.3 里会报 <code>cd: null directory</code>。这是本机另测的。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>source marco.sh          <span class="cm"># 在当前 shell 里定义函数，之后 marco 和 polo 才能用</span>
+bash marco.sh            <span class="cm"># 函数定义在子进程里，跑完就没了</span>
+echo "$PWD" &gt; ~/.marco   <span class="cm"># 改存进文件，就能跨终端：这边 marco，那边 polo（补充）</span>
+                         <span class="cm"># 代价是多一次文件读写</span></pre></div>
+
+<!-- ======================= 5 ======================= -->
+<h2 id="ex05" data-nav="5 · 跑到失败为止">练习 5 · 用返回码驱动循环，每轮覆盖写日志 <label class="ex-done"><input type="checkbox" data-ex="ex05">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Return Codes · 1</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：有个命令偶尔才失败。为了调试，要抓到失败那次的输出。可等它失败很费时间。写一个 bash 脚本，反复运行下面的脚本，直到它失败。标准输出和标准错误要分别存进文件。最后把它们全部打印出来。加分项：报告跑了多少次才失败。</p>
+<p class="lead">让返回码驱动循环，成功就再跑一轮，失败就停。两条流用 <code>&gt;</code> 每轮覆盖，写进两个文件。循环停下时，文件里正好只剩失败那一轮。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>返回码与 <code>!</code>，见<a href="../ch02.html#s6">第 2 讲第 6 节</a>。重定向 stdout 和 stderr，见<a href="../ch02.html#s4">第 4 节</a>。它和第 1 讲的 flaky 测试脚本是同一个套路。见<a href="../ch01.html#s16">第 1 讲第 16 节</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div>
+<p>被测脚本是讲义原文，一字未改：</p><div data-file="ex05/random.sh"></div>
+<p>题解：</p><div data-file="ex05/run_until_fail.sh" data-new="1-14"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex05-a"></div>
+<p>失败那一轮的两条流，分别落在 out.log 和 err.log 里。每次运行的轮数都不同，连跑三次：</p><div data-run="ex05-b"></div>
+<p>讲义的 Markdown 源码里，藏着一份注释掉的参考答案。它用 <code>until [[ "$?" -ne 0 ]]</code> 判断上一轮的返回码。再用 <code>&amp;&gt;</code> 把两条流写进同一个文件。照着它跑一遍：</p><div data-run="ex05-c"></div>
+<p>它能工作，但两条流混进了一个文件。分不清哪句来自 stderr。题目要求“分别存进文件”。所以上面的题解用了两个文件。</p></div>
+<p class="like"><b>打个比方</b>这像守在机器前一直试，试到出事为止。每次只留最后一张小票，出事那张自然就在手里。</p>
+<div data-vz="lab02-until"></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：用了追加，或者没重定向</div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>bash random.sh &gt;&gt; out.log 2&gt;&gt; err.log</code>，也就是追加</div></div>
+<div class="row"><b>后果</b><div>日志里堆着上百轮 “Everything went according to plan”。失败那一轮埋在了最后。用 <code>&gt;</code> 每轮覆盖，循环结束时文件里<strong>只剩</strong>失败那一轮。这正是我们要的。</div></div></div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>while bash random.sh; do count=$((count+1)); done</code>，不重定向</div></div>
+<div class="row"><b>后果</b><div>能停在失败处，但上百行成功输出会刷屏。失败信息一闪而过，题目还要求最后打印全部。这条是推理，没单独实测。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>if ! bash random.sh &gt; out.log 2&gt; err.log; then break; fi   <span class="cm"># 每轮覆盖，失败就跳出</span>
+<span class="cm"># 每轮失败概率 1/100，要跑的轮数服从几何分布</span>
+<span class="cm"># 期望是 1/p = 100 轮，标准差约 99.5</span>
+<span class="cm"># 所以三次实测是 26、10、25 轮，差这么多很正常</span></pre></div>
+
+<!-- ======================= 6 ======================= -->
+<h2 id="ex06" data-nav="6 · Ctrl-Z / bg / pkill">练习 6 · pgrep -f 按完整命令行找进程，不用手打 PID <label class="ex-done"><input type="checkbox" data-ex="ex06">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Signals and Job Control · 1</span><span class="tag gb">Git Bash 实测（模拟 pgrep）</span><span class="tag lnx">Linux 未实测</span></div>
+<p class="q-orig"><b>原题</b>：在终端里启动 <code>sleep 10000</code>。用 <kbd>Ctrl</kbd>+<kbd>Z</kbd> 挂起它，再用 <code>bg</code> 让它在后台继续跑。然后用 <a href="https://www.man7.org/linux/man-pages/man1/pgrep.1.html" target="_blank" rel="noopener">pgrep</a> 找到它的 PID，用 pkill 杀掉它。全程不许亲手输入 PID。提示：<code>-lf</code>。</p>
+<p class="lead">Linux 上的答案是 <code>pgrep -lf "sleep 10000"</code> 加 <code>pkill -f "sleep 10000"</code>。<code>-f</code> 匹配的是完整命令行，不只是程序名。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>作业控制与信号，见<a href="../ch02.html#s8">第 2 讲第 8 节</a>，有状态机演示。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p>pgrep 列出命令行匹配的进程。<code>-f</code> 匹配完整命令行，<code>-l</code> 顺便显示名字。pkill 给匹配到的进程发 SIGTERM。两者都来自 procps 包，原理是遍历 <code>/proc/&lt;PID&gt;/cmdline</code>。Git Bash 没有 procps，但 MSYS 运行时同样提供了 /proc。于是自己写一个：</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写（Git Bash 下的替代品）</div><div data-file="ex06/pgrep_lf.sh" data-new="1-23"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex06-a"></div>
+<p>读输出：先确认本机确实没有 pgrep 和 pkill。<code>kill -TSTP %1</code> 代替 Ctrl-Z 后，作业显示 Stopped。<code>bg %1</code> 发 SIGCONT，让它在后台 Running。<code>pgrep_lf</code> 打印出那个 sleep 的 PID 和完整命令行。<code>pkill_f</code> 发 SIGTERM，jobs 报告 Terminated。再查一次，已经没有匹配的进程。全程没有手打 PID。</p>
+<div data-run="ex06-lnx"></div></div>
+<p class="like"><b>打个比方</b>pgrep -f 像按快递单上的完整地址找包裹。只按程序名找，就像只按“张三”找。会翻出一堆同名的。</p>
+<div data-vz="lab02-pgrep"></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：本机实测踩到的两个坑</div>
+<div class="pit-card"><div class="row bad"><b>现象 1</b><div>第一版脚本在 <code>sleep 10000 &amp;</code> 之后，立刻 <code>kill -TSTP %1</code>。jobs 仍显示 Running。接着 <code>bg</code> 报 “job 1 already in background”，pkill 也杀不掉它。</div></div>
+<div class="row"><b>原因</b><div>这是竞争。信号发出时，sleep 可能还没完全启动。bash 也还没来得及收到“已暂停”的通知。进程其实已经停下了，Git Bash 的 ps 第一列显示 S。而停住的进程在 Git Bash 下，连 TERM 和 KILL 都处理不了。最后只能从 Windows 那边结束它。加一句 <code>sleep 0.3</code> 让状态稳定，问题就消失了。上面的题解就是这样写的。</div></div></div>
+<div class="pit-card"><div class="row bad"><b>现象 2</b><div>pgrep_lf 把测试脚本自己也匹配上了。前提是没跳过 bash 进程。</div></div>
+<div class="row"><b>原因</b><div>脚本是用 <code>bash -c '…sleep 10000…'</code> 运行的。这个 bash 的命令行里，也有 “sleep 10000”。真正的 pgrep 有同样的问题。在脚本里用 <code>pgrep -f</code> 时，小心匹配到自己的父进程（补充）。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>pgrep -l sleep            <span class="cm"># 只匹配进程名，所有 sleep 都会找到</span>
+pgrep -lf "sleep 10000"   <span class="cm"># 匹配完整命令行，能精确到参数 10000</span>
+pkill -f "sleep 10000"    <span class="cm"># 默认发 SIGTERM</span></pre></div>
+
+<!-- ======================= 7 ======================= -->
+<h2 id="ex07" data-nav="7 · wait 与 pidwait">练习 7 · wait 只能等自己的子进程，别人的要轮询 <label class="ex-done"><input type="checkbox" data-ex="ex07">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Signals and Job Control · 2</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：想等一个进程结束，再启动另一个。限制进程是 <code>sleep 60 &amp;</code>。一种办法是用 <a href="https://www.man7.org/linux/man-pages/man1/wait.1p.html" target="_blank" rel="noopener">wait</a>：启动 sleep，让一条 <code>ls</code> 等它结束。但换到另一个 bash 会话里，这招就不灵了。因为 wait 只对子进程有效。有一点课上没讲：<code>kill</code> 成功时返回 0，否则返回非 0。<code>kill -0</code> 不发信号，但进程不存在时返回非 0。写一个 bash 函数 <code>pidwait</code>。它接收一个 PID，一直等到该进程结束。用 sleep 避免白白占用 CPU。</p>
+<p class="lead">自己的子进程，直接 <code>wait $pid</code>。别的进程就用 <code>kill -0</code> 轮询，每轮 sleep 1 秒，直到它返回非 0。</p>
+<div class="callout extra"><div class="ct">实测改动</div><p>把 <code>sleep 60</code> 缩短成 <code>sleep 3</code>，不然每次生成页面都要干等一分钟。逻辑完全相同。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：第一部分，wait</div><div data-run="ex07-a"></div>
+<p>时间戳差 3 秒。wait 一直阻塞到后台 sleep 结束，之后 ls 才运行。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：第二部分，pidwait</div><div data-file="ex07/pidwait.sh" data-new="1-8"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex07-b"></div>
+<p>读输出：另一个 bash 里，<code>wait $P</code> 立刻失败了。<code>bash -c</code> 是一个新的 shell 进程。报错是 <strong>pid … is not a child of this shell</strong>，退出码 127。题目说的情况真实出现了。同一个“外人” shell 里换成 pidwait，就能一直等到 sleep 结束。开始和结束的时间戳差 4 秒。那是 sleep 剩下的约 3 秒，加上最多 1 秒的轮询间隔。</p></div>
+<p class="like"><b>打个比方</b>wait 像父母等自家孩子放学，学校会通知。pidwait 像等邻居家孩子，只能每隔一会儿去门口看一眼。</p>
+<div data-vz="lab02-pidwait"></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>wait $P                                           <span class="cm"># 只对本 shell 的子进程有效，否则报 not a child，返回 127</span>
+kill -0 $P                                        <span class="cm"># 不发信号，只测进程还在不在</span>
+while kill -0 "$1" 2&gt;/dev/null; do sleep 1; done   <span class="cm"># pidwait 的核心</span>
+<span class="cm"># 删掉 sleep 1：循环不停地启动 kill -0，把一个 CPU 核心占满</span>
+<span class="cm"># sleep 越长越省 CPU，但发现得越晚</span></pre></div>
+
+<!-- ======================= 8 ======================= -->
+<h2 id="ex08" data-nav="8 · 最近修改的文件">练习 8 · 让 find 打印“时间 路径”，再统一排序 <label class="ex-done"><input type="checkbox" data-ex="ex08">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Files and Permissions · 1（进阶）</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：进阶题。写一条命令或脚本，递归找出目录里最近修改的文件。更一般地，你能按修改时间列出所有文件吗？</p>
+<p class="lead">让 find 给每个文件打印一行“时间戳 路径”。按数值排序后，最后一行就是最新的。这比在 ls 的输出上做文章可靠得多。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>find 见<a href="../ch01.html#s10">第 1 讲第 10 节</a>。sort、tail、cut 流水线见<a href="../ch01.html#s12">第 1 讲第 12 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p>GNU find 的 <code>-printf</code> 能打印每个文件的元数据。<code>%T@</code> 是修改时间的 Unix 时间戳，带小数。<code>%p</code> 是路径。<code>%TY-%Tm-%Td %TH:%TM</code> 是人能读的日期。先打印“时间 路径”，再按数值排序。最后一行就是最新的。<code>-printf</code> 是 GNU 扩展，macOS 自带的 BSD find 没有。可以改用 <code>stat</code>，或者装 GNU findutils（补充）。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex08-a"></div></div>
+<p class="like"><b>打个比方</b>ls -tR 像每个班各自按身高排队。find 加 sort 像全校站成一排再排。想找全校最高的，只能用后一种。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：ls -tR 不是全局排序</div><div data-run="ex08-b"></div>
+<div class="pit-card"><div class="row"><b>现象</b><div><code>ls -tR</code> 确实递归了，但每个目录<strong>各自</strong>排序。最新的 helpers.py 埋在最后一段。你没法一眼看出全局最新的是谁。</div></div>
+<div class="row good"><b>正确写法</b><div>让 find 把所有文件压平成一个列表。再统一排序，就是上面的写法。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>find proj -type f -printf '%T@ %p\n' | sort -n | tail -n 1   <span class="cm"># 全局最新的文件在最后一行</span>
+ls -tR proj                                                  <span class="cm"># 每个目录各排各的，不是全局</span>
+<span class="cm"># 为什么用 %T@ 排：精确到小数秒，同一分钟改的文件也分得出先后</span>
+<span class="cm"># “2026-01-13 08:15”按字典序排也对，但只精确到分钟</span></pre></div>
+
+<!-- ======================= 9 ======================= -->
+<h2 id="ex09" data-nav="9 · tmux 教程与定制">练习 9 · tmux 先练熟三层结构，配置放进 dotfiles <label class="ex-done"><input type="checkbox" data-ex="ex09">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Terminal Multiplexers · 1</span><span class="tag lnx">tmux 未实测</span></div>
+<p class="q-orig"><b>原题</b>：跟着这篇 <a href="https://www.hamvocke.com/blog/a-quick-and-easy-guide-to-tmux/" target="_blank" rel="noopener">tmux 教程</a>学一遍。然后按<a href="https://www.hamvocke.com/blog/a-guide-to-customizing-your-tmux-conf/" target="_blank" rel="noopener">这些步骤</a>，做一些基本定制。</p>
+<p class="lead">会话、窗口、窗格三层先练熟，再写一份 <code>~/.tmux.conf</code>。本机没有 tmux，配置写好了，但没实测。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>tmux 的三层结构和前缀键，见<a href="../ch02.html#s11">第 2 讲第 11 节</a>，有演示。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>怎么做（在 Linux、macOS 或 WSL 上）</div>
+<ol>
+<li>安装：<code>sudo apt install tmux</code> 或 <code>brew install tmux</code>。</li>
+<li>照第 2 讲第 11 节的表格逐个练。先 <code>tmux new -s work</code> 开会话，再用 <code>&lt;C-b&gt; "</code> 或 <code>%</code> 分割，用 <code>&lt;C-b&gt; 方向键</code> 切换。然后 <code>&lt;C-b&gt; c</code> 开窗口，<code>&lt;C-b&gt; d</code> 分离。最后 <code>tmux ls</code> 看一眼，<code>tmux a -t work</code> 接回。</li>
+<li>在 VM 里跑一个 <code>sleep 1000</code>。分离后断开 SSH，重连再接回，确认它还在跑。这是 tmux 最有价值的地方。</li>
+<li>写配置文件。下面这份放在 dotfiles 仓库里。练习 14 的安装脚本会把它链接到 <code>~/.tmux.conf</code>。改完在 tmux 里按 <code>前缀 r</code> 重载。</li>
+</ol></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="dotfiles/tmux/tmux.conf" data-new="1-19"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex09-a"></div><div data-run="ex09-lnx"></div>
+<p>本机能做的只有两件事。确认 tmux 不存在，再数一下配置里有 9 条有效指令。<strong>检验标准</strong>要在有 tmux 的机器上看。<code>tmux show-options -g prefix</code> 应输出 <code>prefix C-a</code>。<code>tmux list-keys</code> 里能看到 <code>|</code> 和 <code>-</code> 绑定到 split-window。鼠标能点选窗格。</p></div>
+<p class="like"><b>打个比方</b>tmux 配置像给工具箱重新排格子。前缀改成 C-a，就像把最常用的扳手挪到手边。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>tmux source-file ~/.tmux.conf   <span class="cm"># 改了配置，开着的 tmux 不会自动生效</span>
+                                <span class="cm"># tmux server 只在启动时读一次配置</span>
+                                <span class="cm"># 配置里绑的“前缀 r”就是干这个的</span>
+<span class="cm"># 不想 source，就杀掉 server 重开。和改了 .bashrc 要 source 一个道理</span></pre></div>
+
+<!-- ======================= 10 ======================= -->
+<h2 id="ex10" data-nav="10 · alias dc=cd">练习 10 · alias dc=cd 一行搞定，但只在交互式 shell 里生效 <label class="ex-done"><input type="checkbox" data-ex="ex10">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Aliases and Dotfiles · 1</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：建一个别名 <code>dc</code>。你把 cd 打错时，它也能用。</p>
+<p class="lead">答案就一行 <code>alias dc=cd</code>，放进 dotfiles 的 <code>bash/aliases</code>。脚本里它不起作用，因为非交互式 shell 不展开别名。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>alias 见<a href="../ch02.html#s13c">第 2 讲第 13 节的别名部分</a>。练习 13、14 会把它放进 dotfiles。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex10-a"></div>
+<p>第一行说明，Git Bash 里本来没有叫 dc 的命令。在 Linux 上，<code>dc</code> 往往是个真实存在的程序。它是“桌面计算器”，bc 的兄弟。别名会盖过它，这一点没实测。随后在交互式 bash 里定义别名，<code>dc /usr</code> 确实切换了目录。</p></div>
+<p class="like"><b>打个比方</b>别名像输入法里的自定义短语，只有你手打时才会替换。脚本是印好的文章，没人在打字，替换就不会发生。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：脚本里别名不生效</div><div data-run="ex10-b"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>在 <code>bash -c</code> 里写 <code>alias dc=cd; dc /usr</code>，结果报 <code>dc: command not found</code>。</div></div>
+<div class="row"><b>原因</b><div>非交互式 shell 默认不展开别名，<code>expand_aliases</code> 选项是关着的。而且 bash 是读完<strong>一整行</strong>才执行的。同一行里刚定义的别名，对这一行本身不起作用。所以第二个例子做了两件事。打开选项，再把定义和使用分在两行。</div></div>
+<div class="row good"><b>结论</b><div>别名是给人敲命令用的。脚本里请用函数。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>alias dc=cd        <span class="cm"># 对：= 两边没有空格</span>
+alias dc = cd      <span class="cm"># 错：alias 收到 dc、=、cd 三个参数，当成查询，找不到就报 not found</span>
+alias dc=cd; dc /  <span class="cm"># 同一行定义、同一行用，不生效。bash 读完一整行才执行</span></pre></div>
+
+<!-- ======================= 11 ======================= -->
+<h2 id="ex11" data-nav="11 · 最常用的命令">练习 11 · 先 sort 再 uniq -c，数出最常用的 10 条命令 <label class="ex-done"><input type="checkbox" data-ex="ex11">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Aliases and Dotfiles · 2</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：运行 <code>history | awk '{$1="";print substr($0,2)}' | sort | uniq -c | sort -n | tail -n 10</code>，得到你最常用的 10 条命令。考虑给它们写更短的别名。注意，这条适用于 Bash。zsh 要用 <code>history 1</code> 代替 <code>history</code>。</p>
+<p class="lead">awk 先删掉行号，<code>sort | uniq -c</code> 计数，<code>sort -n | tail</code> 取最多的 10 条。用得最多的，最值得起别名。</p>
+<div class="callout extra"><div class="ct">实测改动</div><p>不读你的真实历史。用 <code>history -r ex11/history.txt</code>，把一份 20 行的示意历史读进 bash 的历史列表。再运行题目里的原命令。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<figure class="fig"><script>
+DG('flow', { nodeH: 50, cols: [
+  [ { id: 'a', l: 'history', s: '编号 + 命令', tone: 'teal' } ], [ { id: 'b', l: "awk '{$1=\"\"…}'", s: '清掉第 1 列编号', tone: 'info' } ],
+  [ { id: 'c', l: 'sort | uniq -c', s: '相同命令计数', tone: 'info' } ], [ { id: 'd', l: 'sort -n', s: '次数从小到大', tone: 'info' } ], [ { id: 'e', l: 'tail -n 10', s: '最多的 10 条', tone: 'ok' } ]
+], edges: [ ['a', 'b', '|', 'data'], ['b', 'c', '|', 'data'], ['c', 'd', '|', 'data'], ['d', 'e', '|', 'data'] ] });
+</script><figcaption>awk 给 $1 赋空串后，会用空格重组整行。开头因此多出一个空格，再用 substr($0,2) 去掉它</figcaption></figure></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex11-a"></div>
+<p>git status 用了 6 次，ls -la 用了 4 次。给它们起 <code>gs</code>、<code>ll</code> 这样的别名最划算。这两个已经写进 dotfiles 的 bash/aliases。</p></div>
+<p class="like"><b>打个比方</b>像月底翻外卖记录，看哪家点得最多。点得最多的那家，最值得设成快捷下单。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：统计把自己也算进去了</div><div data-run="ex11-b"></div>
+<div class="pit-card"><div class="row"><b>现象</b><div>你刚敲下的 <code>history …</code> 这一行，在<strong>执行前</strong>就被记进了历史。编号是 21，交互式 bash 就是这样。</div></div>
+<div class="row"><b>影响</b><div>统计结果里会多出一条 “history | awk …”，次数为 1。不碍事，但别惊讶。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>sort | uniq -c   <span class="cm"># 对：先排序，散在各处的 git status 才会挨在一起</span>
+uniq -c          <span class="cm"># 错：uniq 只合并相邻的重复行（第 1 讲）</span>
+history 1        <span class="cm"># zsh 要这样写，才列出全部历史</span></pre></div>
+
+<!-- ======================= 12 ======================= -->
+<h2 id="ex12" data-nav="12 · dotfiles 仓库">练习 12 · dotfiles 就是一个按工具分目录的 git 仓库 <label class="ex-done"><input type="checkbox" data-ex="ex12">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Aliases and Dotfiles · 3</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：给你的 dotfiles 建一个文件夹，并设置版本控制。</p>
+<p class="lead">建一个 git 仓库，按工具分子目录。练习 13 到 17 都在它上面接着做。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>dotfiles 的组织方式，见<a href="../ch02.html#s14">第 2 讲第 14 节</a>，有演示。git 本身第 5 讲细讲。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>结构</div>
+<figure class="fig"><script>
+DG('tree', { noteX: 300, root: { l: 'dotfiles/', s: 'git 仓库（练习 12）', tone: 'ok', c: [
+  { l: '.gitattributes', s: '统一 LF 换行（练习 15 的坑）', tone: 'warn' },
+  { l: 'bash/', c: [ { l: 'bashrc', s: '练习 13 → ~/.bashrc' }, { l: 'aliases', s: '练习 10/11 → ~/.bash_aliases' } ] },
+  { l: 'git/gitconfig', s: '→ ~/.gitconfig' },
+  { l: 'tmux/tmux.conf', s: '练习 9 → ~/.tmux.conf' },
+  { l: 'install.sh', s: '练习 14：建符号链接', tone: 'info' } ] } });
+</script><figcaption>按工具分子目录。文件名去掉开头的点，链接时再加上。这样在仓库里就不会被 ls 隐藏</figcaption></figure></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex12-a"></div>
+<p>提交作者用 <code>-c user.name=…</code> 临时指定，免得读写你的全局 git 配置。沙箱里的 HOME 也是临时目录。</p></div>
+<p class="like"><b>打个比方</b>dotfiles 仓库像一个搬家专用箱。按房间分好格子，搬到哪都能原样摆回去。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>dotfiles/bash/bashrc   <span class="cm"># 仓库里不带点：ls 看得见，按工具分组也清楚</span>
+~/.bashrc              <span class="cm"># 家目录里带点的名字，由安装脚本建链接时决定</span>
+<span class="cm"># 很多人的 dotfiles 仓库都这样组织（补充）</span></pre></div>
+
+<!-- ======================= 13 ======================= -->
+<h2 id="ex13" data-nav="13 · 定制提示符">练习 13 · PS1 用单引号，提示符才会每次重新展开 <label class="ex-done"><input type="checkbox" data-ex="ex13">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Aliases and Dotfiles · 4</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：给至少一个程序加一些定制，比如你的 shell。起步可以很简单，比如设置 <code>$PS1</code> 来定制提示符。</p>
+<p class="lead">写一份自己的 bashrc。提示符显示当前目录和上一条命令的失败码。PATH 里加上 ~/bin。别名单独放一个文件。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>PS1、PATH 和配置文件的加载时机，见<a href="../ch02.html#s13">第 2 讲第 13 节</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="dotfiles/bash/bashrc" data-new="1-15"></div><div data-file="dotfiles/bash/aliases" data-new="1-6"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex13-a"></div>
+<p>读输出：这里的提示符是 bash 真实画出来的。家目录显示成 <code>~</code>。<code>ls /nonexistent</code> 失败，返回 2。下一个提示符前面就出现了 <code>[2]</code>。再下一条命令成功，<code>[2]</code> 就消失了。别名文件也被加载了。</p></div>
+<p class="like"><b>打个比方</b>PS1 像车上的仪表盘。单引号是装了一块实时跳动的表。双引号是拍张照片贴上去，永远停在拍照那一刻。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：rcfile 只在交互式 shell 里读</div><div data-run="ex13-b"></div>
+<div class="pit-card"><div class="row"><b>现象 1</b><div><code>bash --rcfile … -c '…'</code> 里 PS1 是空的。带 <code>-c</code> 的 bash 不是交互式的，根本不读 rcfile。</div></div>
+<div class="row"><b>现象 2</b><div>把 bashrc 当脚本运行，也就是 <code>bash bashrc</code>。第 2 行的 <code>return</code> 报 “can only `return' from a function or sourced script”，exit=1。bashrc 是给 shell <strong>source</strong> 的，不是拿来执行的。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>PS1='$(r=$?; [[ $r -ne 0 ]] &amp;&amp; echo "[$r] ")\w \$ '   <span class="cm"># 单引号：$( ) 和 $? 原样存进去</span>
+                                                      <span class="cm"># 每次显示提示符时，bash 再展开一遍</span>
+<span class="cm"># 换成双引号：赋值那一刻就执行了 $( )，提示符永远定格在当时的值</span></pre></div>
+
+<!-- ======================= 14 ======================= -->
+<h2 id="ex14" data-nav="14 · 一键安装脚本">练习 14 · 安装脚本只做一件事：给每个文件建软链接 <label class="ex-done"><input type="checkbox" data-ex="ex14">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Aliases and Dotfiles · 5</span><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：设一个办法，在新机器上快速装好 dotfiles。而且不用手工操作。可以简单到一个 shell 脚本，为每个文件调用一次 <code>ln -s</code>。也可以用<a href="https://dotfiles.github.io/utilities/" target="_blank" rel="noopener">专门的工具</a>。</p>
+<p class="lead"><code>bash install.sh</code> 一条命令装好全部配置。它能反复跑，不覆盖已有文件。在 Git Bash 上也能建出真正的符号链接。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>符号链接见<a href="../ch02.html#s14">第 2 讲第 14 节</a>，有演示。<code>set -euo pipefail</code> 见第 1 讲。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="dotfiles/install.sh" data-new="1-25"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex14-a"></div>
+<p>读输出：家目录里原有的 .bashrc 被改名备份了。4 个链接都建好了。<code>ls -l</code> 第一个字符是 <code>l</code>，末尾的 <code>-&gt;</code> 指向仓库。第二次运行只是重建链接，<strong>没有</strong>再备份。因为它现在已经是链接了。这就叫幂等。</p>
+<p>链接的意义在这里。直接改仓库里的文件，家目录立刻生效：</p><div data-run="ex14-b"></div></div>
+<p class="like"><b>打个比方</b>软链接像把家里所有开关都接到一块总控面板上。改总控面板，各个房间马上跟着变。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：Git Bash 的 ln -s 默认是复制</div><div data-run="ex14-c"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>没设 MSYS 时，<code>ln -s</code> 不报错。但 <code>[ -L ]</code> 判断它不是链接，它是一份<strong>拷贝</strong>。之后你改仓库，家目录的配置纹丝不动。</div></div>
+<div class="row good"><b>正确写法</b><div>看脚本第 8 到 10 行。在 MINGW 或 MSYS 下，导出 <code>MSYS=winsymlinks:nativestrict</code>。建不出真链接时就直接报错，不会悄悄复制。这需要 Windows 开发者模式或管理员权限。在 Linux 和 macOS 上，ln -s 一直是真链接。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>ln -sfn "$src" "$dst"   <span class="cm"># -f 替换已有链接，脚本能反复跑</span>
+                        <span class="cm"># -n 目标是指向目录的链接时，别把新链接建进那个目录里</span>
+rm "$dst"; ln -s …      <span class="cm"># 先删再建也行，但多一步，多一个失败点（补充）</span>
+[ -L ~/.bashrc ]        <span class="cm"># 为真才是链接。Git Bash 不设 MSYS 时，这里是假</span></pre></div>
+
+<!-- ======================= 15 ======================= -->
+<h2 id="ex15" data-nav="15 · 在全新环境测试">练习 15 · 从 git clone 出来的副本测，才等于新机器 <label class="ex-done"><input type="checkbox" data-ex="ex15">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Aliases and Dotfiles · 6</span><span class="tag gb">Git Bash 实测（空 HOME 代替 VM）</span><span class="tag lnx">VM 未实测</span></div>
+<p class="q-orig"><b>原题</b>：在一台全新的虚拟机上，测试你的安装脚本。</p>
+<p class="lead">本机没有 VM，就造一个空的 HOME 代替。从仓库克隆，再跑安装脚本，最后开个新 shell 检查。</p>
+<div class="blk why"><div class="bh"><i>?</i>思路</div><p>“全新”的关键是家目录里什么都没有。你手工改过的东西，一样都不能有。本机没有 VM，就造一个<strong>空的 HOME 目录</strong>。从 git 仓库克隆，而不是直接用工作目录。再运行安装脚本，打开新的交互式 shell 检查效果。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex15-a"></div>
+<p>空 HOME 里一开始是 0 个文件。克隆，安装，再开新 shell。别名 dc 能用，PATH 末尾也多了新 HOME 下的 bin。</p><div data-run="ex15-vm"></div></div>
+<p class="like"><b>打个比方</b>这像搬新家前，先在空房子里试摆一遍。只用搬家箱里有的东西，旧房子里顺手放的一样不带。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：在 Windows 上克隆，换行符变了</div><div data-run="ex15-b"></div>
+<div class="pit-card"><div class="row"><b>现象</b><div>Git for Windows 的系统配置里有 <code>core.autocrlf=true</code>。没有 .gitattributes 的仓库，克隆出来的 install.sh 是 <strong>CRLF</strong> 换行。加了 <code>* text=auto eol=lf</code> 之后，克隆出来是 LF。中间几行 warning，是 git 在提交时提醒你。它会把工作区里的 CRLF 规范成 LF。</div></div>
+<div class="row"><b>为什么危险</b><div>Git Bash 的 bash 能容忍 CRLF。本机实测，带 CRLF 的 bashrc 照样加载。所以在 Windows 上测不出问题。把这样的文件拿到 Linux 上，bash 会报 <code>$'\r': command not found</code>。这条没实测，是补充。“在全新机器上测试”能抓到的，正是这类问题。</div></div>
+<div class="row good"><b>做法</b><div>仓库里放一个 <code>.gitattributes</code>，练习 12 已经加了。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>git clone REPO "$HOME/.dotfiles"   <span class="cm"># HOME 指向空目录。从仓库克隆，才等于新机器拿到的东西</span>
+<span class="cm"># 开发目录里可能有没提交的文件，或者只在本地的改动</span>
+<span class="cm"># 上面的 CRLF 问题，也只有经过 clone 才会冒出来</span>
+* text=auto eol=lf                 <span class="cm"># 写进 .gitattributes，统一用 LF</span></pre></div>
+
+<!-- ======================= 16 ======================= -->
+<h2 id="ex16" data-nav="16 · 迁移所有配置">练习 16 · 逐个迁移，机密文件不进仓库 <label class="ex-done"><input type="checkbox" data-ex="ex16">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Aliases and Dotfiles · 7</span><span class="tag gb">Git Bash 实测（示意家目录）</span></div>
+<p class="q-orig"><b>原题</b>：把你当前所有工具的配置，都迁进 dotfiles 仓库。</p>
+<p class="lead">一次只迁一个工具。mv 进仓库，install.sh 加一行，重建链接，再提交。私钥和带令牌的配置一律不进仓库。</p>
+<div class="blk why"><div class="bh"><i>?</i>步骤</div>
+<ol>
+<li><strong>盘点</strong>：列出家目录和 <code>~/.config</code> 下的配置文件。</li>
+<li><strong>逐个迁移</strong>：<code>mv ~/.vimrc dotfiles/vim/vimrc</code>。在 install.sh 里加一行 <code>link vim/vimrc .vimrc</code>。跑一次安装脚本，把链接建回来，确认工具还正常。</li>
+<li><strong>排除机密</strong>：私钥 <code>~/.ssh/id_*</code> 和带令牌的配置<strong>不进仓库</strong>。<code>~/.ssh/config</code> 可以进。但先查查里面有没有内网地址，这类信息别公开。</li>
+<li><strong>提交</strong>：每迁一个工具就提交一次，出了问题好回滚。</li>
+</ol>
+<p>讲师建议，别一次性照搬别人的整份配置，要逐行理解。见<a href="../ch02.html#s14">第 2 讲第 14 节</a>。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：盘点（在示意家目录上）</div><div data-run="ex16-a"></div>
+<p>准备步骤造了一个假家目录。里面有私钥文件和历史文件。盘点命令只挑出了配置文件。<code>id_ed25519</code> 和 <code>.bash_history</code> 没被列出来，它们本来也不该进仓库。本页没读你的真实家目录。</p></div>
+<p class="like"><b>打个比方</b>迁配置像收拾行李箱。衣服鞋子都装进去，护照和银行卡单独贴身带。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>link vim/vimrc .vimrc    <span class="cm"># 迁一个工具：mv 进仓库，install.sh 加一行</span>
+link nvim .config/nvim   <span class="cm"># ~/.config 下的整个目录也能链接（补充）</span>
+                         <span class="cm"># install.sh 里 ln -sfn 的 -n，就是为这种情况准备的</span>
+mkdir -p ~/.config       <span class="cm"># 链接前先确保父目录存在</span></pre></div>
+
+<!-- ======================= 17 ======================= -->
+<h2 id="ex17" data-nav="17 · 发布到 GitHub">练习 17 · 发布前先扫一遍机密，推送要你自己来 <label class="ex-done"><input type="checkbox" data-ex="ex17">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Aliases and Dotfiles · 8</span><span class="tag gb">发布前检查实测</span><span class="tag lnx">发布未实测</span></div>
+<p class="q-orig"><b>原题</b>：把你的 dotfiles 发布到 GitHub。</p>
+<p class="lead">推送前先 grep 一遍私钥头、password、token 这类字样。没有匹配，再建仓库推上去。</p>
+<div class="blk why"><div class="bh"><i>?</i>步骤</div>
+<ol>
+<li>发布前扫一遍可疑内容，下面真跑了。</li>
+<li>在 GitHub 网页上新建一个空仓库 dotfiles，不要勾选生成 README。</li>
+<li><code>git remote add origin git@github.com:你/dotfiles.git</code>，再 <code>git push -u origin main</code>。用 SSH 推送前，要先把练习 18 的公钥加到 GitHub 账户。这就是讲师说的“GitHub 用你的公钥验证你”。</li>
+<li>在 README 里写一句安装方法：<code>git clone … ~/.dotfiles &amp;&amp; bash ~/.dotfiles/install.sh</code>。</li>
+</ol>
+<p>本笔记没有替你建账户，也没有推送。这要用你的 GitHub 账号。而且发布是公开操作，应该由你自己来。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：发布前的机密扫描</div><div data-run="ex17-a"></div>
+<p>在 dotfiles 和 ssh 配置里找可疑字样。比如私钥头、password、token、secret 和 api key。结果没有匹配，grep 返回 1。</p></div>
+<p class="like"><b>打个比方</b>发布前扫机密，像寄快递前检查箱子。别把家门钥匙一起封进去。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>grep -rnIiE 'BEGIN .*PRIVATE KEY|password|passwd|token|secret|api[_-]?key' dotfiles ssh   <span class="cm"># 返回 1：没找到</span>
+<span class="cm"># 万一把私钥推上去了，删掉文件再提交一次不够。它还在 git 历史里</span>
+<span class="cm"># 要立刻作废这对密钥，从所有 authorized_keys 和 GitHub 删掉公钥，换新的</span>
+<span class="cm"># 清理历史只是次要的（补充）</span></pre></div>
+
+<!-- ======================= 18 ======================= -->
+<h2 id="ex18" data-nav="18 · 生成 SSH 密钥">练习 18 · 带口令的 ed25519 密钥：.pub 能给人，私钥不能 <label class="ex-done"><input type="checkbox" data-ex="ex18">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Remote Machines · 1</span><span class="tag gb">Git Bash 实测（沙箱 HOME）</span></div>
+<p class="q-orig"><b>原题</b>：本组练习需要一台 Linux 虚拟机。可以参考讲义链接的<a href="https://hibbard.eu/install-ubuntu-virtual-box/" target="_blank" rel="noopener">安装教程</a>。进入 <code>~/.ssh/</code>，看看有没有一对 SSH 密钥。没有的话，用 <code>ssh-keygen -a 100 -t ed25519</code> 生成。推荐设口令，并使用 <a href="https://www.ssh.com/ssh/agent" target="_blank" rel="noopener">ssh-agent</a>。</p>
+<p class="lead"><code>ssh-keygen</code> 生成两个文件。<code>id_ed25519.pub</code> 可以给别人，<code>id_ed25519</code> 绝不能给。口令不对时，连本机都解不开私钥。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>SSH 密钥见<a href="../ch02.html#s9">第 2 讲第 9 节</a>，有演示。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex18-a"></div>
+<p>沙箱 HOME 里原本没有 ~/.ssh。生成后得到私钥 id_ed25519 和公钥 id_ed25519.pub。指纹和 randomart 每次都不同。口令用了一句示例短语，真用时请自己想一句。</p>
+<div data-run="ex18-b"></div>
+<p>读输出：口令错误时，连本机都解不开私钥，exit=255。口令正确时，<code>-y</code> 从私钥推出公钥，和 .pub 文件开头一致。私钥文件以 <code>-----BEGIN OPENSSH PRIVATE KEY-----</code> 开头，这里只打印了第一行。</p></div>
+<p class="like"><b>打个比方</b>私钥加口令，像把钥匙锁进一个带密码的小盒。盒子被偷了，没有密码也打不开。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：私钥文件的权限</div>
+<div class="pit-card"><div class="row"><b>本机现象</b><div>上面 <code>ls -l</code> 显示私钥是 <code>-rw-r--r--</code>，所有人可读。这是 Git Bash 根据 Windows 权限拼出来的显示。Windows 版 OpenSSH 另有一套检查方式。</div></div>
+<div class="row"><b>在 Linux 上</b><div>私钥权限太宽时，ssh 会拒绝使用。它会提示 “UNPROTECTED PRIVATE KEY FILE!”。要 <code>chmod 600 ~/.ssh/id_ed25519</code> 和 <code>chmod 700 ~/.ssh</code>。这条没实测，是补充。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>ssh-keygen -a 100 -t ed25519         <span class="cm"># -a 100：用口令派生密钥时，做 100 轮 KDF 运算</span>
+                                     <span class="cm"># 你解锁慢一点点，攻击者暴力猜口令却要慢 100 倍（补充）</span>
+ssh-keygen -y -f ~/.ssh/id_ed25519   <span class="cm"># 用口令解开私钥，推出公钥</span>
+chmod 600 ~/.ssh/id_ed25519          <span class="cm"># Linux 上私钥权限太宽，ssh 会拒绝使用</span></pre></div>
+
+<!-- ======================= 19 ======================= -->
+<h2 id="ex19" data-nav="19 · ~/.ssh/config">练习 19 · ssh -G 不连服务器，也能检查配置 <label class="ex-done"><input type="checkbox" data-ex="ex19">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Remote Machines · 2</span><span class="tag gb">Git Bash 实测（不连接）</span></div>
+<p class="q-orig"><b>原题</b>：编辑 <code>.ssh/config</code>，加入一个 Host vm 条目。里面有 User、HostName、IdentityFile，还有 LocalForward 9999 localhost:8888。</p>
+<p class="lead">写好 Host vm 之后，<code>ssh vm</code> 一个词就能连上。还会顺带打开端口转发。没有 VM 时，用 <code>ssh -G vm</code> 看解析结果。</p>
+<div class="blk write"><div class="bh"><i>{}</i>写（题目原样）</div><div data-file="ssh/config" data-new="1-5"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex19-a"></div>
+<p><code>ssh -G 主机</code> 只解析配置，打印最终生效的设置，不会真去连接。所以没有 VM 也能检查配置写对没有。用 <code>-F</code> 明确指定配置文件，保证读的是沙箱里这份。第一行 “Pseudo-terminal will not be allocated…” 是 ssh 的提示。它发现 stdin 不是终端时就会说。本机加了 <code>&lt; /dev/null</code> 也会出现，无害。注意 <code>localforward 9999 [localhost]:8888</code>，练习 21 就靠它。</p></div>
+<p class="like"><b>打个比方</b>~/.ssh/config 像手机通讯录。存一次“vm”，以后不用每次都背 IP、端口和用户名。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>Host vm          <span class="cm"># 具体的主机写在前面</span>
+Host *.mit.edu   <span class="cm"># 通配的写在后面</span>
+<span class="cm"># 两条同时匹配时，每个选项取第一次出现的值（见 man ssh_config，补充）</span>
+ssh -G vm        <span class="cm"># 只打印解析结果，不连接</span></pre></div>
+
+<!-- ======================= 20 ======================= -->
+<h2 id="ex20" data-nav="20 · ssh-copy-id">练习 20 · ssh-copy-id 只是往 authorized_keys 追加一行 <label class="ex-done"><input type="checkbox" data-ex="ex20">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Remote Machines · 3</span><span class="tag gb">本地模拟实测</span><span class="tag lnx">VM 未实测</span></div>
+<p class="q-orig"><b>原题</b>：用 <code>ssh-copy-id vm</code> 把你的 SSH 公钥拷到服务器上。</p>
+<p class="lead">这个“魔法命令”只做一件事。它把一行公钥追加到服务器的 <code>~/.ssh/authorized_keys</code> 里。之后登录 VM 就不用密码了。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p>讲师现场看了 authorized_keys。然后说，这个“魔法命令”只做了一件事。它往服务器上追加了一行公钥（视频 <span class="ts" data-v="ccBGsPedE9Q">34:43</span>）。追加进的文件是 <code>~/.ssh/authorized_keys</code>。讲义给的手动等价写法是 <code>cat .ssh/id_ed25519.pub | ssh alice@remote 'cat &gt;&gt; ~/.ssh/authorized_keys'</code>。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：在本地模拟“追加”这一步</div><div data-run="ex20-a"></div>
+<p>把 <code>ssh alice@remote</code> 换成 <code>(cd fake-vm &amp;&amp; …)</code>。数据流完全一样，只是“远端”成了本地的一个目录。authorized_keys 多了 1 行，内容是类型、公钥和注释 student@laptop。</p>
+<div data-run="ex20-vm"></div>
+<p><strong>检验标准</strong>要在有 VM 时看。<code>ssh -o PasswordAuthentication=no vm true</code> 能成功返回，就说明已经不靠密码了。</p></div>
+<p class="like"><b>打个比方</b>authorized_keys 像小区门卫手里的访客名单。ssh-copy-id 就是往名单上添一行你的名字。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>cat .ssh/id_ed25519.pub | ssh alice@remote 'cat &gt;&gt; ~/.ssh/authorized_keys'   <span class="cm"># 用 &gt;&gt; 追加</span>
+<span class="cm"># 写成 &gt; 会清空文件。别人或你别的电脑之前放进去的公钥，全没了</span>
+ssh -o PasswordAuthentication=no vm true   <span class="cm"># 能成功，说明已经不靠密码</span></pre></div>
+
+<!-- ======================= 21 ======================= -->
+<h2 id="ex21" data-nav="21 · 端口转发">练习 21 · 端口转发：最后一跳是 VM 自己连 localhost <label class="ex-done"><input type="checkbox" data-ex="ex21">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Remote Machines · 4</span><span class="tag gb">本机替身实测</span><span class="tag lnx">VM 未实测</span></div>
+<p class="q-orig"><b>原题</b>：在 VM 里执行 <code>python -m http.server 8888</code>，启动一个网页服务器。然后在本机浏览器访问 <code>http://localhost:9999</code>。</p>
+<p class="lead">浏览器连本机 9999，ssh 把数据经加密连接送到 VM。VM 上的 sshd 再替你连 localhost:8888。只在 VM 本机监听的服务，也能这样搬到你电脑上。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>练习 19 的 LocalForward。<a href="../ch02.html#s10">第 2 讲第 10 节</a>演示的第 2 幕，画了完整的数据路径。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<figure class="fig"><script>
+DG('seq', { actors: [ { l: '浏览器', s: '本机', tone: 'data' }, { l: 'ssh 客户端', s: '本机 :9999', tone: 'info' }, { l: 'sshd', s: 'VM', tone: 'neutral' }, { l: 'http.server', s: 'VM :8888', tone: 'teal' } ], msgs: [
+  { f: 0, t: 1, l: 'GET / → localhost:9999', mono: true },
+  { f: 1, t: 2, l: '经 SSH 加密连接转发', tone: 'ok' },
+  { f: 2, t: 3, l: 'sshd 替你连 localhost:8888', tone: 'teal' },
+  { f: 3, t: 0, l: '200 + 页面，原路返回', tone: 'ok', dash: '5 4' }
+] });
+</script><figcaption>“localhost:8888” 是从 VM 的角度说的。这条连接由 VM 上的 sshd 发起</figcaption></figure></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：没有 VM 时的“替身”</div><div data-file="ex21/forward.py" data-new="1-28"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex21-a"></div>
+<p>读输出：curl 只连了本机 19999。拿到的却是 18888 上 http.server 给的页面，状态码 200。转发器日志记了两次转发。http.server 的访问日志显示，请求来自 127.0.0.1。这和用 ssh -L 时 VM 上看到的一样。因为请求是 sshd 从 VM 本机发起的。中间那行 Killed，是实验结束时 <code>kill -9</code> 清理转发器留下的提示。</p>
+<div data-run="ex21-vm"></div></div>
+<p class="like"><b>打个比方</b>端口转发像一条专用地下通道。你从自家 9999 号入口进去，从 VM 屋里的 8888 号门出来。外人在街上直接敲 8888 的门，敲不开。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>LocalForward 9999 localhost:8888   <span class="cm"># 本机 9999 进，VM 视角的 localhost:8888 出</span>
+<span class="cm"># VM 上的服务只绑 localhost，为什么转发后还能访问？</span>
+<span class="cm"># 最后一跳是 VM 上的 sshd 自己连 localhost:8888，对 VM 来说是本机连接</span>
+<span class="cm"># 外网直接访问 VM 的 8888 会被拒，这正是端口转发安全的地方</span></pre></div>
+
+<!-- ======================= 22 ======================= -->
+<h2 id="ex22" data-nav="22 · 加固 sshd">练习 22 · 关密码登录前，先确认密钥能登录 <label class="ex-done"><input type="checkbox" data-ex="ex22">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Remote Machines · 5</span><span class="tag gb">示意配置实测</span><span class="tag lnx">VM 未实测</span></div>
+<p class="q-orig"><b>原题</b>：用 <code>sudo vim /etc/ssh/sshd_config</code> 编辑 SSH 服务端配置。改 <code>PasswordAuthentication</code> 的值，禁用密码认证。改 <code>PermitRootLogin</code> 的值，禁止 root 登录。用 <code>sudo service sshd restart</code> 重启 ssh 服务，再试着 ssh 进去。</p>
+<p class="lead">两行都改成 <code>no</code>，服务器就只认密钥，root 也不能直接登录。第 1 讲日志里那些扫描器乱试 admin、root。这下再怎么猜都没用。</p>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><p>示意配置，按 Ubuntu 默认文件的相关几行写成：</p><div data-file="ex22/sshd_config"></div><p>用脚本代替手工编辑，可重复，也能审查：</p><div data-file="ex22/harden.sh" data-new="1-9"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：对示意文件执行</div><div data-run="ex22-a"></div><div data-run="ex22-vm"></div>
+<p><strong>检验标准</strong>要在有 VM 时看。改完先用 <code>sudo sshd -t</code> 检查语法。<strong>当前会话保持别退出</strong>，另开一个终端测试。密钥登录成功，<code>ssh -o PubkeyAuthentication=no vm</code> 被拒，提示 Permission denied (publickey)。Ubuntu 上服务名是 ssh，写成 <code>sudo service ssh restart</code>。讲义写的 sshd 在部分发行版上适用（补充）。</p></div>
+<p class="like"><b>打个比方</b>关密码登录像把门上的密码锁拆了，只留指纹锁。拆之前，先确认自己的指纹真能开门。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：把自己锁在门外</div>
+<div class="pit-card"><div class="row bad"><b>场景</b><div>还没确认公钥登录能用，就关了密码登录。然后还退出了会话。</div></div>
+<div class="row good"><b>做法</b><div>先做练习 20，验证免密登录能用。改配置时，始终留一个已登录的会话。等新会话测试通过了，再关掉它。VM 至少还有控制台能救。云服务器可能就麻烦了（补充）。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>#PasswordAuthentication yes            <span class="cm"># 被注释的行只是告诉你，默认值是 yes</span>
+PasswordAuthentication yes             <span class="cm"># 只删 # 等于显式写 yes，什么也没改</span>
+PasswordAuthentication no              <span class="cm"># 要把值改成 no</span>
+sudo sshd -T | grep -i passwordauth    <span class="cm"># 核对最终生效的值</span>
+<span class="cm"># sshd 取第一次出现的值。Include 进来的 sshd_config.d/*.conf 可能先写了 yes</span></pre></div>
+
+<!-- ======================= 23 ======================= -->
+<h2 id="ex23" data-nav="23 · mosh 断网恢复">练习 23 · （挑战）同一会话断网后接着刷新，才算恢复 <label class="ex-done"><input type="checkbox" data-ex="ex23">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Remote Machines · 6</span><span class="tag lnx">未实测</span></div>
+<p class="q-orig"><b>原题</b>：挑战题。在 VM 里装好 <a href="https://mosh.org/" target="_blank" rel="noopener">mosh</a>，建立连接。然后断开服务器或 VM 的网卡。mosh 能正确恢复吗？</p>
+<p class="lead">本机做不了这个实验，下面给出步骤和判断标准。断网再接上后，同一个会话接着刷新。不用重新登录，就算能恢复。</p>
+<div class="blk why"><div class="bh"><i>?</i>实验步骤与判断标准</div>
+<ol>
+<li>本机和 VM 都装上 mosh，它需要两端各有一个程序。VM 的防火墙要放行 UDP 60000 到 61000。</li>
+<li>本机运行 <code>mosh vm</code>，它会复用 ~/.ssh/config 的设置。在里面跑 <code>top</code> 这类不断刷新的程序。</li>
+<li>在虚拟机软件里断开 VM 网卡，等 30 秒以上，再接上。</li>
+<li>对照组：用普通的 <code>ssh vm</code> 重复同样的操作。</li>
+<li><strong>判断标准</strong>：断网期间，mosh 窗口顶部会提示失去连接。恢复后同一个会话继续刷新，不用重新登录。这就是“能恢复”。ssh 的会话通常会卡住，等到超时断开。</li>
+</ol>
+<p>讲义说 mosh 能处理断线和睡眠唤醒。切换网络和高延迟链路，它也扛得住。以上步骤和预期现象是补充说明，本机未实测。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex23-vm"></div></div>
+<p class="like"><b>打个比方</b>ssh 像打电话，信号一断就得重拨。mosh 像发短信，断网时先攒着，网一回来接着收。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>mosh vm   <span class="cm"># 断网、睡眠唤醒、换网络都能接着用（讲义）</span>
+tmux      <span class="cm"># 有了 mosh 还要 tmux：关掉本机终端或重启电脑，远端的 mosh-server 也会结束</span>
+          <span class="cm"># tmux 让会话不依赖任何客户端，两者常一起用（补充）</span></pre></div>
+
+<!-- ======================= 24 ======================= -->
+<h2 id="ex24" data-nav="24 · 后台端口转发">练习 24 · （挑战）-N 不开 shell，-f 认证完转后台 <label class="ex-done"><input type="checkbox" data-ex="ex24">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Remote Machines · 7</span><span class="tag gb">参数表实测</span><span class="tag lnx">转发未实测</span></div>
+<p class="q-orig"><b>原题</b>：挑战题。查查 ssh 的 <code>-N</code> 和 <code>-f</code> 是干什么的。想出一条在后台做端口转发的命令。</p>
+<p class="lead">答案是 <code>ssh -N -f -L 9999:localhost:8888 vm</code>。只开隧道，不开远端 shell，也不占当前终端。</p>
+<div class="blk why"><div class="bh"><i>?</i>答案</div>
+<div class="tbl-wrap"><table class="tbl"><tr><th>flag</th><th>含义（<a href="https://man.openbsd.org/ssh" target="_blank" rel="noopener">man ssh</a>）</th></tr>
+<tr><td><code>-L 9999:localhost:8888</code></td><td>本地转发，和配置里的 LocalForward 同义</td></tr>
+<tr><td><code>-N</code></td><td>不执行远端命令。只做转发，不开 shell</td></tr>
+<tr><td><code>-f</code></td><td>认证完成后转入后台。认证时可能要你输入口令</td></tr>
+</table></div>
+<p>命令是 <code>ssh -N -f -L 9999:localhost:8888 vm</code>。如果 ~/.ssh/config 里已经写了 LocalForward，<code>ssh -N -f vm</code> 就够了。结束时用 <code>pkill -f 'ssh -N -f'</code>，这是练习 6 学的。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex24-a"></div>
+<p>本机 OpenSSH 的用法摘要里，<code>N</code> 和 <code>f</code> 都在无参数选项列表 <code>[-46AaCfGgKkMNnqsTtVvXxYy]</code> 里。</p><div data-run="ex24-vm"></div></div>
+<p class="like"><b>打个比方</b>-N 是只接网线、不开屏幕。-f 是接好线就把机箱塞进柜子，桌面腾出来给你用。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>ssh -N -f -L 9999:localhost:8888 vm   <span class="cm"># -N 不开 shell，-f 认证完转后台</span>
+ssh -N -L 9999:localhost:8888 vm &amp;    <span class="cm"># 用 &amp; 不好：一开始就在后台，要输口令时读不到终端</span>
+<span class="cm"># -f 还会脱离当前 shell 的作业控制，关掉终端也不受影响（补充）</span>
+pkill -f 'ssh -N -f'                  <span class="cm"># 用完按命令行找到它，结束隧道</span></pre></div>
+
+<!-- ======================= 自查 ======================= -->
+<h2 id="selfcheck" data-nav="自查">自查：自己重跑一遍</h2>
+<p class="lead">本页的代码和输出，都是生成笔记时在本机真跑收集的。想验证，就把题解复制到空目录，在 Git Bash 里重跑。</p>
+<p>生成脚本和题解源文件都已删除，<strong>代码以本页为准</strong>。代码块的“复制”按钮，拿到的是原文件的原始字节。生成时间见页头。练习 5 每次失败的轮数不同。练习 18 的指纹也每次不同。这都是正常的。</p>
+<div class="code"><div class="cap">考点速查（注释里写着答案）</div><pre>ls *                                    <span class="cm"># 目录里有 -l、a.txt、b.txt：打印 a.txt 和 b.txt 的长格式（练习 1）</span>
+bash random.sh &gt;&gt; out.log 2&gt;&gt; err.log   <span class="cm"># 题解第 6 行改成追加：失败那轮埋在末尾，cat 打出上百行（练习 5）</span>
+bash marco.sh                           <span class="cm"># 必须 source：子进程里定义的函数和 cd，跑完就消失（练习 4）</span>
+bash -c "wait $P"                       <span class="cm"># 不是自己的子进程：报 not a child，立刻返回 127（练习 7）</span>
+ln -s "$src" "$dst"                     <span class="cm"># 删掉 install.sh 第 8 到 10 行：Git Bash 悄悄复制，改仓库不再生效（练习 14）</span></pre></div>
+
+</article></main>
+<script src="../assets/vz.js"></script>
+<script src="../assets/viz/lab02-run.js"></script>
+<script src="../assets/lab.js"></script>
+</body>
+</html>

@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>01 · 课程概览 + Shell 入门 · Missing Semester 2026 中文笔记</title>
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/vz.css">
+<script>window.PAGE = { key: 'ch01', type: 'ch', vzCount: 8 };</script>
+<script src="assets/course.js"></script>
+<script src="assets/dg.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<div class="callout key"><div class="ct">本讲结论</div>
+<p>shell 是电脑最底层的文本接口。一行命令就是程序名加参数。程序之间用管道和重定向拼起来。命令写进文件，第一行加上 <code>#!</code>，就成了脚本。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s1" data-nav="这门课教什么" data-t="0:01">工具没人教，但天天要用 <span class="ts">0:01</span></h2>
+<p class="lead">这门课教的是干活的工具。别的课默认你会，却没人专门教。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre><span class="cm"># 测试一百次才挂一次？别手动按一百遍 ↑ 加回车</span>
+while ./run_tests.sh; do     <span class="cm"># 测试通过，退出码是 0，就接着跑</span>
+  echo "又过了一次"
+done                         <span class="cm"># 第一次失败时跳出循环</span></pre></div>
+<p class="like"><b>打个比方</b>专业课教你做菜，没人教你磨刀。刀钝了，做哪道菜都慢。</p>
+<p>三位讲师是 Anish、Jon 和 Jose，都是 MIT 的前博士生。他们 2019 年和 2020 年开过这门课。到了 2026 年，AI 工具变化太大，于是重开一轮。</p>
+<p>课名说的就是这件事。MIT 的课默认你会用 Git、编辑器和终端。可是没有哪门课专门教这些。这就是“缺失的一学期”。</p>
+<div class="grid2">
+  <div class="mini"><h4>为什么要学工具</h4><p>电脑最会做重复的活。可我们常忘了，用电脑这件事本身也能自动化。比如反复跑测试，不必手动按一百次 ↑ 加回车。</p></div>
+  <div class="mini"><h4>“未知的未知”</h4><p>你遇到的麻烦，前人多半早就解决了。只是编译原理和算法课不讲。这门课先让你知道这些工具存在，要用时能想起来。</p></div>
+  <div class="mini"><h4>“暴露疗法”</h4><p>一共 9 讲，每讲 1 小时。覆盖面大，细节少。课上只展示能做到什么。具体用法，靠课后读讲义和做练习。</p></div>
+  <div class="mini"><h4>练习最重要</h4><p>每讲都配练习，讲师说这是收获最大的环节。官方不给答案。卡住了可以去 OSSU Discord 问，也可以拿题目和 LLM 聊。</p></div>
+</div>
+<div class="callout ai"><div class="ct">2026 版：AI 拆进了每一讲</div>
+<p>讲义首页说得很清楚。AI 是通用技术，所以<strong>不单开一讲</strong>。每一讲都会带上相关的 AI 工具。第 7 讲另外专讲智能体编程。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s2" data-nav="终端与 shell" data-t="7:06">终端只是窗口，干活的是 shell <span class="ts">7:06</span></h2>
+<p class="lead">终端只负责显示文字和接收按键。读懂命令、启动程序的，是窗口里跑着的 shell。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Git Bash）</div><pre><span class="p">$ </span><span class="cmd">echo $BASH_VERSION</span>   <span class="cm"># 窗口里跑的是 bash，这是它的版本号</span>
+<span class="o">5.3.15(1)-release</span>
+<span class="p">$ </span><span class="cmd">which ls</span>             <span class="cm"># ls 不是 shell 本身，是磁盘上的一个程序</span>
+<span class="o">/usr/bin/ls</span>
+<span class="p">$ </span><span class="cmd">type cd</span>              <span class="cm"># cd 是 shell 自带的，没有对应的文件</span>
+<span class="o">cd is a shell builtin</span></pre></div>
+<p class="like"><b>打个比方</b>终端是餐厅的点菜窗口，shell 是后厨的接单员。你在窗口报菜名，接单员去叫对应的厨师。厨师就是 ls、date 这些程序。</p>
+<p>图形界面只能做作者设计好的事。不存在的按钮你按不了。两家厂商的软件也很难拼在一起。shell 往下降了一层，它是电脑的<strong>文本接口</strong>。命令随便写，也随便组合。它比所有图形界面都早。</p>
+<figure class="fig"><script>
+DG('layers', { arrows: true, sideW: 230, items: [
+  { l: '终端 Terminal', s: '一个窗口：显示文字，处理复制粘贴', tone: 'neutral', side: '例：Windows Terminal、iTerm2', down: '你敲的键', up: '输出的文字' },
+  { l: 'Shell（bash / zsh / fish）', s: '读一行命令，切词，再启动程序', tone: 'info', side: '本课只讲 bash，zsh 基本兼容', down: '程序名 + 参数', up: '程序的输出' },
+  { l: '程序', s: 'date、echo、ls，大多是磁盘上的文件', tone: 'data', side: '少数是 shell 内建：cd、if' }
+] });
+</script><figcaption>终端只是外壳窗口。真正干活的是窗口里的 shell（视频 8:59）</figcaption></figure>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>系统</th><th>怎么打开终端</th><th>默认 shell</th></tr>
+<tr><td>Linux</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>，或在菜单里搜 Terminal</td><td>通常是 bash，有的发行版换成 zsh</td></tr>
+<tr><td>macOS</td><td><kbd>Cmd</kbd>+<kbd>Space</kbd> 打开 Spotlight，搜 Terminal</td><td>以前是 bash，现在是 zsh。zsh 和 bash 兼容</td></tr>
+<tr><td>Windows</td><td><kbd>Win</kbd>+<kbd>R</kbd>，输入 <code>cmd</code> 或 <code>powershell</code></td><td>cmd 或 PowerShell，<strong>不是</strong>本课用的 shell。请装 WSL 或 Linux 虚拟机</td></tr>
+</table></div>
+<p>shell 有好几种。bash 最普及，但多年没加大功能。zsh 兼容 bash，用起来更顺手。fish 主打让人敲着舒服。三位讲师各用各的，课上统一讲 <strong>bash</strong>。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>Windows 自带的 cmd 和 PowerShell 也是 shell，只是语法完全不同。课上的命令拿过去跑，很多直接报错。比如 <code>ls -l</code>，cmd 根本不认识 ls。所以先确认窗口里跑的是 bash。</p></div>
+<div class="callout warn"><div class="ct">本笔记的实测环境</div>
+<p>标着“本机实测”的输出，来自 Windows 11 上的 <strong>Git Bash</strong>。版本是 GNU bash 5.3.15。本讲大部分命令它都能跑。但它不是真的 Linux，比如 NTFS 不记执行权限（见<a href="#s15">第 15 节</a>）。讲义推荐 Windows 用户用 WSL。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s3" data-nav="为什么学 shell" data-t="11:52">学 shell 图的是快、能自动化、能组合 <span class="ts">11:52</span></h2>
+<p class="lead">图形界面一次只能点一下。shell 一行命令能处理一百个文件，还能接着往下加工。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre><span class="cm"># 图形界面：打开 100 个日志，一个个搜 ERROR</span>
+<span class="cm"># shell：一行搞定，结果还能接着往下传</span>
+grep -l ERROR logs/*.log | wc -l   <span class="cm"># 出过错的日志一共几个</span></pre></div>
+<p class="like"><b>打个比方</b>图形界面像自动售货机，只能按面板上那几个钮。shell 像自家厨房，原料怎么配都行。</p>
+<ul class="keys">
+<li><strong>快</strong>：熟练以后，敲几个键就顶得上很多次点击。任务越复杂，差距越大。</li>
+<li><strong>能自动化</strong>：提示符就是一个 bash 程序的开头。你敲的每一行，都是一段被执行的代码。</li>
+<li><strong>能组合</strong>：一个程序的输出喂给下一个，再喂给第三个。shell 天生就是为这种组合设计的。</li>
+<li><strong>通用语</strong>：开源工具的安装说明，几乎都是 shell 命令。看懂它们，就不用从 Stack Overflow 盲目复制。</li>
+<li><strong>CI 也用它</strong>：第 9 讲的持续集成，步骤大多是 shell 命令。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s4" data-nav="提示符与参数" data-t="13:39">shell 先按空白切词，第一个词是程序名 <span class="ts">13:39</span></h2>
+<p class="lead">shell 拿到一行命令，先按空白切成一串词。第一个词是要运行的程序，后面的都是参数。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">echo hello    world</span>      <span class="cm"># 切成 3 个词，中间几个空格都一样</span>
+<span class="o">hello world</span>
+<span class="p">$ </span><span class="cmd">echo "hello    world"</span>    <span class="cm"># 引号里不切，4 个空格原样保留</span>
+<span class="o">hello    world</span>
+<span class="p">$ </span><span class="cmd">echo My\ Photos</span>          <span class="cm"># \ 让紧跟的空格变成普通字符</span>
+<span class="o">My Photos</span>
+<span class="p">$ </span><span class="cmd">cd My Photos</span>             <span class="cm"># 没加引号，cd 收到了两个参数</span>
+<span class="e">bash: cd: too many arguments</span></pre></div>
+<p class="like"><b>打个比方</b>切词就像拿剪刀沿着空格剪纸条。引号是贴在纸条上的胶带，胶带盖住的空格不剪。反斜杠是只盖一个字的小胶带。</p>
+<p>打开终端看到的那一小段叫<strong>提示符</strong>（prompt）。它表示 shell 在等你输入。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>讲义里的提示符 <code>missing:~$</code></th><th>含义</th></tr>
+<tr><td><code>missing</code></td><td>主机名。讲师的提示符还带用户名，比如 <code>jon@xos</code></td></tr>
+<tr><td><code>~</code></td><td>当前所在的目录。<code>~</code> 是家目录的简写</td></tr>
+<tr><td><code>$</code></td><td>表示你不是 root 管理员</td></tr>
+</table></div>
+<p>想让一个参数里带空格，有两种写法 <span class="ts">16:04</span>。</p>
+<ul>
+<li><strong>引号</strong>：<code>'My Photos'</code> 或 <code>"My Photos"</code>。引号里的空格不切。</li>
+<li><strong>转义</strong>：<code>My\ Photos</code>。反斜杠告诉 shell，下一个字符别当特殊字符。</li>
+</ul>
+<p>切出来的这些词，最后就是程序拿到的参数。Python 里叫 <code>sys.argv</code>，Java 里是 <code>main</code> 的 <code>args</code>（<span class="ts">17:24</span> 学生提问）。</p>
+<p>路径里同时有空格、单引号和双引号时最难写。得把几种引号拼着用。很头疼，但总能写对。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>文件名带空格最容易出事。<code>cd My Photos</code> 被切成两个参数，bash 直接报 too many arguments。脚本里更隐蔽。<code>rm $file</code> 没加引号，带空格的文件名会被拆成两个去删。所以变量一律写成 <code>"$file"</code>。</p></div>
+<div class="callout tip"><div class="ct">引号没闭合怎么办</div>
+<p>敲 <code>echo 'hello</code> 回车，shell 会显示 <code>&gt;</code> 等你接着输（<span class="ts">19:58</span>）。补上引号就行。不想要这行了，就按 <kbd>Ctrl</kbd>+<kbd>C</kbd>。</p></div>
+<p>下面的演示一步步切词。看扫描指针怎么走，词怎么进 argv。再看引号和反斜杠怎么改规则。</p>
+<div data-vz="ch01-argv"></div>
+
+<!-- ============================================================ -->
+<h2 id="s5" data-nav="man 手册" data-t="19:58">不会用就先 man <span class="ts">19:58</span></h2>
+<p class="lead"><code>man 程序名</code> 会打开这个程序的说明书。所有选项都在里面，很多还附了例子。</p>
+<div class="code term"><div class="cap">bash</div><pre><span class="p">$ </span><span class="cmd">man echo</span>       <span class="cm"># 打开 echo 的手册，按 q 退出</span>
+<span class="p">$ </span><span class="cmd">man bash</span>       <span class="cm"># 很厚的一本，按 / 再输关键词搜索</span>
+<span class="p">$ </span><span class="cmd">date --help</span>    <span class="cm"># 只想看简短版，多数程序支持 --help</span></pre></div>
+<p class="like"><b>打个比方</b>man 是家电附带的说明书，什么都写，就是厚。tldr 是别人贴在冰箱上的便利贴，只写最常用的几招。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>Git Bash 没有带 man。本机实测敲 <code>type man</code>，结果是 not found。在 Git Bash 里只能用 <code>--help</code>，或者上网查手册页。一般的 Linux 都自带 man。</p></div>
+<div class="callout tool"><div class="ct">讲义推荐 · tldr</div><p><a href="https://tldr.sh/" target="_blank" rel="noopener">tldr</a> 直接给出常见用法的例子。另外，LLM 很会解释命令，也能帮你拼出想要的写法。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s6" data-nav="路径与 cd" data-t="21:13">相对路径从当前目录算，cd 就是改当前目录 <span class="ts">21:13</span></h2>
+<p class="lead">shell 一直记着一个当前目录。相对路径都从它算起，<code>cd</code> 改的就是它。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Git Bash 的家目录是 /c/Users/lrhto）</div><pre><span class="p">$ </span><span class="cmd">cd /; pwd</span>                     <span class="cm"># 以 / 开头是绝对路径，从根走起</span>
+<span class="o">/</span>
+<span class="p">$ </span><span class="cmd">cd usr/../usr/./bin/..; pwd</span>   <span class="cm"># .. 退一层，. 原地不动</span>
+<span class="o">/usr</span>
+<span class="p">$ </span><span class="cmd">cd ~/..; pwd</span>                  <span class="cm"># ~ 是家目录，它的上一层是 /c/Users</span>
+<span class="o">/c/Users</span></pre></div>
+<p class="like"><b>打个比方</b>当前目录就像你在商场里站的位置。相对路径是“往前走两家店”。绝对路径是“从正门进来第三家”。你一挪地方，“往前两家”就指向别处了。</p>
+<p>很多命令不说位置时，就作用在当前目录上。所以提示符里一直显示它。不确定自己在哪，就敲 <code>pwd</code> 或 <code>echo $PWD</code>。</p>
+<figure class="fig"><script>
+DG('tree', { noteX: 300, root: { l: '/', s: '根目录，所有绝对路径的起点', c: [
+  { l: 'bin', s: '系统程序，cd /bin 进到这里' },
+  { l: 'home', c: [ { l: 'john', s: '家目录 ~，讲师的例子', hl: true, tone: 'warn', c: [
+    { l: 'dev', c: [ { l: '6824', s: '在这里 cd ../6858 就去了隔壁' }, { l: '6858' } ] } ] } ] },
+  { l: 'usr', c: [ { l: 'bin' } ] }
+] } });
+</script><figcaption>绝对路径从根 / 找起。相对路径从当前目录找起（视频 22:58 的例子）</figcaption></figure>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>写法</th><th>含义</th><th>例子</th></tr>
+<tr><td><code>/a/b</code></td><td>绝对路径，从根 <code>/</code> 逐段走</td><td><code>cd /bin</code></td></tr>
+<tr><td><code>a/b</code></td><td>相对路径，从当前目录开始</td><td>在 <code>/</code> 时 <code>cd bin</code> 到 <code>/bin</code>。在 <code>/bin</code> 里再 <code>cd bin</code> 就报错</td></tr>
+<tr><td><code>.</code></td><td>当前目录本身</td><td><code>cd .</code> 原地不动</td></tr>
+<tr><td><code>..</code></td><td>上一层目录。在 <code>/</code> 时还是 <code>/</code></td><td><code>cd ../6858</code> 退一层再进隔壁</td></tr>
+<tr><td><code>~</code></td><td>家目录</td><td><code>cd ~/..</code> 到 <code>/home</code></td></tr>
+</table></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>脚本里写了 <code>cat data.txt</code>。在脚本所在的目录跑没问题，换个目录跑就找不到文件。因为相对路径看的是你当时站在哪，不看脚本放在哪。</p></div>
+<p><strong>Tab 补全</strong> <span class="ts">27:03</span>：敲几个字母按 <kbd>Tab</kbd> 会自动补全。候选不止一个时，按两下 <kbd>Tab</kbd> 全部列出。讲师演示 <code>cd /b</code> 时，候选有 <code>/bin</code> 和 <code>/boot</code>。</p>
+<p>下面的演示走一遍讲义里那条绕圈命令 <code>cd bin/../bin/././../bin/..</code>。每走一段，当前目录跟着变。</p>
+<div data-vz="ch01-cd"></div>
+<div class="callout tool"><div class="ct">讲义推荐 · zoxide</div><p><a href="https://github.com/ajeetdsouza/zoxide" target="_blank" rel="noopener">zoxide</a> 会记住你常去的目录。以后敲 <code>z 关键字</code> 就能跳过去，少打很多字。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s7" data-nav="$PATH 查找" data-t="28:08">shell 按 $PATH 的顺序找程序，只用第一个 <span class="ts">28:08</span></h2>
+<p class="lead">敲 <code>date</code> 时，shell 按 <code>PATH</code> 里的目录挨个找同名文件。找到第一个就运行，后面的不看。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Git Bash）</div><pre><span class="p">$ </span><span class="cmd">which -a python</span>   <span class="cm"># 三个都叫 python，敲 python 只跑第一个</span>
+<span class="o">/d/py/python
+/d/anaconda/python
+/c/Users/lrhto/AppData/Local/Microsoft/WindowsApps/python</span>
+<span class="p">$ </span><span class="cmd">type cd</span>           <span class="cm"># cd 是内建命令，根本不查 PATH</span>
+<span class="o">cd is a shell builtin</span></pre></div>
+<p class="like"><b>打个比方</b>PATH 像一排抽屉，从左往右挨个翻。翻到第一个就停手。后面的抽屉里有同名的，也不会去管。</p>
+<p>PATH 是一个<strong>环境变量</strong>。里面是一串目录，用冒号隔开。讲义里的样子是这样的：</p>
+<div class="code term"><div class="cap">讲义原文</div><pre><span class="p">missing:~$ </span><span class="cmd">echo $PATH</span>
+<span class="o">/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin</span>
+<span class="p">missing:~$ </span><span class="cmd">which echo</span>
+<span class="o">/bin/echo</span>
+<span class="p">missing:~$ </span><span class="cmd">/bin/echo $PATH</span>
+<span class="o">/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin</span></pre></div>
+<figure class="fig"><script>
+DG('flow', { nodeH: 46, cols: [
+  [ { id: 'in', l: '输入命令名', s: 'date / ./x.sh / cd', tone: 'data' } ],
+  [ { id: 'slash', l: '名字里有 “/” 吗', shape: 'diamond', tone: 'warn', w: 150 } ],
+  [ { id: 'direct', l: '按路径直接执行', s: './lecture.sh', tone: 'ok' }, { id: 'bi', l: '是内建或关键字吗', shape: 'diamond', tone: 'warn', w: 150 } ],
+  [ { id: 'self', l: 'shell 自己执行', s: 'cd、if、test', tone: 'info' }, { id: 'walk', l: '按 $PATH 顺序找', s: '用第一个命中的', tone: 'teal' } ],
+  [ { id: 'run', l: '运行这个文件', s: 'which 显示的就是它', tone: 'ok' }, { id: 'nf', l: 'command not found', tone: 'bad' } ]
+], edges: [ ['in', 'slash'], ['slash', 'direct', '是', 'ok'], ['slash', 'bi', '否'], ['bi', 'self', '是', 'info'], ['bi', 'walk', '否'], ['walk', 'run', '找到', 'ok'], ['walk', 'nf', '都没有', 'bad'] ] });
+</script><figcaption>shell 查找命令的顺序。“内建优先”这一步是补充，不在视频里。出处是 <code>man bash</code> 的 COMMAND EXECUTION 一节</figcaption></figure>
+<ul>
+<li><code>which 程序名</code> 把同样的查找走一遍，打印第一个命中的路径。<code>which</code> 自己也只是一个程序。</li>
+<li><code>which -a sh</code> 列出 PATH 里<strong>所有</strong>同名文件（<span class="ts">31:02</span>）。</li>
+<li>直接写完整路径，比如 <code>/bin/echo</code>，就会<strong>跳过</strong>查找。</li>
+<li>想知道能运行哪些程序？把 PATH 里每个目录 <code>ls</code> 一遍，比如 <code>ls /bin</code>。</li>
+</ul>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>装了新版 Python，敲 <code>python</code> 跑的还是旧版。多半是旧版所在的目录在 PATH 里更靠前。先敲 <code>which -a python</code> 看看排序，再去调 PATH。上面本机实测就有三个 python。</p></div>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">which -a sh</span>   <span class="cm"># Git Bash 里同一个 sh 被列了三次</span>
+<span class="o">/usr/bin/sh
+/bin/sh
+/usr/bin/sh</span></pre></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）：为什么 sh 列了三行</div>
+<p>Git Bash 的 PATH 里，<code>/usr/bin</code> 出现了不止一次。<code>which -a</code> 每命中一次就列一行。<code>/bin</code> 在 Git Bash 里也映射到同一个目录。规则不变，shell 只用第一个。</p></div>
+<p>下面的演示让搜索指针一个目录一个目录地走。先找到 <code>/bin/echo</code>。再看 <code>lecture.sh</code> 为什么找不到。最后看 <code>./lecture.sh</code> 和 <code>cd</code> 为什么根本不查 PATH。</p>
+<div data-vz="ch01-path"></div>
+
+<!-- ============================================================ -->
+<h2 id="s8" data-nav="cat / sort / uniq" data-t="32:43">sort 默认按字典序，uniq 只合并挨着的行 <span class="ts">32:43</span></h2>
+<p class="lead">这几个小工具各管一件事。最容易错的有两点。<code>sort</code> 默认按字典序排，<code>uniq</code> 只看相邻的行。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">printf 'a\n3\n31\nb\nx\n1\n4\n' &gt; data</span>   <span class="cm"># 造 7 行测试数据</span>
+<span class="p">$ </span><span class="cmd">sort data | tr '\n' ' '</span>      <span class="cm"># 字典序逐个字符比，31 排在 4 前面</span>
+<span class="o">1 3 31 4 a b x</span>
+<span class="p">$ </span><span class="cmd">sort -n data | tr '\n' ' '</span>   <span class="cm"># -n 才按数值，字母行被当成 0</span>
+<span class="o">a b x 1 3 4 31</span>
+<span class="p">$ </span><span class="cmd">printf 'bob\nann\nbob\n' | uniq -c</span>          <span class="cm"># 两个 bob 不挨着，各数一次</span>
+<span class="o">      1 bob
+      1 ann
+      1 bob</span>
+<span class="p">$ </span><span class="cmd">printf 'bob\nann\nbob\n' | sort | uniq -c</span>   <span class="cm"># 先排序，同名才挨在一起</span>
+<span class="o">      1 ann
+      2 bob</span></pre></div>
+<p class="like"><b>打个比方</b>uniq 像排队点名，只和前一个人比。前后两人同名才算重复。中间隔了一个人，它就认不出来。所以先用 sort 让大家按名字站好。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>命令</th><th>作用</th><th>要点</th></tr>
+<tr><td><code>cat file</code></td><td>打印文件内容</td><td>讲义推荐带语法高亮的 <a href="https://github.com/sharkdp/bat" target="_blank" rel="noopener">bat</a></td></tr>
+<tr><td><code>sort file</code></td><td>按行排序</td><td><strong>默认字典序</strong>。加 <code>-n</code> 才按数值</td></tr>
+<tr><td><code>uniq file</code></td><td>去掉<strong>相邻</strong>的重复行</td><td>4 4 4 3 4 变成 4 3 4。<code>sort -u</code> 一步到位</td></tr>
+<tr><td><code>head</code> / <code>tail</code></td><td>打印开头或结尾几行</td><td>默认 10 行，<code>-n 数字</code> 指定</td></tr>
+</table></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>统计次数时忘了先 sort，同一个名字会被数成好几段。上面两个 bob 就是这样。正确写法是 <code>sort | uniq -c</code>。按次数排序时也要加 <code>-n</code>，不然 10 会排在 9 前面。</p></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）</div><p><code>tr '\n' ' '</code> 只是把多行压成一行，方便展示。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s9" data-nav="grep 与 sed" data-t="35:39">grep 挑出匹配的行，sed 改写每一行 <span class="ts">35:39</span></h2>
+<p class="lead"><code>grep</code> 只把匹配模式的行打印出来。<code>sed</code> 按规则改写每一行。两者的模式都是正则表达式。</p>
+<div class="code term"><div class="cap">bash · 写法示意</div><pre><span class="p">$ </span><span class="cmd">grep -r TODO src/</span>              <span class="cm"># 搜的是文件内容，不是文件名</span>
+<span class="p">$ </span><span class="cmd">sed 's/grep/john/' notes.md</span>    <span class="cm"># 不加 -i，只打印结果，文件不变</span>
+<span class="p">$ </span><span class="cmd">sed -i 's/grep/john/g' */*.md</span>  <span class="cm"># -i 直接改文件，g 表示一行里全换</span></pre></div>
+<p class="like"><b>打个比方</b>grep 像拿荧光笔扫一遍，只抄下带关键词的行。sed 像编辑器里的“查找替换”，但能一口气改一堆文件。</p>
+<p><code>grep</code> 加 <code>-r</code> 会钻进子目录，把整棵目录树都搜一遍。正则表达式在第 9 讲细讲。</p>
+<p><code>sed</code> 是一个能编程的行编辑器。它有自己的小语言，最常用的就是查找替换：</p>
+<div class="code term"><div class="cap">讲义原文</div><pre><span class="p">$ </span><span class="cmd">sed -i 's/pattern/replacement/g' file</span></pre></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>片段</th><th>含义</th></tr>
+<tr><td><code>-i</code></td><td>直接改文件。不加的话文件不变，只打印结果</td></tr>
+<tr><td><code>s/…/…/</code></td><td>sed 里的替换命令。<code>/</code> 隔开模式和替换内容</td></tr>
+<tr><td><code>g</code></td><td><strong>一行里所有</strong>匹配都换。不加只换每行第一个</td></tr>
+</table></div>
+<p>讲师在课程仓库里跑了 <code>sed -i 's/grep/john/g' */*.md</code>。再用 <code>git diff</code> 一看，所有 grep 都成了 john（<span class="ts">38:07</span>）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>第一，忘了 <code>g</code>，每行只换掉第一个。第二，<code>-i</code> 改完没法撤销。稳妥的做法是先不加 <code>-i</code> 看输出，确认没错再加。第三，macOS 自带的 sed，<code>-i</code> 后面必须跟一个参数，比如 <code>-i ''</code>。这一条是补充，不在视频里。</p></div>
+<h3 id="s9b">glob 归 shell 展开，正则归程序解释 <span class="ts">39:17</span></h3>
+<p class="lead"><code>*.md</code> 这种通配符，shell 会先展开成文件名。正则表达式原样交给程序，由程序自己解释。</p>
+<div class="code term"><div class="cap">bash · 本机实测（目录里有 a/x.md 和 b/y.md）</div><pre><span class="p">$ </span><span class="cmd">echo */*.md</span>     <span class="cm"># shell 先展开成文件列表，echo 只管打印</span>
+<span class="o">a/x.md b/y.md</span>
+<span class="p">$ </span><span class="cmd">echo '*/*.md'</span>   <span class="cm"># 加了引号，shell 不展开，原样交给 echo</span>
+<span class="o">*/*.md</span></pre></div>
+<p class="like"><b>打个比方</b>glob 像门卫，先按名单把人领进来。程序只看得到名单上的人。正则像一张规则纸条，原样递给屋里的程序自己判断。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th></th><th>glob（通配符）</th><th>正则表达式</th></tr>
+<tr><td>谁来解释</td><td><strong>shell</strong> 在运行程序前展开成路径列表。前提是没加引号</td><td><strong>程序自己</strong>，比如 grep 和 sed</td></tr>
+<tr><td>语法</td><td>很小：<code>*</code> <code>?</code> <code>{a,b}</code>，还有 <code>[...]</code></td><td>复杂得多</td></tr>
+<tr><td>用途</td><td>写路径，<code>/</code> 有特殊含义</td><td>匹配任意文本，不懂目录</td></tr>
+<tr><td>例子</td><td><code>*/*.md</code>：任意子目录里的 .md 文件</td><td><code>[^a].*-[0-9]</code></td></tr>
+</table></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>给 grep 的正则不加引号，里面的 <code>*</code> 会先被 shell 当成 glob。如果正好匹配到文件名，grep 收到的就不是你写的模式。所以正则一律用单引号包起来。</p></div>
+<div class="callout tool"><div class="ct">讲义推荐 · ripgrep</div><p><a href="https://github.com/BurntSushi/ripgrep" target="_blank" rel="noopener">ripgrep（rg）</a> 比 grep 快，也更友好。它默认递归搜当前目录，只是可移植性差一点。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s10" data-nav="find" data-t="42:57">find 逐层检查每个文件，-exec 对结果跑命令 <span class="ts">42:57</span></h2>
+<p class="lead"><code>find</code> 从一个目录往下逐层走。每个文件都拿条件过一遍，全满足的才输出。</p>
+<div class="code term"><div class="cap">讲义例子（注释是笔记加的）</div><pre><span class="p">$ </span><span class="cmd">find ~/Downloads -type f -name "*.zip" -mtime +30</span>   <span class="cm"># 30 天前的 zip 文件</span>
+<span class="p">$ </span><span class="cmd">find ~ -type f -size +100M -exec ls -lh {} \;</span>       <span class="cm"># 大于 100M 的逐个列出</span>
+<span class="p">$ </span><span class="cmd">find . -name "*.py" -exec grep -l "TODO" {} \;</span>      <span class="cm"># 哪些 py 文件里有 TODO</span></pre></div>
+<p class="like"><b>打个比方</b>find 像仓库管理员拿着清单逐层巡查。条件就是清单上的要求。<code>-exec</code> 是让他每找到一件，就顺手贴个标签。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>片段</th><th>含义</th></tr>
+<tr><td><code>-type f</code></td><td>只要普通文件。<code>d</code> 表示目录</td></tr>
+<tr><td><code>-name "*.zip"</code></td><td>文件名匹配这个 glob。要<strong>加引号</strong>，交给 find 自己匹配</td></tr>
+<tr><td><code>-mtime +30</code></td><td>修改时间在 30 天以前</td></tr>
+<tr><td><code>-size +100M</code></td><td>大于 100M</td></tr>
+<tr><td><code>-exec 命令 {} \;</code></td><td>对每个结果跑一次命令，<code>{}</code> 换成文件路径。<code>;</code> 表示命令结束。它要写成 <code>\;</code>，否则 shell 会当成分隔符</td></tr>
+<tr><td><code>-maxdepth N</code></td><td>最多往下走 N 层，默认不限。讲师现场踩了坑：它要写在 <code>-name</code> 这类条件<strong>前面</strong></td></tr>
+</table></div>
+<p><code>grep -l</code> 打印匹配的<em>文件名</em>，不打印匹配的行。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p><code>-name</code> 后面的 <code>*.zip</code> 不加引号，就会被 shell 先展开。当前目录正好有 zip 文件时，find 收到的就成了具体文件名。另外，把 <code>ls -lh</code> 换成 <code>rm</code>，一行就能批量删文件。讲师也没真跑。你也先用 <code>ls</code> 看清楚再删。</p></div>
+<div class="callout ai"><div class="ct">讲师建议</div><p>find 的语法很怪，看几个例子学不会。网上的 find 例子极多。所以<strong>让 LLM 帮你写 find 命令</strong>，效果通常很好（<span class="ts">50:00</span>）。更现代的替代品是 <a href="https://github.com/sharkdp/fd" target="_blank" rel="noopener">fd</a>。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s11" data-nav="awk" data-t="51:07">awk 按列取数据 <span class="ts">51:07</span></h2>
+<p class="lead"><code>awk</code> 把每一行按空白切成几列。<code>$1</code> 是第一列，<code>$2</code> 是第二列。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">printf 'a b c\nd e f\ng h i\n' &gt; m</span>   <span class="cm"># 3 行 3 列</span>
+<span class="p">$ </span><span class="cmd">awk '{print $2}' m</span>                   <span class="cm"># 单引号：$2 原样交给 awk</span>
+<span class="o">b
+e
+h</span>
+<span class="p">$ </span><span class="cmd">awk "{print $2}" m</span>                   <span class="cm"># 双引号：$2 先被 shell 换成空串</span>
+<span class="o">a b c
+d e f
+g h i</span></pre></div>
+<p class="like"><b>打个比方</b>awk 像拿着一张 Excel 表，只抄你要的那一列。sed 擅长改文件，awk 擅长拆文件。</p>
+<ul>
+<li><code>{ … }</code> 里的代码对每一行执行一次。前面可以加一个条件，只处理满足条件的行。练习 17 会用到。</li>
+<li>加 <code>-F,</code> 改用逗号分列，awk 马上就能解析 CSV。讲师现场拿没逗号的文件试了一下。没有第 2 列，打印出来全是空行。</li>
+</ul>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>awk 程序要用单引号包起来。用了双引号，<code>$2</code> 会先被 shell 当成自己的变量。它通常是空的，awk 收到的就成了 <code>{print }</code>，于是整行原样打印。上面第二条命令就是这样。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s12" data-nav="SSH 日志流水线" data-t="53:27">流水线的每一级只做一件小事 <span class="ts">53:27</span></h2>
+<p class="lead">前一级的输出就是后一级的输入。几个小工具一连，就能从日志里数出谁被乱试得最多。</p>
+<div class="code term"><div class="cap">讲义原文（讲师的服务器现场没连上，讲义给出了结果）</div><pre><span class="p">$ </span><span class="cmd">ssh myserver 'journalctl -u sshd -b-1 | grep "Disconnected from"' \
+  | sed -E 's/.*Disconnected from .* user (.*) [^ ]+ port.*/\1/' \
+  | sort | uniq -c \
+  | sort -nk1,1 | tail -n10 \
+  | awk '{print $2}' | paste -sd,</span>
+<span class="o">postgres,mysql,oracle,dell,ubuntu,inspur,test,admin,user,root</span></pre></div>
+<p class="like"><b>打个比方</b>像工厂流水线。每个工位只拧一颗螺丝，整条线连起来就能出成品。</p>
+<figure class="fig"><script>
+DG('flow', { w: 860, nodeH: 52, dir: 'TB', rowGap: 34, cols: [
+  [ { id: 'a', l: 'ssh + journalctl', s: '远端取 sshd 日志', tone: 'teal' }, { id: 'b', l: 'grep', s: '留下 Disconnected 行', tone: 'info' }, { id: 'c', l: 'sed -E', s: '只留用户名 \\1', tone: 'info' }, { id: 'd', l: 'sort', s: '同名挨在一起', tone: 'info' } ],
+  [ { id: 'h', l: 'paste -sd,', s: '合成一行，逗号隔开', tone: 'info' }, { id: 'g', l: "awk '{print $2}'", s: '去掉次数', tone: 'info' }, { id: 'f', l: 'sort -nk1,1 | tail', s: '按次数排，取前 10', tone: 'info' }, { id: 'e', l: 'uniq -c', s: '计数', tone: 'info' } ]
+], edges: [ ['a', 'b', '|', 'data'], ['b', 'c', '|', 'data'], ['c', 'd', '|', 'data'], ['d', 'e', '|', 'data'], ['e', 'f', '|', 'data'], ['f', 'g', '|', 'data'], ['g', 'h', '|', 'data'] ] });
+</script><figcaption>每一级只做一件小事。前一级的 stdout 就是后一级的 stdin</figcaption></figure>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>片段</th><th>作用（视频 54:00 到 56:21）</th></tr>
+<tr><td><code>ssh myserver '…'</code></td><td>在远程服务器上执行引号里的命令。第 2 讲细讲 ssh</td></tr>
+<tr><td><code>journalctl -u sshd -b-1</code></td><td>打印 sshd 服务的日志。<code>-b-1</code> 只要上一次开机期间的</td></tr>
+<tr><td><code>grep "Disconnected from"</code></td><td>有人登录失败或断开时，日志里会出现这句</td></tr>
+<tr><td><code>sed -E 's/…(.*)…/\1/'</code></td><td>正则替换。<code>\1</code> 是<strong>反向引用</strong>，指第一个括号抓到的用户名</td></tr>
+<tr><td><code>sort | uniq -c</code></td><td>先排序再计数。<code>john</code> 出现 3 次就输出 <code>3 john</code></td></tr>
+<tr><td><code>sort -nk1,1 | tail -n10</code></td><td>按第 1 列的数值排，次数多的在后面。取最后 10 行就是前 10 名</td></tr>
+<tr><td><code>awk '{print $2}' | paste -sd,</code></td><td>只留用户名，再用逗号连成一行</td></tr>
+</table></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>整条流水线一次写对很难。出错时别盯着整行看。从左往右一级级加，每加一级就看一眼输出。哪一级的输出不对，问题就在哪。</p></div>
+<p>讲义结果里全是 postgres、oracle、admin、root 这类名字。它们来自网上的扫描器，在乱试密码。讲师说，“没有一个是我的名字”。</p>
+<p>我们连不上讲师的服务器。所以笔记造了 12 行<strong>示意日志</strong>。在本机把每一级都真跑了一遍。下面的演示逐级播放。右侧代码高亮当前这一级，控制台是这一级的真实输出。</p>
+<div data-vz="ch01-ssh"></div>
+
+<!-- ============================================================ -->
+<h2 id="s13" data-nav="管道与重定向" data-t="58:43">管道把程序接到程序，重定向把流接到文件 <span class="ts">58:43</span></h2>
+<p class="lead"><code>|</code> 把左边程序的标准输出，接到右边程序的标准输入。<code>&gt;</code> 和 <code>&lt;</code> 把流改接到文件上。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">ls /nonexistent /tmp &gt; out.txt 2&gt; err.txt; echo "exit=$?"</span>   <span class="cm"># 练习 5：正常输出和报错分开存</span>
+<span class="o">exit=2</span>
+<span class="p">$ </span><span class="cmd">cat err.txt</span>   <span class="cm"># 报错走的是 2 号流 stderr</span>
+<span class="o">ls: cannot access '/nonexistent': No such file or directory</span>
+<span class="p">$ </span><span class="cmd">printf '3\n1\n2\n' &gt; f; sort f &gt; f; wc -c &lt; f</span>   <span class="cm"># &gt; 先把 f 清空，sort 读到的是空文件</span>
+<span class="o">0</span></pre></div>
+<p class="like"><b>打个比方</b>每个程序都接着三根水管。0 号进水，1 号出水，2 号排污。管道把一根出水管接到下一个程序的进水口。重定向把水管接进水桶。</p>
+<p>大多数命令行程序没拿到文件参数，就去读 stdin。管道正是靠这一点才能用。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>写法</th><th>效果</th></tr>
+<tr><td><code>cmd &gt; file</code></td><td>stdout 写进文件，会<strong>覆盖</strong></td></tr>
+<tr><td><code>cmd &gt;&gt; file</code></td><td>stdout <strong>追加</strong>到文件末尾</td></tr>
+<tr><td><code>cmd &lt; file</code></td><td>stdin 从文件读，不从键盘读</td></tr>
+<tr><td><code>cmd 2&gt; file</code></td><td>stderr 也就是报错，写进文件 <span class="tag">练习 5</span></td></tr>
+<tr><td><code>cmd &gt; file 2&gt;&amp;1</code></td><td>stdout 和 stderr 进同一个文件。讲义的 flaky 脚本就这么用</td></tr>
+<tr><td><code>a | tee log | b</code></td><td>tee 把输入原样往下传，<strong>同时</strong>存一份到文件</td></tr>
+</table></div>
+<div class="callout tip"><div class="ct">讲义里的 tee 用法</div><p><code>verbose cmd | tee verbose.log | grep CRITICAL</code>。完整日志留在文件里，终端只显示关键行。</p></div>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">printf 'INFO a\nCRITICAL disk\nINFO b\n' | tee verbose.log | grep CRITICAL</span>
+<span class="o">CRITICAL disk</span>
+<span class="p">$ </span><span class="cmd">wc -l verbose.log</span>   <span class="cm"># 终端只看到一行，文件里三行都在</span>
+<span class="o">3 verbose.log</span></pre></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>第一，<code>sort f &gt; f</code> 会把 f 清空。shell 先打开并清空输出文件，sort 才开始读。上面本机实测，结果是 0 字节。第二，<code>2&gt;&amp;1</code> 要写在 <code>&gt; file</code> 后面。写反了，报错还是跑到终端上：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">ls /nonexistent &gt; o 2&gt;&amp;1; cat o</span>       <span class="cm"># 先把 1 接到 o，再让 2 跟着 1 走</span>
+<span class="o">ls: cannot access '/nonexistent': No such file or directory</span>
+<span class="p">$ </span><span class="cmd">ls /nonexistent 2&gt;&amp;1 &gt; o; wc -c &lt; o</span>   <span class="cm"># 2 先跟了终端，1 后来才改到 o</span>
+<span class="e">ls: cannot access '/nonexistent': No such file or directory</span>
+<span class="o">0</span></pre></div></div>
+<p>管道和重定向是一件事的两面，都是把流接到哪里。所以下面的演示分两幕。第一幕看管道接 stdin。第二幕看重定向把 0、1、2 改接到文件。</p>
+<div data-vz="ch01-pipe"></div>
+
+<!-- ============================================================ -->
+<h2 id="s14" data-nav="if / while / for" data-t="1:01:02">if 看的是退出码，不是真假值 <span class="ts">1:01:02</span></h2>
+<p class="lead">bash 的 <code>if</code> 后面跟的是一条命令。命令退出码是 0 就算真，非 0 就算假。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">grep -q zzz data; echo $?</span>   <span class="cm"># 没找到 zzz，退出码是 1</span>
+<span class="o">1</span>
+<span class="p">$ </span><span class="cmd">if grep -q 31 data; then echo found; else echo missing; fi</span>   <span class="cm"># if 直接看 grep 的退出码</span>
+<span class="o">found</span>
+<span class="p">$ </span><span class="cmd">a=x; [ "$a"="y" ] &amp;&amp; echo same</span>   <span class="cm"># = 两边没空格，成了一个非空字符串，永远为真</span>
+<span class="o">same</span>
+<span class="p">$ </span><span class="cmd">a=x; ["$a" = "y"]</span>                <span class="cm"># [ 后面没空格，shell 去找叫 [x 的程序</span>
+<span class="e">bash: [x: command not found</span></pre></div>
+<p class="like"><b>打个比方</b>if 不问“这句话对不对”，只问“这件事办成没有”。办成了返回 0，就走 then。这和 C 语言里 0 为假正好相反。</p>
+<p>bash 有变量、条件、循环和函数。你在提示符里敲的，就是一小段被解释执行的代码。</p>
+<div class="code"><div class="cap">bash · 语法骨架（讲义，注释是笔记加的）</div><pre>if command1; then command2; command3; fi      <span class="cm"># command1 退出码为 0 才走 then</span>
+while command1; do command2; command3; done   <span class="cm"># command1 一直成功，就一直循环</span>
+for varname in a b c d; do command; done      <span class="cm"># 依次把 a b c d 放进 varname</span>
+for i in $(seq 1 10); do …; done              <span class="cm"># $( ) 是命令替换，把输出塞进来</span></pre></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>概念</th><th>说明</th></tr>
+<tr><td>退出码</td><td>程序结束时返回的一个数。<code>$?</code> 存着上一条命令的退出码。grep 找到返回 0，没找到返回 1，出错返回 2</td></tr>
+<tr><td><code>$(cmd)</code></td><td>命令替换。先运行 cmd，用它的输出换掉整个 <code>$( )</code>，再按空白切词。旧代码里的反引号作用一样。<code>$( )</code> 能嵌套，优先用它</td></tr>
+<tr><td><code>test</code> / <code>[</code></td><td>专门做比较的程序，条件成立就返回 0。<code>[ -f file ]</code> 判断文件存在。<code>[ "$var" = "string" ]</code> 判断字符串相等</td></tr>
+<tr><td><code>[[ ]]</code></td><td>bash 内建的加强版，引号相关的怪问题更少</td></tr>
+<tr><td><code>sleep 10</code></td><td>视频里放进 while 循环，每 10 秒检查一次</td></tr>
+</table></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p><code>[</code> 其实是一个命令，<code>]</code> 是它的最后一个参数。所以 <code>[</code>、<code>]</code> 和 <code>=</code> 两边都要有空格。少了空格不一定报错，可能悄悄地永远为真。上面第三条就是。</p></div>
+<p>下面的演示把“条件就是退出码”画出来。先看 grep 的退出码怎么决定分支。再看 <code>$( )</code> 的输出怎么变成 for 的元素。最后看 test 不成立时怎么走 else。</p>
+<div data-vz="ch01-flow"></div>
+<div class="callout warn"><div class="ct">学生提问：if 是程序吗（视频 1:07:31）</div><p>不是。<code>if</code>、<code>while</code> 和 <code>|</code> 都是 bash 自己的语法，<code>cd</code> 也内建在 shell 里。<code>test</code> 和 <code>[</code> 在讲师的机器上是真实存在的程序，<code>which [</code> 能找到。cd 为什么必须内建？这是练习 7。</p></div>
+<div class="callout ai"><div class="ct">讲师建议</div><p>bash 的语法很古老。结束 if 要写 <code>fi</code>，讲师的解释是“因为为什么不呢”。这类命令 LLM 写得很好。人除非写过很多次，否则总得查。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s15" data-nav="shebang 与 chmod" data-t="1:08:12">脚本要过两关：执行权限和第一行的 #! <span class="ts">1:08:12</span></h2>
+<p class="lead">运行 <code>./lecture.sh</code> 时，系统先查有没有执行权限。再读第一行的 <code>#!</code>，决定把文件交给哪个解释器。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">printf '#!/bin/sh\necho hi\n' &gt; lecture.sh</span>   <span class="cm"># 第一行 #! 指定用 /bin/sh 来跑</span>
+<span class="p">$ </span><span class="cmd">chmod +x lecture.sh</span>   <span class="cm"># 加执行权限，Linux 下不加会 Permission denied</span>
+<span class="p">$ </span><span class="cmd">./lecture.sh</span>          <span class="cm"># 带 ./，明说文件就在当前目录</span>
+<span class="o">hi</span>
+<span class="p">$ </span><span class="cmd">lecture.sh</span>            <span class="cm"># 不带 /，只查 PATH，当前目录不在里面</span>
+<span class="e">bash: lecture.sh: command not found</span></pre></div>
+<p class="like"><b>打个比方</b><code>#!</code> 像快递单上的收件人。系统看一眼第一行，就知道这个包裹该交给谁拆。执行权限是门禁卡，没卡连门都进不去。</p>
+<p>命令长到三行，在提示符里就很难改了。把它们写进文件，bash 会从上到下逐行执行。效果和你一行行敲一样。</p>
+<figure class="fig"><script>
+DG('seq', { actors: [ { l: '你', tone: 'neutral' }, { l: 'bash', s: '当前 shell', tone: 'info' }, { l: '内核', s: '操作系统', tone: 'warn' }, { l: '/bin/sh', s: '解释器', tone: 'info' } ], msgs: [
+  { f: 0, t: 1, l: './lecture.sh', mono: true },
+  { f: 1, t: 2, l: '请执行这个文件', tone: 'data' },
+  { note: '检查 x 权限，没有就 Permission denied', at: 2, tone: 'bad' },
+  { note: '有权限，读第一行 #!/bin/sh', at: 2, tone: 'ok' },
+  { f: 2, t: 3, l: '启动 /bin/sh，把 lecture.sh 交给它', tone: 'ok' },
+  { f: 3, t: 0, l: '逐行执行脚本，输出到终端', tone: 'data' }
+] });
+</script><figcaption>“内核读 #! 再启动解释器”这个分工是补充，不在视频里。视频里的说法是：shell 运行 #! 指定的程序，把文件交给它</figcaption></figure>
+<ul class="keys">
+<li><strong>shebang</strong> <code>#!/path</code>：写在文件第一行，指定用哪个程序运行它。<code>./lecture.sh</code> 就相当于 <code>/bin/sh lecture.sh</code>。换成 <code>#!/usr/bin/python</code> 就能直接跑 Python。R、Julia、Ruby 都行。Java 不行，它得先编译。</li>
+<li><strong>执行权限</strong>：<code>ls -l</code> 左边的 rwx 分别是读、写、执行。新建的文件没有 x，执行会报 <code>Permission denied</code>。<code>chmod +x</code> 加上执行位后，ls 还会把它换个颜色显示。</li>
+<li><strong>为什么要写 ./</strong>：名字里没有 <code>/</code> 时，shell 只查 PATH。当前目录故意不放进 PATH。不然有人在目录里放个 <code>ls</code> 文件，你敲的 <code>ls</code> 就被顶替了。</li>
+</ul>
+<div class="callout warn"><div class="ct">本机实测差异：Git Bash 不认 chmod</div>
+<p>在 Windows 的 Git Bash 里，以 <code>#!</code> 开头的文件，<code>ls -l</code> 直接显示 <code>-rwxr-xr-x</code>。不用 chmod 也能运行。不带 <code>./</code> 运行一样会报错：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">ls -l lecture.sh</span>
+<span class="o">-rwxr-xr-x 1 lrhto 197610 30 Oct 29 15:29 lecture.sh</span>
+<span class="p">$ </span><span class="cmd">lecture.sh</span>
+<span class="e">bash: lecture.sh: command not found</span></pre></div>
+<p>想亲眼看到 Permission denied，请在 WSL 或 Linux 里做练习 9。</p></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）：Windows 换行符的坑</div>
+<p>在 Windows 上写的脚本，行尾常常是 CRLF。到了 Linux，第一行就成了 <code>#!/bin/sh</code> 后面多一个回车符。系统找不到这个解释器，会报 bad interpreter。本机 Git Bash 能容忍 CRLF，实测照样输出 hi。所以这个坑只在 Linux 上踩到。</p></div>
+<p>下面的演示把两道关画出来。先查执行权限，再读 <code>#!</code> 启动解释器。最后一步对照 Git Bash 的实测差异。</p>
+<div data-vz="ch01-perm"></div>
+
+<!-- ============================================================ -->
+<h2 id="s16" data-nav="跑到失败的脚本" data-t="1:08:44">讲义的完整脚本：一直跑，跑到失败为止 <span class="ts">1:08:44</span></h2>
+<p class="lead">这个脚本循环跑测试，直到某一次失败才停。日志文件里留下的，正好是失败那一轮。</p>
+<p class="like"><b>打个比方</b>像设个闹钟让机器一直试。你去喝咖啡，它摔倒的那一刻就停下。现场原样留着，等你回来看。</p>
+<p>讲师在 6.824 分布式系统课上碰到一个测试。它跑一百次才挂一次。于是写了这个脚本。后台先把 CPU 压满，再循环跑测试，人去喝咖啡。</p>
+<div class="code"><div class="cap">flaky.sh（讲义脚本，注释译成中文并补了考点）</div><pre>#!/bin/bash
+set -euo pipefail                   <span class="cm"># 三个安全开关，下面的表格逐个讲</span>
+
+<span class="cm"># 在后台启动 CPU 压力</span>
+stress --cpu 8 &amp;                    <span class="cm"># &amp; 放到后台，shell 不等它</span>
+STRESS_PID=$!                       <span class="cm"># $! 是刚才那个后台进程的 PID</span>
+
+<span class="cm"># 准备日志文件</span>
+LOGFILE="test_runs_$(date +%s).log" <span class="cm"># 用时间戳起名，每次都不重名</span>
+echo "Logging to $LOGFILE"
+
+<span class="cm"># 一直跑测试，直到失败</span>
+RUN=1                               <span class="cm"># 从 1 开始，正好避开 ((RUN++)) 的坑</span>
+while cargo test my_test &gt; "$LOGFILE" 2&gt;&amp;1; do   <span class="cm"># 每轮覆盖写，最后留下失败那轮</span>
+    echo "Run $RUN passed"
+    ((RUN++))
+done
+
+<span class="cm"># 收尾并报告</span>
+kill $STRESS_PID                    <span class="cm"># 别忘了关掉后台的压力进程</span>
+echo "Test failed on run $RUN"
+echo "Last 20 lines of output:"
+tail -n 20 "$LOGFILE"
+echo "Full log: $LOGFILE"</pre></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>新东西</th><th>含义</th></tr>
+<tr><td><code>&amp;</code></td><td>放到后台运行，shell 不等它结束。<code>$!</code> 是这个后台进程的 PID</td></tr>
+<tr><td><code>$(date +%s)</code></td><td>当前的 Unix 时间戳，本机实测的一个例子是 <code>1793288178</code>。每次日志名都不一样</td></tr>
+<tr><td><code>&gt; "$LOGFILE" 2&gt;&amp;1</code></td><td>每一轮的全部输出都覆盖写进日志。循环结束时，文件里正好是失败那一轮</td></tr>
+<tr><td><code>((RUN++))</code></td><td>算术展开，RUN 加 1</td></tr>
+<tr><td><code>set -e</code></td><td>任何命令失败，脚本立刻退出</td></tr>
+<tr><td><code>set -u</code></td><td>用到没定义的变量就报错，不当成空串</td></tr>
+<tr><td><code>set -o pipefail</code></td><td>管道里任一程序失败，整条管道就算失败</td></tr>
+</table></div>
+<p>下面的演示逐行执行这个脚本。右侧同步显示变量、日志文件和输出。失败轮次和 PID 都是示意。</p>
+<div data-vz="ch01-script"></div>
+<div class="code term"><div class="cap">bash · 本机实测：三个开关的效果</div><pre><span class="p">$ </span><span class="cmd">bash -c 'set -u; echo "$NOPE"'</span>   <span class="cm"># -u：变量没定义，直接报错</span>
+<span class="e">bash: line 1: NOPE: unbound variable</span>
+<span class="p">$ </span><span class="cmd">bash -c 'set -e; false; echo never'; echo "exit=$?"</span>   <span class="cm"># -e：false 一失败就退出</span>
+<span class="o">exit=1</span>
+<span class="p">$ </span><span class="cmd">bash -c 'false | true; echo $?'</span>   <span class="cm"># 默认只看管道里最后一个程序</span>
+<span class="o">0</span>
+<span class="p">$ </span><span class="cmd">bash -c 'set -o pipefail; false | true; echo $?'</span>   <span class="cm"># pipefail：任一失败就算失败</span>
+<span class="o">1</span></pre></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑（补充，非视频内容）</div>
+<p>算术命令 <code>((表达式))</code> 的值为 0 时，退出码是 1。讲义脚本里 RUN 从 1 开始，所以没事。要是从 0 开始，第一次 <code>((RUN++))</code> 的值就是 0。退出码成了 1，<code>set -e</code> 会让脚本<strong>一声不吭地退出</strong>。本机实测：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">bash -c 'set -e; RUN=0; ((RUN++)); echo "after RUN=$RUN"'; echo "exit=$?"</span>   <span class="cm"># echo 那句根本没跑到</span>
+<span class="o">exit=1</span></pre></div>
+<p>改成 <code>RUN=$((RUN + 1))</code> 就没这个问题。</p></div>
+<div class="callout ai"><div class="ct">讲义建议</div><p>bash 的坑多到有人专门建站收集，叫 <a href="https://mywiki.wooledge.org/BashPitfalls" target="_blank" rel="noopener">BashPitfalls</a>。写脚本时多用 <a href="https://www.shellcheck.net/" target="_blank" rel="noopener">shellcheck</a> 检查。LLM 很会写、也很会调 shell 脚本。脚本超过 100 行，就让它帮你改写成 Python 这类正经语言。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s17" data-nav="一页带走" data-t="1:14:06">一页带走：本讲结论都在这几行里 <span class="ts">1:14:06</span></h2>
+<p class="lead">把本讲浓缩成几行命令。每行的注释就是结论和考点。</p>
+<div class="code"><div class="cap">bash · 本讲速查（注释即考点）</div><pre>echo hello    world       <span class="cm"># 切成 3 个词，echo 用一个空格拼起来输出</span>
+echo "hello    world"     <span class="cm"># 引号里不切，argv[1] 带着 4 个空格</span>
+which -a python           <span class="cm"># 同名程序全列出来，shell 只跑第一个</span>
+sort data | uniq          <span class="cm"># uniq 只合并相邻行，所以先 sort</span>
+find . -name "*.zip"      <span class="cm"># 加引号，模式交给 find，别让 shell 先展开</span>
+sed -i 's/a/b/g' */*.md   <span class="cm"># 不加引号，就是要 shell 展开成文件列表</span>
+cmd &gt; out.txt 2&gt;&amp;1        <span class="cm"># 2&gt;&amp;1 写在后面，报错才会跟着进文件</span>
+if grep -q x f; then …    <span class="cm"># if 看退出码，0 才是真</span>
+./lecture.sh              <span class="cm"># 当前目录不在 PATH 里，要写 ./</span></pre></div>
+<ul class="keys">
+<li>终端是窗口，shell 是读命令的程序。本课用 bash。</li>
+<li>一行命令按空白切成参数，第一个词是程序名。引号和 <code>\</code> 能改变切法。</li>
+<li>程序名里没有 <code>/</code> 时，按 <code>$PATH</code> 的顺序找。<code>cd</code> 和 <code>if</code> 是 shell 内建的。</li>
+<li>cat、sort、uniq、grep、sed、find、awk 各管一件事。用 <code>|</code> 接起来，威力就大了。</li>
+<li><code>&gt;</code>、<code>&gt;&gt;</code> 和 <code>&lt;</code> 把流接到文件，<code>tee</code> 负责分流。</li>
+<li><code>if</code> 和 <code>while</code> 看命令的退出码。<code>[</code> 做比较，<code>$( )</code> 做命令替换。</li>
+<li>脚本就是文件加 shebang 加执行权限。<code>set -euo pipefail</code> 让脚本更安全。</li>
+</ul>
+<div class="callout key"><div class="ct">下一步</div>
+<p>这一讲是全课的地基，后面每一讲的工具都在 shell 里用。下一讲是命令行环境。会深入讲参数、glob、三条流和环境变量。还有信号、作业控制、SSH 和 tmux。现在先去做<a href="labs/lab01.html">本讲练习的可视化笔记</a>。</p></div>
+
+</article></main>
+<script src="assets/vz.js"></script>
+<script src="assets/viz/ch01-shell.js"></script>
+<script src="assets/viz/ch01-pipe.js"></script>
+</body>
+</html>

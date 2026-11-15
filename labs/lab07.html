@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>练习 07 · 智能体编程 · Missing Semester 2026</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="../assets/vz.css">
+<link rel="stylesheet" href="../assets/lab.css">
+<script>window.PAGE = { key: 'lab07', ch: 'ch07', type: 'lab', base: '../' };</script>
+<script src="../assets/course.js"></script>
+<script src="../assets/dg.js"></script>
+<script src="../assets/app.js"></script>
+<script src="data/lab07.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<header class="lab-head">
+  <div class="k">LAB 07 · 对应 <a href="../ch07.html">第 7 讲 · 智能体编程</a></div>
+  <h1>练习可视化笔记 · 智能体编程</h1>
+  <p class="lede">讲义第 7 讲一共 6 道练习，这里逐题讲。这一讲的练习，几乎都是用某个编码智能体去做一件事。这需要账号或付费订阅。所以本页<strong>不调用任何智能体，也不编造使用体验</strong>。每题先亮结论，再给做法和提示词。还有<strong>能自己核对的验收标准</strong>。不依赖智能体的部分，都在本机真跑。比如验收测试、参考实现和命令行做法。还有配置检查，和一个最小的 harness 骨架。考点都写在代码注释里。生成时间是 <b id="labGen">…</b>。</p>
+  <div class="lab-prog" id="labProg"><span class="t"></span><div class="bar"><div class="f"></div></div><button class="btn sm" id="labGo" type="button">定位到第一道未完成的题</button></div>
+  <div class="lab-legend">
+    <span><span class="wb gb">Git Bash 5.3 · Windows 本机</span> 真跑</span>
+    <span><span class="ec na">未实测</span> 需要智能体账号或 Docker，写明原因和验收标准</span>
+    <span><span class="ann" style="display:inline-flex;margin:0;padding:1px 8px"><span class="ar">L3</span></span> 注释层（不可选中，复制不会带上）</span>
+  </div>
+</header>
+
+<h2 id="env" data-nav="环境检查">环境检查：不调用智能体，只跑能验证的部分</h2>
+<p class="lead">本页命令都在 Windows 的 Git Bash 里真跑。需要智能体账号或 Docker 的步骤，标成了未实测。</p>
+<p>动手前先确认工具链。下面是生成本页时，在本机真跑的检查命令和输出：</p>
+<div data-env="gitbash"></div>
+<div class="callout warn"><div class="ct">本机限制与处理办法</div>
+<ul>
+<li><strong>不调用智能体</strong>：Claude Code、Codex 和 opencode 都要账号。它们按用量或订阅付费。所有“让智能体去做”的步骤，都标成<strong>未实测</strong>。页面给出你能照抄的提示词和验收命令。</li>
+<li><strong>没有 Docker</strong>：练习 6 的沙箱容器建不起来。只对配置文件做了静态检查。</li>
+<li><strong>mypy</strong>：本机没有全局安装。练习 1 的验收需要它。所以只装进那条命令自己的沙箱 venv。下载缓存放在临时目录，跑完就删。</li>
+<li><strong>隐私</strong>：输出经过 <code>.sanitize.py</code> 过滤。本机路径会显示成 <code>&lt;沙箱&gt;</code> 这类占位符。练习 2 和 5 用的是课程网站仓库的本地副本。不读你的其他文件。</li>
+<li><strong>题解作者</strong>：参考实现、测试和配置，都是笔记作者写的。它们都在本机验证过。它们是给你的“尺子”，不是智能体做出来的样子。</li>
+</ul></div>
+
+<!-- ======================= 补充 ======================= -->
+<h2 id="extra" data-nav="补充 · harness 骨架">补充实验 · harness 就是一个循环，50 多行就能写完</h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span><span class="tag ai">假模型</span></div>
+<p class="lead">harness 把上下文交给模型，再执行模型要的工具。工具结果追加回上下文。循环到模型输出文字为止。</p>
+<p>做练习前，先把这个循环跑一遍。<code>mini_harness.py</code> 里工具是真的，能读文件、运行命令。<strong>模型是假的</strong>，按顺序吐出预先写好的回复。所以每次结果都一样。把 <code>fake_llm</code> 换成一次真正的 API 调用。它就成了一个最小的编码智能体。讲义说，核心概念 <a href="https://www.mihaileric.com/The-Emperor-Has-No-Clothes/" target="_blank" rel="noopener">200 行代码就能实现</a>。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>harness 的循环，见<a href="../ch07.html#s5">第 7 讲第 5 节</a>。上下文管理和压缩，见<a href="../ch07.html#s14">第 14 节</a>和<a href="../ch07.html#s15">第 15 节</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>读</div><div data-file="extra/mini_harness.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：批准所有工具调用</div><div data-run="extra-a"></div>
+<p>输出怎么读。每一行 <code>[推理 #N]</code>，都是把整个上下文交给模型一次。输入从 25 字节涨到 517、599、676 字节。读过的文件、命令的输出，全都留在上下文里。一个请求，背后是 4 次推理、3 次工具调用。</p></div>
+<p class="like"><b>打个比方</b>harness 像餐厅的传菜员，厨师是模型。厨师喊要什么料，传菜员就去库房取。取来放到灶台上，厨师再喊下一样。直到厨师说“出菜”。</p>
+<div class="blk run"><div class="bh"><i>▶</i>跑：拒绝运行命令</div><div data-run="extra-b"></div>
+<p>读文件被配置成自动批准，运行命令需要确认。不加 <code>--approve</code> 时，harness 不执行命令，只告诉模型“被拒绝”。这对应讲师的配置（<span class="ts" data-v="sTdz6PZoAnw">4:35</span>）。改文件不问，每条 bash 都要他确认。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：把“上下文窗口”设成 600 字节</div><div data-run="extra-c"></div>
+<p>第三次工具调用后，上下文 676 字节，超过了上限。harness 把前缀压缩成一条摘要，变成 2 条、112 字节。最后一次推理只带着摘要。真实的 harness 会再调用一次 LLM 来写这份摘要。第 7 讲有两个演示，用的就是这些输出。一个讲工具调用循环，一个讲压缩。</p></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：没验证也敢下结论</div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>extra-b 里，两条命令都被拒绝了。假模型最后照样说“dl.py 能通过编译”。</div></div>
+<div class="row"><b>原因</b><div>这个假模型是写死的，不会因为被拒绝而改口。真实模型也可能在没验证的情况下下结论。</div></div>
+<div class="row good"><b>正确做法</b><div>看 harness 的原始输出，确认工具真的执行了。结论要能被输出撑住，才算数。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>python mini_harness.py --approve "…"               <span class="cm"># 4 次推理、3 次工具调用，上下文从 25 涨到 676 字节</span>
+python mini_harness.py "…"                         <span class="cm"># 不批准：run 的结果是“（用户拒绝了这次工具调用）”，39 字节</span>
+python mini_harness.py --approve --limit 600 "…"   <span class="cm"># 676 字节超限，压缩成 2 条 / 112 字节</span>
+ctx.append({"role": "tool", "content": result})    <span class="cm"># 工具结果必须追加进上下文：模型没有记忆，只看得到输入</span></pre></div>
+
+<!-- ======================= 1 ======================= -->
+<h2 id="ex01" data-nav="1 · 四种方式对比">练习 1 · 同一个任务做四遍，先写好统一的尺子 <label class="ex-done"><input type="checkbox" data-ex="ex01">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">验收部分 Git Bash 实测</span><span class="tag lnx">智能体部分未实测</span></div>
+<p class="q-orig"><b>原题</b>：同一个编程任务，做四遍。分别用手写、AI 自动补全、行内对话和智能体。然后比较体验。最好选你正在做的项目里的一个小功能。没有的话，可以做开源项目里 “good first issue” 一类的任务。也可以做 <a href="https://adventofcode.com/" target="_blank" rel="noopener">Advent of Code</a> 或 <a href="https://leetcode.com/" target="_blank" rel="noopener">LeetCode</a> 的题。</p>
+<p class="lead">比较之前，先写好验收测试和类型检查。四种做法都用这把尺子量，才说得清谁真做完了。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>AI 自动补全和行内对话，见第 3 讲。开场演示见<a href="../ch07.html#s1">第 7 讲第 1 节</a>。测试驱动见<a href="../ch07.html#s3">第 3 节</a>。git worktree 见<a href="../ch07.html#s12">第 12 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>做法</div>
+<ol>
+<li><strong>选任务</strong>：本页用讲师开场演示的那个任务当例子。把讲义的 dl.py 改成正经的命令行程序。要用 argparse，加类型注解，还要通过类型检查。再加上讲义建议的“只保留绝对 URL”。你也可以换成自己项目里的小功能。</li>
+<li><strong>先写好尺子</strong>：验收测试 <code>test_dl.py</code>，加上 <code>mypy --strict</code>。四种做法都用它判定做没做完。不然没法比较。</li>
+<li><strong>隔离</strong>：用 <code>compare.sh</code> 建四个 git worktree。每种做法在自己的目录、自己的分支里完成，互不污染。</li>
+<li><strong>记录</strong>：每种做法都记下这些数据。用时、交互次数、手动改了几处、是否通过验收。还有 <code>git diff --shortstat</code> 的结果。全部填进 <code>record.txt</code>。</li>
+<li><strong>控制变量</strong>：建议按固定顺序做。先手写，再自动补全，再行内对话，最后智能体。做到后面几次，你已经熟悉了任务。这一点也记进备注。</li>
+</ol></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：起点、尺子、手写版、工作区脚本</div>
+<div data-file="ex01/dl.py"></div><div data-file="ex01/test_dl.py" data-new="1-29"></div><div data-file="ex01/dl_cli.py" data-new="1-34"></div><div data-file="ex01/compare.sh" data-new="1-22"></div><div data-file="ex01/record.txt"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：建四个工作区，提交手写版</div><div data-run="ex01-a"></div>
+<p>输出怎么读。四个 worktree 都从同一个基准提交出发。hand 分支相对 main 加了 34 行，其余三个等你来做。CRLF 警告来自 Git for Windows 的系统级 autocrlf 设置，不影响结果。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：验收（手写版）</div><div data-run="ex01-b"></div>
+<p>输出怎么读。4 个测试通过，<code>mypy --strict dl_cli.py</code> 没有问题。对照组是讲义原版 <code>dl.py</code>，它过不了严格类型检查，报 no-any-return。演示里的提示词要求 <code>make sure the program passes type checking</code>。智能体要解决的，正是这个问题。</p></div>
+<p>下面的演示画出类型在哪一步“丢掉”。再看手写版怎么把它补回来。</p>
+<div data-vz="lab07-check"></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：其余三种做法（需要你自己的工具）</div><div data-run="ex01-c"></div>
+<p>验收标准对每种做法都一样。在对应工作区里，<code>python -m pytest -q test_dl.py</code> 全部通过。<code>mypy --strict dl_cli.py</code> 没有错误。提交到同名分支。然后运行 <code>compare.sh</code> 末尾那段循环，把 <code>git diff --shortstat</code> 填进表格。智能体那一栏，讲义的提示词可以原样使用。它就在上面命令的最后一行。</p></div>
+<p class="like"><b>打个比方</b>像比较四种上班的交通方式。得先定好终点和打卡规则，才能比谁快、谁省事。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：没有尺子就没法比</div>
+<div class="pit-card"><div class="row bad"><b>误解</b><div>四种做法各跑一下，看着能用，就算做完了。</div></div>
+<div class="row"><b>实际</b><div>原版 dl.py 也“能用”，可它过不了 <code>mypy --strict</code>。没有统一的验收，就分不清谁真做完了。</div></div>
+<div class="row good"><b>正确做法</b><div>先写好并审查测试，再让人或智能体去实现。讲义也推荐测试驱动。智能体能自己跑测试、自己迭代。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>git worktree add -q -b "$mode" "../wt-$mode"   <span class="cm"># 每种做法一个目录、一条分支，共享同一个仓库</span>
+git diff --shortstat main hand                 <span class="cm"># 1 file changed, 34 insertions(+)：这一栏填进 record.txt</span>
+data: bytes = response.read()                  <span class="cm"># 去掉这个注解：测试照样过，mypy --strict 报 no-any-return</span>
+python -m pytest -q test_dl.py                 <span class="cm"># 先写尺子再比较：四种做法共用这一个验收标准</span></pre></div>
+
+<!-- ======================= 2 ======================= -->
+<h2 id="ex02" data-nav="2 · 读陌生代码库">练习 2 · 让智能体带你读代码，每个结论都要核对 <label class="ex-done"><input type="checkbox" data-ex="ex02">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">核对部分 Git Bash 实测</span><span class="tag lnx">智能体部分未实测</span></div>
+<p class="q-orig"><b>原题</b>：用 AI 编码智能体探索一个不熟悉的代码库。最好是你真正想调试或加功能的项目。想不到的话，试试 <a href="https://github.com/anomalyco/opencode" target="_blank" rel="noopener">opencode</a> 这个智能体。让智能体帮你弄懂，它的安全相关功能是怎么实现的。</p>
+<p class="lead">智能体靠 list、search、read 这些工具找答案。它说的每个文件、函数和命令，你都要亲手核对一次。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>“读懂代码库”这个用例，见<a href="../ch07.html#s9">第 7 讲第 9 节</a>。上下文管理见<a href="../ch07.html#s14">第 14 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>做法</div>
+<ol>
+<li>在仓库根目录启动智能体。它大体能看到这个目录下的一切（<span class="ts" data-v="sTdz6PZoAnw">34:32</span>）。</li>
+<li>从大到小提问。先问 <code>explain this code base to me</code>。再问具体的，比如 <code>How do I run this site locally?</code>。这是讲义注释里给课程仓库准备的问题。对 opencode 可以问：它怎么决定一次工具调用要不要用户批准？指出文件和函数。</li>
+<li>观察它调用了哪些工具，比如 list、search、read。它的回答应当建立在这些工具的输出之上。</li>
+<li><strong>核对</strong>：它给的文件、函数和命令，都自己过一遍。下面的脚本就是一份人工复核。它把智能体通常会做的只读操作，手动走了一遍。</li>
+</ol></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="ex02/explore.sh" data-new="1-14"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：以课程网站仓库为例，核对“怎么在本地跑起来”</div><div data-run="ex02-a"></div>
+<p>输出怎么读。答案有两条路。一条是 <code>bundle exec jekyll serve -w</code>。另一条是在 Docker 里 <code>docker compose up --build</code>。然后打开 4000 端口。</p>
+<p>顺带还有个发现。README 写的是 <code>docker compose</code>，AGENTS.md 写的是旧式的 <code>docker-compose</code>。仓库里的技能文件，也用到了 <code>jekyll serve</code>。智能体只读一个文件，回答就和另一个对不上。这就是要核对的原因。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：opencode（需要智能体，下载量也大）</div><div data-run="ex02-b"></div>
+<p>验收标准有三条。智能体回答里的每个文件路径都真实存在，<code>ls</code> 能找到。每个函数名，用 <code>grep -rn</code> 能搜到。你能不看回答，顺着这些位置自己讲一遍流程。讲的是一次工具调用，从提出到被批准或拒绝。</p></div>
+<p class="like"><b>打个比方</b>像问路。路人说“往前两个路口左转”，你还是得看一眼路牌。他记错了，你就白走了。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：只读一个文件就下结论</div>
+<div class="pit-card"><div class="row bad"><b>误解</b><div>智能体说“用 docker-compose 启动”，就照着敲。</div></div>
+<div class="row"><b>实际</b><div>课程仓库的 README 和 AGENTS.md，给的命令不一样。智能体读了哪个，就照哪个说。上面 ex02-a 一搜就看出来了。</div></div>
+<div class="row good"><b>正确做法</b><div>让它说出依据的文件和行号，你自己 <code>grep</code> 一遍。两处说法不一时，去看代码和配置本身。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>ls                                           <span class="cm"># 智能体的 list 工具：先看顶层有什么</span>
+grep -rn --include='*.md' -e 'jekyll serve' .   <span class="cm"># search 工具：全仓库搜关键命令</span>
+sed -n '/^## Development/,/^## License/p' README.md   <span class="cm"># read 工具：只读最相关的那一段</span>
+<span class="cm"># 探索要读大量无关文件。交给子智能体去搜去读，只把结论交回主上下文</span>
+<span class="cm"># 这样主智能体的上下文就不会被撑满（第 7 讲第 17 节）</span></pre></div>
+
+<!-- ======================= 3 ======================= -->
+<h2 id="ex03" data-nav="3 · 氛围编程">练习 3 · 氛围编程：只写需求和测试，代码全交给它 <label class="ex-done"><input type="checkbox" data-ex="ex03">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">验收测试 Git Bash 实测</span><span class="tag lnx">智能体部分未实测</span></div>
+<p class="q-orig"><b>原题</b>：从零开始氛围编程（vibe code）一个小应用。一行代码都不要亲手写。</p>
+<p class="lead">“一行都不写”不等于“不管”。精力放在需求说明和验收测试上。然后只用自然语言和智能体对话。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>氛围编程见<a href="../ch07.html#s10">第 7 讲第 10 节</a>。实现功能与测试驱动，见<a href="../ch07.html#s7">第 7 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>做法</div>
+<p>建议把精力放在两份文件上。一份是<strong>需求说明</strong>，一份是<strong>验收测试</strong>。然后在一个全新目录里，只用自然语言和智能体对话。示例应用是一个词频统计命令行工具。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：需求和尺子（交给智能体的输入）</div><div data-file="ex03/SPEC.md" data-new="1-15"></div><div data-file="ex03/test_wordfreq.py" data-new="1-30"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：先证明尺子本身没问题</div>
+<p>测试写错了，智能体就会朝错误的方向努力。所以先用一个参考实现跑一遍测试，确认它们能通过。这份实现<strong>不是</strong>氛围编程的产物，只是给测试“验尺”：</p>
+<div data-file="ex03/wordfreq.py"></div><div data-run="ex03-a"></div><div data-run="ex03-b"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：真正的练习（需要智能体）</div><div data-run="ex03-c"></div>
+<p>验收标准有四条。① 你没在编辑器里手改过任何一行。<code>git log -p</code> 里的改动，全部来自智能体。② <code>python -m pytest -q test_wordfreq.py</code> 全部通过。③ <code>git diff</code> 显示测试文件没被改动。提示词里写了“不要修改测试”。④ 记下你一共发了几条消息。还有它几次“声称完成”，其实测试没过。</p></div>
+<p class="like"><b>打个比方</b>像装修时你只给图纸和验收单，不亲自砌墙。可验收单得你自己写，还得先确认它没写错。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：它为了通过测试去改测试</div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>智能体报告“全部测试通过”。可测试文件也被它改过了。</div></div>
+<div class="row"><b>后果</b><div>测试不再代表你的需求，“全部通过”毫无意义。</div></div>
+<div class="row good"><b>防法</b><div>在提示里明确禁止。用 <code>git diff -- test_wordfreq.py</code> 检查。或者把测试放在它不该碰的位置。练习 4 的技能里，也写了这条护栏。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>python -m pytest -q test_wordfreq.py   <span class="cm"># 先用参考实现验尺：5 passed，说明测试本身没写错</span>
+git diff -- test_wordfreq.py           <span class="cm"># 应该是空的：测试被改过，“全部通过”就不算数</span>
+git log -p                             <span class="cm"># 改动全部来自智能体，才算一行没亲手写</span>
+printf 'The cat and the hat.\nTHE end\n' | python wordfreq.py -n 3   <span class="cm"># 第一行是 3 the：不分大小写（ex03-b）</span></pre></div>
+
+<!-- ======================= 4 ======================= -->
+<h2 id="ex04" data-nav="4 · AGENTS.md / 技能 / 子智能体">练习 4 · 三种配置的区别：何时进上下文、进多少 <label class="ex-done"><input type="checkbox" data-ex="ex04">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">格式与体积 Git Bash 实测</span><span class="tag lnx">在智能体中测试未实测</span></div>
+<p class="q-orig"><b>原题</b>：为你选的编码智能体，创建并测试三样东西。一是 <code>AGENTS.md</code>，或者对应的文件，比如 <code>CLAUDE.md</code>。二是一个技能，比如 <a href="https://code.claude.com/docs/en/skills" target="_blank" rel="noopener">Claude Code 的 skill</a> 或 <a href="https://developers.openai.com/codex/skills/" target="_blank" rel="noopener">Codex 的 skill</a>。三是一个子智能体，比如 <a href="https://code.claude.com/docs/en/sub-agents" target="_blank" rel="noopener">Claude Code 的 subagent</a>。想想什么时候该用哪一个。你的智能体可能不支持其中某些功能。可以跳过，或者换一个支持的智能体。</p>
+<p class="lead">AGENTS.md 每次启动全文加载。技能和子智能体启动时只加载描述。子智能体还在独立的上下文里跑。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>AGENTS.md 与技能，见<a href="../ch07.html#s16">第 7 讲第 16 节</a>。子智能体见<a href="../ch07.html#s17">第 17 节</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写（以 Claude Code 的目录约定为例）</div>
+<div data-file="ex04/AGENTS.md" data-new="1-14"></div><div data-file="ex04/CLAUDE.md" data-new="1"></div>
+<div data-file="ex04/.claude/skills/run-tests/SKILL.md" data-new="1-11"></div>
+<div data-file="ex04/.claude/agents/code-checker.md" data-new="1-12"></div>
+<div data-file="ex04/ctx_cost.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：检查格式，估算各自占多少上下文</div><div data-run="ex04-a"></div>
+<p>输出怎么读。AGENTS.md 每次启动都整个进上下文，515 字节。技能和子智能体启动时只放描述，分别是 158 和 215 字节。正文 322 和 442 字节，用到时才读。字节数只是估算，真实系统按 token 计。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：在智能体里测试（需要账号）</div><div data-run="ex04-b"></div>
+<p>验收标准有四条。① 新开会话，直接问“改完 Python 代码后要做什么”。它能复述 AGENTS.md 里的两条规矩。② 说“跑一下测试”。它会打开 run-tests 技能，按里面的格式汇报。也就是只列失败测试和第一行断言。③ 改一个 .py 文件后，说 <code>use the code-checker subagent</code>。主对话里只出现子智能体的结论，没有几百行检查输出。④ 删掉 AGENTS.md 里的某条规矩，再问一遍。回答跟着变，说明它真的来自文件。不是模型自己的习惯。</p></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th></th><th>AGENTS.md / CLAUDE.md</th><th>技能 skill</th><th>子智能体 subagent</th></tr>
+<tr><td>何时进上下文</td><td>每次启动，全文</td><td>启动时只有描述。用到时读正文</td><td>启动时只有描述。被调用时，在<strong>独立</strong>的上下文里运行</td></tr>
+<tr><td>适合放</td><td>每次都需要的规矩：怎么跑测试、代码风格、目录约定</td><td>偶尔才用的长流程：发布步骤、评审清单</td><td>读得多、结论短的子任务：检查、调研、评审</td></tr>
+<tr><td>代价</td><td>越长越占上下文</td><td>描述写得不好，就不会被想起</td><td>多一次启动。看不到主对话的历史，提示要给足</td></tr>
+</table></div>
+<p class="like"><b>打个比方</b>AGENTS.md 像员工手册，入职第一天全读。技能像工具柜里的说明书，用哪台机器才翻哪本。子智能体像外包，你只看他交来的报告。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：描述只写“是什么”</div>
+<div class="pit-card"><div class="row bad"><b>误解</b><div>子智能体的 description，写成“一个 Python 检查工具”就够了。</div></div>
+<div class="row"><b>实际</b><div>主智能体启动时只看得到描述。它靠描述决定什么时候委派。描述里没写“何时用”，它往往不会被自动调用。</div></div>
+<div class="row good"><b>正确写法</b><div>像本题的 SKILL.md 那样，把使用时机写进描述。比如“在修改 Python 代码之后使用”。讲义也说，可以显式调用它。也可以让主智能体在改完 Python 文件后自动调用。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>AGENTS.md                   <span class="cm"># 每次启动全文进上下文，515 字节：只放每次都需要的规矩</span>
+SKILL.md 的头部             <span class="cm"># 启动时只加载 name 和 description，158 字节。正文用到才读</span>
+code-checker.md             <span class="cm"># 子智能体：独立上下文干活，只把结论交回主对话</span>
+CLAUDE.md 里写 @AGENTS.md   <span class="cm"># Claude Code 读 CLAUDE.md，这一行让两种工具共用一份说明</span>
+<span class="cm"># 两份正文要是写进 AGENTS.md，每次启动要多占 764 字节（ex04-a）</span></pre></div>
+
+<!-- ======================= 5 ======================= -->
+<h2 id="ex05" data-nav="5 · 别让它直接编辑">练习 5 · 让智能体写一条 sed，别让它逐行编辑 <label class="ex-done"><input type="checkbox" data-ex="ex05">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">命令行做法 Git Bash 实测</span><span class="tag lnx">智能体部分未实测</span></div>
+<p class="q-orig"><b>原题</b>：第 9 讲（代码质量）有一道 Markdown 列表正则练习。用编码智能体完成它。把讲义文件里作为列表标记的 <code>-</code> 换成 <code>*</code>。注意不是所有的 <code>-</code> 都是列表标记。它是不是直接编辑文件完成的？让智能体直接改文件来做这种事，有什么缺点和局限？想办法让它不通过直接编辑文件来完成。提示：让它用第 1 讲里的某个命令行工具。</p>
+<p class="lead">列表标记只在行首，后面跟空格，而且不在代码块里。让智能体写一条 sed 或 awk 命令。规则一眼看清，换个文件还能再用。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>第 1 讲的 sed 和 awk。第 9 讲的正则。本讲的上下文与审查，见<a href="../ch07.html#s14">第 7 讲第 14 节</a>和<a href="../ch07.html#s18">第 18 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理：直接编辑的缺点</div>
+<ul>
+<li><strong>耗上下文</strong>：要把整个文件读进上下文。每一处修改，还要生成一段 diff。文件越大，越慢、越贵，还可能撑满窗口。</li>
+<li><strong>难复现、难审查</strong>：28 处修改，分散在一堆编辑操作里。你只能逐处检查。一条 sed 或 awk 命令，规则一眼看懂，换个文件还能再用。</li>
+<li><strong>容易漏改或误改</strong>：模型是概率性的。长文件里逐行手改，可能漏掉几处。也可能把破折号 <code>---</code> 也改了。以上是根据讲座内容的推理，你做练习时可以验证。</li>
+</ul></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：命令行做法，以及给智能体的两种提示</div><div data-file="ex05/bullets.sh" data-new="1-12"></div><div data-file="ex05/prompts.txt"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：天真的全局替换会误伤多少</div><div data-run="ex05-a"></div>
+<p>输出怎么读。<code>sed 's/-/*/g'</code> 改动了 68 行，真正的列表项只有 28 行。front matter 的 <code>---</code> 变成了 <code>***</code>。日期变成了 <code>2026*01*23</code>，<code>high-quality</code> 变成了 <code>high*quality</code>。实测用的是课程仓库本地副本里的 code-quality.md。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：只换列表标记</div><div data-run="ex05-b"></div>
+<p>恰好 28 行被改，替换后不再有“- ”开头的列表项。结果和一行 <code>sed -E 's/^([[:space:]]*)- /\1* /'</code> 逐字节相同。因为这个文件的代码块里，恰好没有“- ”开头的行。awk 版本多做了一层保险。</p></div>
+<p>下面的演示逐行扫描，看 awk 怎么只换该换的那几处。</p>
+<div data-vz="lab07-bullets"></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：在智能体里比较两种提示（需要账号）</div><div data-run="ex05-c"></div>
+<p>验收标准有三条。① 用提示 A 时，记录它是否直接编辑。还有它调了几次编辑工具。再看 <code>git diff --stat</code> 改了多少行，应为 28 行，多了就是误改。② 用提示 B 时，它应该给出一条 sed 或 awk 命令并运行。<code>git diff --stat</code> 同样是 28 行。③ 用 <code>cmp</code> 把两种方式的结果和本页 <code>bullets.sh</code> 的结果比一比。看谁做对了。</p></div>
+<p class="like"><b>打个比方</b>让智能体逐行改，像请人在书里一处处描改符号。让它写 sed，像请他刻一枚印章。印章对不对，你看一眼就知道，还能反复用。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：awk 里写成了 gsub</div>
+<div class="code term"><div class="cap">bash · 本机实测（输入是第 101 行那段文字）</div><pre><span class="p">$ </span><span class="cmd">cat line101.txt</span>
+<span class="o">- `abc` --- matches the literal "abc".</span>
+<span class="p">$ </span><span class="cmd">awk '{ sub(/- /, "* ") } 1' line101.txt</span>    <span class="cm"># sub 只换第一处</span>
+<span class="o">* `abc` --- matches the literal "abc".</span>
+<span class="p">$ </span><span class="cmd">awk '{ gsub(/- /, "* ") } 1' line101.txt</span>   <span class="cm"># gsub 全换，破折号被改坏</span>
+<span class="o">* `abc` --* matches the literal "abc".</span></pre></div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>gsub(/- /, "* ")</code></div></div>
+<div class="row"><b>后果</b><div>gsub 会把一行里所有的“- ”都换掉。第 101 行的破折号 <code>---</code> 后面正好有空格。于是它变成了 <code>--*</code>。</div></div>
+<div class="row good"><b>正确写法</b><div>用 <code>sub</code>。它只替换一行里的第一处匹配，也就是行首的列表标记。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>sed 's/-/*/g' code-quality.md        <span class="cm"># 错：68 行被改，第 1 行的 --- 变成 ***，front matter 坏了</span>
+awk '!code &amp;&amp; /^[[:space:]]*- / { sub(/- /, "* ") }'   <span class="cm"># 对：只换行首的“- ”，正好 28 行</span>
+/^[[:space:]]*```/ { code = !code; print; next }   <span class="cm"># 遇到代码块围栏就翻转标志，块里的行一律不动</span>
+diff a.md a.md.new | grep -c '^&gt;'   <span class="cm"># 数改动行数，再和智能体的 git diff --stat 对照</span></pre></div>
+
+<!-- ======================= 6 ======================= -->
+<h2 id="ex06" data-nav="6 · 隔离环境里的 yolo">练习 6 · yolo 模式关进容器，最坏也只毁掉容器 <label class="ex-done"><input type="checkbox" data-ex="ex06">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">配置静态检查 Git Bash 实测</span><span class="tag lnx">Docker 未实测</span></div>
+<p class="q-orig"><b>原题</b>：多数编码智能体都有某种“yolo 模式”，例如 Claude Code 的 <code>--dangerously-skip-permissions</code>。直接这样用不安全。但放进虚拟机或容器这类隔离环境，可能就可以接受。在你的机器上把这套环境搭起来。这些文档可能有用：<a href="https://code.claude.com/docs/en/devcontainer" target="_blank" rel="noopener">Claude Code devcontainers</a>、<a href="https://docs.docker.com/ai/sandboxes/agents/claude-code/" target="_blank" rel="noopener">Docker Sandboxes / Claude Code</a>。做法不止一种。</p>
+<p class="lead">在容器里跳过所有确认。智能体能碰到的，只有容器和挂载进去的项目目录。破坏了就删掉重建，项目里的改动靠 Git 审查。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>容器与 Dockerfile，见<a href="../ch06.html#s12">第 6 讲第 12 到 15 节</a>。本讲的工具审批见<a href="../ch07.html#s1">第 7 讲第 1 节</a>，隐私见<a href="../ch07.html#s6">第 6 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<figure class="fig"><script>
+DG('layers', { arrows: false, sideW: 240, items: [
+  { l: '智能体（yolo：不再逐条确认）', s: 'claude --dangerously-skip-permissions', tone: 'info', side: '只能看到容器内部' },
+  { l: '容器：node:22-slim + git + python3', s: '非 root 用户 node', tone: 'warn', side: '破坏了就删掉重建' },
+  { l: '/workspace ← 绑定挂载的项目目录', s: '唯一与宿主机共享的地方', tone: 'teal', side: '用 Git 跟踪，事后审查' },
+  { l: '宿主机', s: '你的家目录、密钥、其他项目', tone: 'neutral', side: '智能体接触不到' }
+] });
+</script><figcaption>隔离的意义：最坏情况只发生在容器和这个目录里。API 密钥仍要传进容器，智能体也读得到（devcontainer.json 第 7 行）</figcaption></figure>
+<p>注意网络。容器默认能访问外网。智能体仍可能把数据发出去，或者下载东西。官方文档的参考 devcontainer 还配置了出站网络限制。这一点以文档为准，本页未实测。本页的最小配置没有这一层。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="ex06/.devcontainer/Dockerfile" data-new="1-9"></div><div data-file="ex06/.devcontainer/devcontainer.json" data-new="1-8"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：本机能做的检查</div><div data-run="ex06-a"></div>
+<p>输出怎么读。devcontainer.json 是合法的 JSON。Dockerfile 第 2 行用 node:22-slim，第 7 行切到非 root 用户 node。第 9 行的默认命令，跳过了所有权限确认。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：构建并启动（需要 Docker 和账号）</div><div data-run="ex06-b"></div>
+<p>验收标准有四条。① 在容器里 <code>whoami</code> 输出 node，而不是 root。② <code>ls /workspace</code> 只看到项目文件。<code>ls ~</code> 看不到你宿主机家目录的内容。③ 让智能体做破坏性操作，比如删掉 <code>/workspace</code> 之外的某个文件。影响只留在容器里，重建容器就能恢复。④ /workspace 里的改动，用 <code>git diff</code> 全部看得见、撤得回。</p></div>
+<p class="like"><b>打个比方</b>像让小朋友在沙坑里随便玩。沙坑弄乱了，铲平就行。可你借给他的那本书带进了沙坑，弄坏了还是你的。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：以为进了容器就万事大吉</div>
+<div class="pit-card"><div class="row bad"><b>误解</b><div>智能体在容器里，项目目录也就安全了。</div></div>
+<div class="row"><b>实际</b><div>项目目录是挂载进去的。智能体对它的改动，会直接写回宿主机。隔离保护的，只是目录之外的东西。</div></div>
+<div class="row good"><b>正确做法</b><div>目录之内的改动，照样要靠 Git 审查和撤销。这也是讲师自己的做法。密钥别写进 devcontainer.json，用环境变量传。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>USER node                                <span class="cm"># 容器里也不给 root（Dockerfile 第 7 行）</span>
+-v "$PWD":/workspace                     <span class="cm"># 唯一和宿主机共享的目录：改动直接写回宿主机，靠 Git 审查</span>
+-e ANTHROPIC_API_KEY                     <span class="cm"># 密钥从环境变量传进去，但容器里的智能体也读得到</span>
+claude --dangerously-skip-permissions    <span class="cm"># yolo 模式：只在这种隔离环境里考虑</span>
+<span class="cm"># 容器默认能上外网：本页的最小配置没有限制出站网络</span></pre></div>
+
+<!-- ======================= 自查 ======================= -->
+<h2 id="selfcheck" data-nav="自查">自查：自己重跑一遍</h2>
+<p class="lead">本页的代码和输出，都是生成笔记时在本机真跑收集的。想验证，就把题解复制到空目录，在 Git Bash 里重跑。</p>
+<p>生成脚本和题解源文件都已删除，<strong>代码以本页为准</strong>。代码块的“复制”按钮，拿到的是原文件的原始字节。生成时间见页头。练习 1 的类型检查，要先在 venv 里装好 mypy。</p>
+<div class="code"><div class="cap">考点速查（注释里写着答案）</div><pre>python mini_harness.py "检查 dl.py 能否编译"   <span class="cm"># 不加 --approve：run 的结果是“（用户拒绝了这次工具调用）”，39 字节（extra-b）</span>
+dl_cli.py 第 12 行去掉 data: bytes =          <span class="cm"># 测试照样过，mypy --strict 报 no-any-return，和原版 dl.py 一样（练习 1）</span>
+ctx.append({"role": "tool", ...})            <span class="cm"># 每次工具结果都追加进上下文：模型没有记忆，只看得到输入（第 7 讲第 5 节）</span>
+sed 's/-/*/g' code-quality.md                <span class="cm"># 第 1 行 --- 变成 ***，front matter 坏了（ex05-a）</span>
+技能只预先加载描述                           <span class="cm"># 免得对话还没开始，上下文就被占满。两份正文省下 764 字节（ex04-a）</span></pre></div>
+
+</article></main>
+<script src="../assets/vz.js"></script>
+<script src="../assets/viz/lab07-run.js"></script>
+<script src="../assets/lab.js"></script>
+</body>
+</html>

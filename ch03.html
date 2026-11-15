@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03 · 开发环境与工具 · Missing Semester 2026 中文笔记</title>
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/vz.css">
+<script>window.PAGE = { key: 'ch03', type: 'ch', vzCount: 8 };</script>
+<script src="assets/course.js"></script>
+<script src="assets/dg.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<div class="callout key"><div class="ct">本讲结论</div>
+<p>写代码时，大部分时间在跳转、阅读和小改。Vim 把编辑器界面做成一门能组合的<strong>语言</strong>。命令就是动词加计数加名词。IDE 靠<strong>语言服务器</strong>看懂代码的语义。AI 工具有三种形态：<strong>补全、行内对话和编码智能体</strong>。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s1" data-nav="终端派与 IDE 派" data-t="0:34">开发环境分两派：终端拼装和图形 IDE <span class="ts">0:34</span></h2>
+<p class="lead">开发环境就是写软件用的一套工具。核心是文本编辑。再配上高亮、类型检查、格式化和补全。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre><span class="cm"># 终端派：几个命令行工具拼成一套环境</span>
+tmux                 <span class="cm"># 一个窗口分成几个窗格</span>
+vim fizz.py          <span class="cm"># 一个窗格写代码</span>
+ruff check fizz.py   <span class="cm"># 另一个窗格跑 linter，类型检查交给 mypy</span>
+code .               <span class="cm"># IDE 派：VS Code 打开当前目录，这些全在一个窗口里</span></pre></div>
+<p class="like"><b>打个比方</b>终端派像自己攒电脑，每个零件都挑最顺手的。IDE 派像买品牌整机，插上电就能用。</p>
+<p>讲师先展示了自己的两套环境。</p>
+<div class="grid2">
+  <div class="mini"><h4>终端工作流</h4><p>讲师用 tmux 分出几个窗格。左边 Vim 打开讲义，右下角是 shell，右上角跑着 docker。这套环境由几样东西拼成。终端复用器用 <a href="https://github.com/tmux/tmux" target="_blank" rel="noopener">tmux</a>，编辑器用 <a href="https://www.vim.org/" target="_blank" rel="noopener">Vim</a>，shell 用 <a href="https://www.zsh.org/" target="_blank" rel="noopener">Zsh</a>。再加上各语言的命令行工具。比如 Python 的 linter 兼格式化器 <a href="https://docs.astral.sh/ruff/" target="_blank" rel="noopener">Ruff</a>，还有类型检查器 <a href="https://mypy-lang.org/" target="_blank" rel="noopener">Mypy</a>。它很轻量。有的机器没有图形界面，也装不了软件。SSH 上去以后，它可能是唯一选择。</p></div>
+  <div class="mini"><h4>集成开发环境 IDE</h4><p>IDE 是 Integrated Development Environment 的缩写，比如 <a href="https://code.visualstudio.com/" target="_blank" rel="noopener">VS Code</a>。编辑、lint、自动格式化，全在一个程序里。图形 IDE 更容易上手。AI 功能通常也集成得更好，比如 AI 自动补全开箱即用。课上不少人举手说听过 <a href="https://cursor.com/" target="_blank" rel="noopener">Cursor</a>。它是 VS Code 的一个分支（fork）。</p></div>
+</div>
+<p>学生问，终端里的编辑器算不算 IDE（<span class="ts">1:47</span>）。讲师说，Emacs 和 Vim 本质上是文本编辑器。装上一堆插件，它们也能表现得像 IDE。不过一般人说 IDE，指的是图形 IDE。</p>
+<div class="callout tip"><div class="ct">讲义建议</div><p>两种都要基本熟悉，<strong>至少精通一种</strong>。还没有偏好的 IDE，就从 VS Code 开始。</p></div>
+<p>本讲分四部分。先讲文本编辑与 Vim，再讲代码智能与语言服务器。然后是 AI 辅助开发，最后是扩展与其他 IDE 功能。讲师开场还预告了正则表达式和查找替换。实际没来得及讲，2026 版讲义把它放进了第 9 讲。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>平时只用图形 IDE 的人，SSH 到服务器上常常傻眼。那里没有图形界面，往往也不让装软件。所以终端编辑器至少要会打开、修改、保存和退出。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s2" data-nav="Vim 的理念" data-t="3:51">写代码是跳来跳去地小改，Vim 专为此设计 <span class="ts">3:51</span></h2>
+<p class="lead">写代码很少从头写到尾。大多是跳到一处，读一小段，改一行。Vim 的按键就是为这种节奏设计的。</p>
+<div class="code"><div class="cap">vim · 最小例子（示意）</div><pre>j      <span class="cm"># 下移一行</span>
+10j    <span class="cm"># 下移 10 行：数字加动作，这就是组合</span>
+f(     <span class="cm"># 在本行往右找 (</span>
+%      <span class="cm"># 跳到和它配对的括号</span>
+ci(    <span class="cm"># 删掉括号里的内容，直接开始输入</span></pre></div>
+<p class="like"><b>打个比方</b>Vim 的按键像乐高积木。学会几块基本的，就能拼出成百上千种动作。不用一个个死背。</p>
+<p>比如用 Word 写文章，通常是从头写到尾，或者从头读到尾。写代码不一样。你在文件之间跳来跳去，读一小段。在这里加个函数，再跳到上面改一行 bug。讲师问，谁能从头到尾一口气写完一个程序？没有人举手（<span class="ts">4:41</span>）。<a href="https://www.vim.org/" target="_blank" rel="noopener">Vim</a> 就是为这种“导航加小改”优化的。</p>
+<ul class="keys">
+<li><strong>手不离键盘</strong>：在键盘和鼠标之间来回切换很慢。这是 Vim 和前身 vi 的作者观察到的。所以 Vim 避免用鼠标，连方向键都尽量不用。方向键离主键位太远了。</li>
+<li><strong>界面是编程语言</strong>：按键就是命令，名字都有助记含义。命令之间还能<strong>组合</strong>。讲师开场演示了几下（<span class="ts">6:56</span>）。<code>j</code> 下移一行，<code>10j</code> 下移 10 行。<code>f</code> 找字符，<code>%</code> 跳到配对的括号。<code>ci(</code> 删掉括号里的内容，并开始输入。</li>
+<li><strong>效果</strong>：熟练以后，编辑速度能跟上思考速度。就像一个“脑机接口”。</li>
+</ul>
+<div class="callout tool"><div class="ct">不用 Vim 也能用 Vim 的思想</div>
+<p>很多软件支持“Vim 模式”。VS Code 有 <a href="https://marketplace.visualstudio.com/items?itemName=vscodevim.vim" target="_blank" rel="noopener">VSCodeVim</a> 插件，Zsh <a href="https://zsh.sourceforge.io/Guide/zshguide04.html" target="_blank" rel="noopener">内建了 Vim 模拟</a>。bash 也支持，写法是 <code>set -o vi</code>，练习 1 实测过。连 Claude Code 都有 <a href="https://code.claude.com/docs/en/interactive-mode#vim-editor-mode" target="_blank" rel="noopener">Vim 编辑模式</a>。</p>
+<p>所以 2026 版课程不再专讲 Vim 这个软件（<span class="ts">11:34</span>）。怎么用 <code>:wq</code> 退出不再是重点，在 VS Code 里点 X 就行。重点是各处通用的<strong>核心思想和按键</strong>。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>手在键盘和鼠标之间来回挪，每次都要重新找光标。一次只慢一点，可写代码时这个动作极其频繁。Vim 的设计，就是把这一步省掉。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s3" data-nav="模态编辑" data-t="8:05">同一个键，在不同模式下干不同的事 <span class="ts">8:05</span></h2>
+<p class="lead">Vim 是<strong>模态编辑器</strong>（modal editor）。按键先看当前在哪个模式，再决定干什么。</p>
+<div class="code"><div class="cap">vim · 最小例子（示意，文本是 the quick fox）</div><pre>x          <span class="cm"># Normal 模式：删掉光标下的字符</span>
+ix&lt;Esc&gt;    <span class="cm"># i 进 Insert，这时 x 就是打一个字母 x</span>
+vex        <span class="cm"># v 进 Visual，e 选到词尾，x 删掉整个选区</span>
+:q!        <span class="cm"># 有没保存的修改时 :q 会被拒，加 ! 强制退出</span></pre></div>
+<p class="like"><b>打个比方</b>模式像汽车的挡位。同样踩一脚油门，D 挡往前走，R 挡往后退。踩之前先看挂的是哪个挡。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>模式</th><th>用途</th><th>从 Normal 怎么进</th></tr>
+<tr><td><strong>Normal</strong></td><td>移动和修改。这是默认模式，大部分时间待在这里</td><td>任何模式按 <kbd>Esc</kbd> 回来</td></tr>
+<tr><td>Insert</td><td>插入文字，和普通编辑器一样</td><td><code>i</code></td></tr>
+<tr><td>Replace</td><td>覆盖已有的文字</td><td><code>R</code></td></tr>
+<tr><td>Visual（普通 / 行 / 块）</td><td>选中一段文字</td><td><code>v</code> / <code>V</code> / <kbd>Ctrl</kbd>+<kbd>v</kbd></td></tr>
+<tr><td>Command-line</td><td>运行命令，比如 <code>:q</code> 退出</td><td><code>:</code></td></tr>
+</table></div>
+<p>拿字母 <code>x</code> 举例。在 Insert 模式下，它插入一个字面的 x。在 Normal 模式下，它删掉光标下的字符。在 Visual 模式下，它删掉选中的部分。</p>
+<p>Vim 默认在左下角显示当前模式。讲师的配置也是这样（<span class="ts">10:27</span>）。讲师演示 <code>:q</code> 时，因为有没保存的修改，被拒绝了。于是改用 <code>:q!</code> 强制退出。</p>
+<div class="callout tip"><div class="ct">讲义建议：把 Caps Lock 改成 Esc</div><p>Esc 要按很多次。可以考虑把 Caps Lock 映射成 Esc，讲义给了 <a href="https://vim.fandom.com/wiki/Map_caps_lock_to_escape_in_macOS" target="_blank" rel="noopener">macOS 的做法</a>。也可以给 Esc 设一个<a href="https://vim.fandom.com/wiki/Avoid_the_escape_key#Mappings" target="_blank" rel="noopener">简单的替代按键</a>。</p></div>
+<p>下面的演示把模式画成一张状态机。看同一个 <code>x</code>，在三种模式下做了三件不同的事。文本变化来自本机 Vim 9.2 的真实回放。</p>
+<div data-vz="ch03-modes"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>最常见的事故：以为自己在 Insert 模式，其实在 Normal 模式。想打一个 x，结果删掉了一个字符。接着打的一串字母，全被当成了命令。所以先看左下角的模式提示。拿不准就先按一下 <kbd>Esc</kbd>，回到 Normal 再说。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s4" data-nav="插入文字" data-t="12:42">先把 Vim 当普通编辑器用，但别一直待在 Insert <span class="ts">12:42</span></h2>
+<p class="lead">刚上手时，按 <code>i</code> 进 Insert 模式，就能像普通编辑器一样打字。按 <kbd>Esc</kbd> 回到 Normal 模式。</p>
+<div class="code"><div class="cap">vim · 最小例子（示意）</div><pre>i        <span class="cm"># Normal 模式下按 i，进入 Insert 模式</span>
+ABCD     <span class="cm"># 讲师敲的就是这几个字母</span>
+&lt;Esc&gt;    <span class="cm"># 回到 Normal 模式，这时按键又变回命令</span></pre></div>
+<p class="like"><b>打个比方</b>一直待在 Insert 模式，就像买了跑车却只挂一挡开。车能走，但它的本事全浪费了。</p>
+<p>讲师就是这么演示的。按 <code>i</code>，敲了 “ABCD”，再按 <kbd>Esc</kbd>。移动用方向键，配置合适的话还能用鼠标。</p>
+<p>这些就够你用 Vim 改文件了，只是不高效。一直待在 Insert 模式里，就没用上 Vim 的长处（<span class="ts">13:20</span>）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>新手常在 Insert 模式里用方向键挪光标，再用退格一个个删。能用，但很慢。讲义说得直白：删改文字，该用比退格键更强的东西。那就是下面几节的移动和编辑命令。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s5" data-nav="移动（名词）" data-t="13:28">移动命令是名词，指代一段文字 <span class="ts">13:28</span></h2>
+<p class="lead">移动命令也叫<strong>名词</strong>。它指代从光标到落点的那段文字。单独按是挪光标。前面加个动词，就是对这段文字动手。</p>
+<div class="code"><div class="cap">vim · 最小例子（示意）</div><pre>w      <span class="cm"># 单独按：光标跳到下一个词首</span>
+dw     <span class="cm"># 前面加动词 d：删掉到下一个词首的这一段</span>
+$      <span class="cm"># 单独按：光标跳到行尾</span>
+d$     <span class="cm"># 加上 d：从光标删到行尾</span></pre></div>
+<p class="like"><b>打个比方</b>移动命令像指路的话，比如“下一个词”“行尾”。单独说，是让你走过去。前面加个“删”，就是把这一段路拆掉。</p>
+<p>Normal 模式下的按键分五类（<span class="ts">13:54</span>）。分别是<strong>移动</strong>、<strong>选择</strong>、<strong>编辑</strong>、<strong>计数</strong>和<strong>修饰符</strong>。它们可以互相组合。讲师特意讲得很快。他强调别背具体按键，要记住组合的思想。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>类别</th><th>按键（讲义）</th><th>助记</th></tr>
+<tr><td>基本</td><td><code>h</code> <code>j</code> <code>k</code> <code>l</code></td><td>左、下、上、右。手不离开主键位，方向键也能用</td></tr>
+<tr><td>词</td><td><code>w</code> <code>b</code> <code>e</code></td><td>下一个词首、词首（back）、词尾（end）</td></tr>
+<tr><td>行内</td><td><code>0</code> <code>^</code> <code>$</code></td><td>行首、第一个非空字符、行尾</td></tr>
+<tr><td>屏幕</td><td><code>H</code> <code>M</code> <code>L</code>，<kbd>Ctrl</kbd>+<kbd>u</kbd> / <kbd>Ctrl</kbd>+<kbd>d</kbd></td><td>屏幕顶、中、底。往上、往下翻半屏</td></tr>
+<tr><td>文件</td><td><code>gg</code> <code>G</code>，<code>:{行号}&lt;CR&gt;</code> 或 <code>{行号}G</code></td><td>文件开头、结尾。跳到指定行，<code>&lt;CR&gt;</code> 是回车</td></tr>
+<tr><td>配对</td><td><code>%</code></td><td>跳到配对的圆括号或花括号</td></tr>
+<tr><td>行内查找</td><td><code>f{c}</code> <code>t{c}</code> <code>F{c}</code> <code>T{c}</code>，<code>;</code> <code>,</code></td><td>f 是 find，t 是 to，停在它前一格。大写往左找。<code>;</code> 和 <code>,</code> 在匹配之间前后跳</td></tr>
+<tr><td>搜索</td><td><code>/{正则}</code>，<code>n</code> / <code>N</code></td><td>讲师搜了 “phys”，光标跳到第一个匹配。n 下一个，N 上一个</td></tr>
+</table></div>
+<div class="code term"><div class="cap">vim · 本机实测（vim -Es 回放，记下每步的光标）</div><pre><span class="p">文本 L1: </span><span class="cmd">    for i in range(limit):</span>
+<span class="o">w  → L1 C5  (for)      w  → L1 C9  (i)       b  → L1 C5      e → L1 C7 (for 的 r)
+0  → L1 C1             ^  → L1 C5            $  → L1 C26 (:)
+F( → L1 C19 (()        %  → L1 C25 ())       j  → L2 C22     G → L3 C13    gg → L1 C5
+/fizz⏎ → L3 C20（"fizz" 的 f）</span></pre></div>
+<p>注意两点。<code>gg</code> 和 <code>G</code> 落在<strong>第一个非空字符</strong>上，不是第 1 列。<code>j</code> 会尽量保持原来的列。第 2 行只有 22 个字符，光标就停在行尾。下面的演示让光标一步步走一遍：</p>
+<div data-vz="ch03-motion"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p><code>j</code> 记着原来的列号。练习 2 里，光标在第 2 行第 31 列。按 <code>4j</code> 下去，落到第 6 行第 31 列。那里正好是 <code>end=""</code> 的空引号，接下来的 <code>ci"</code> 就改错了地方。想落在第一个非空字符上，用 <code>6G</code> 或 <code>:6</code> 加回车。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s6" data-nav="Visual 选择" data-t="16:55">先选中再动手：三种 Visual 模式 <span class="ts">16:55</span></h2>
+<p class="lead">按 <code>v</code>、<code>V</code> 或 <kbd>Ctrl</kbd>+<kbd>v</kbd> 进 Visual 模式。再用移动键扩大选区，最后按 <code>d</code> 删或 <code>c</code> 改。</p>
+<div class="code"><div class="cap">vim · 最小例子（示意）</div><pre>vw        <span class="cm"># 按字符选，w 把选区扩到下一个词的开头</span>
+Vj        <span class="cm"># 按行选，j 把下一行也选进来</span>
+&lt;C-v&gt;jl   <span class="cm"># Ctrl+v 按矩形块选：往下一行，往右一列</span>
+d         <span class="cm"># 对选区动手：d 删除，c 修改</span></pre></div>
+<p class="like"><b>打个比方</b>Visual 模式像先拿荧光笔，把要改的地方涂出来。涂好了，再决定是擦掉还是重写。</p>
+<p>三种 Visual 模式，进去之后都用<strong>移动键</strong>扩大选区（<span class="ts">17:28</span>）。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>按键</th><th>模式</th><th>讲师演示</th></tr>
+<tr><td><code>v</code></td><td>Visual，按字符选</td><td>按 <code>w</code> 选到下一个词的开头</td></tr>
+<tr><td><code>V</code></td><td>Visual Line，按行选</td><td>按 <code>j</code> 把下一行也选进来</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>v</kbd></td><td>Visual Block，按矩形块选</td><td>选出一个矩形区域。很多编辑器做不到</td></tr>
+</table></div>
+<p>选好之后按 <code>d</code> 删除，按 <code>c</code> 修改。这就是“先选中再操作”。后面行内对话那一节，讲师在 VS Code 里开着 Vim 插件。他就是用 <code>V</code> 加 <code>j</code> 选中代码块，再唤起 AI 的（<span class="ts">43:00</span>）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>在 Visual 模式里，移动键是在扩大选区，不是在挪光标。忘了还在 Visual 模式，顺手按个 <code>d</code>，选中的一大片就没了。好在按 <code>u</code> 能撤销。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s7" data-nav="编辑（动词）" data-t="18:05">编辑命令是动词，作用在名词上 <span class="ts">18:05</span></h2>
+<p class="lead">以前用鼠标做的事，现在用键盘上的<strong>编辑命令</strong>做。它们叫<strong>动词</strong>，后面跟一个移动，就作用在那段文字上。</p>
+<div class="code"><div class="cap">vim · 最小例子（示意）</div><pre>dw     <span class="cm"># 删到下一个词首，连词后的空格一起删</span>
+cw     <span class="cm"># 改这个词：删掉它，再进 Insert 模式</span>
+d$     <span class="cm"># 从光标删到行尾</span>
+x      <span class="cm"># 删一个字符，等于 dl</span>
+u      <span class="cm"># 撤销，Ctrl+r 重做</span></pre></div>
+<p class="like"><b>打个比方</b>动词加名词，就像说“删掉这个词”“改到行尾”。句式是固定的。换个名词，就是一条新命令。</p>
+<p>动词和名词能自由组合，这正是 Vim 像编程语言的地方。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>命令（讲义）</th><th>作用</th></tr>
+<tr><td><code>i</code></td><td>进入 Insert 模式。但删改文字，应该用比退格键更强的东西</td></tr>
+<tr><td><code>o</code> / <code>O</code></td><td>在下方或上方开一个新行，并进入 Insert</td></tr>
+<tr><td><code>d{移动}</code></td><td>删除。<code>dw</code> 删一个词，<code>d$</code> 删到行尾，<code>d0</code> 删到行首。讲师还演示了 <code>dj</code>，删掉本行和下一行</td></tr>
+<tr><td><code>c{移动}</code></td><td>修改。<code>cw</code> 改一个词。相当于 <code>d{移动}</code> 再按 <code>i</code></td></tr>
+<tr><td><code>x</code> / <code>s</code></td><td><code>x</code> 删一个字符，等于 <code>dl</code>。<code>s</code> 替换一个字符，等于 <code>cl</code></td></tr>
+<tr><td>Visual + <code>d</code> / <code>c</code></td><td>选中后删除或修改</td></tr>
+<tr><td><code>u</code> / <kbd>Ctrl</kbd>+<kbd>r</kbd></td><td>撤销、重做</td></tr>
+<tr><td><code>y</code> / <code>p</code></td><td>复制（yank）、粘贴。<code>d</code> 这类命令也会把删掉的内容存起来</td></tr>
+<tr><td><code>~</code> / <code>J</code></td><td>翻转字符大小写。把下一行接到本行末尾</td></tr>
+</table></div>
+<div class="code term"><div class="cap">vim · 本机实测（"" 是无名寄存器，存着删掉的内容）</div><pre><span class="p">起始: </span><span class="cmd">    message = "hello " + name</span>
+<span class="o">j^          → 光标 C5（message 的 m）
+cwgreeting<span class="cm">⎋</span> →     greeting = "hello " + name      "" = message
+w dw        →     greeting "hello " + name        "" = "= "
+u           →     greeting = "hello " + name      （撤销）
+$ x         →     greeting = "hello " + nam       "" = e
+u           →     greeting = "hello " + name      （撤销）
+F+ d$       →     greeting = "hello "             "" = "+ name"</span></pre></div>
+<p>注意 <code>dw</code> 删掉的是 <code>= </code>，因为“一个词”包括后面的空白。<code>d$</code> 从光标所在的字符删到行尾。下面的演示把每个动词的效果逐字画出来：</p>
+<div data-vz="ch03-verbs"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p><code>dw</code> 和 <code>cw</code> 看着对称，其实不一样。<code>dw</code> 会连词后面的空格一起删。光标在词上时，<code>cw</code> 像 <code>ce</code>，只改到词尾，空格留着。上面实测里，<code>cw</code> 改完 message，后面的 <code>=</code> 和空格都还在。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s8" data-nav="计数与修饰符" data-t="19:18">数字让动作重复，i 和 a 决定带不带外壳 <span class="ts">19:18</span></h2>
+<p class="lead">动作前面加数字，就重复那么多次。名词前面加 <code>i</code>，指括号里面。加 <code>a</code>，连括号一起算。</p>
+<div class="code"><div class="cap">vim · 最小例子（示意）</div><pre>3w     <span class="cm"># 前进 3 个词</span>
+7dw    <span class="cm"># 删掉 7 个词，是一条命令，一次 u 就能撤销</span>
+ci(    <span class="cm"># change inside ()：只改括号里面</span>
+da'    <span class="cm"># delete around ''：连引号一起删</span>
+5u     <span class="cm"># 计数几乎哪都能加：撤销 5 次</span></pre></div>
+<p class="like"><b>打个比方</b><code>i</code> 像只倒掉杯子里的水，杯子留着。<code>a</code> 像连杯子一起扔掉。</p>
+<p><strong>计数</strong>（count）让一个动作重复多次。<code>3w</code> 前进 3 个词，<code>5j</code> 下移 5 行，<code>7dw</code> 删掉 7 个词。讲师补充，几乎任何命令都能带计数。比如 <code>5u</code> 撤销 5 次（<span class="ts">19:51</span>）。</p>
+<p><strong>修饰符</strong>（modifier）改变名词的含义。<code>i</code> 表示 inner，也就是里面。<code>a</code> 表示 around，也就是连同外壳。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>组合（讲义）</th><th>读法</th><th>效果</th></tr>
+<tr><td><code>ci(</code></td><td>change · inside · ( )</td><td>改当前这对圆括号里的内容。讲师用它替换 Markdown 链接里的网址。他说改函数参数时非常快</td></tr>
+<tr><td><code>ci[</code></td><td>change · inside · [ ]</td><td>改方括号里的内容</td></tr>
+<tr><td><code>da'</code></td><td>delete · around · ' '</td><td>删掉单引号字符串，连引号一起</td></tr>
+</table></div>
+<div class="code term"><div class="cap">vim · 本机实测</div><pre><span class="p">起始: </span><span class="cmd">print(compute(a, b), items[idx + 1], 'done')</span>
+<span class="o">fa ci(x<span class="cm">⎋</span>  → print(compute(x), items[idx + 1], 'done')       "" = a, b
+fd ci[0<span class="cm">⎋</span>  → print(compute(x), items[0], 'done')             "" = idx + 1
+f' da'      → print(compute(x), items[0],)                    "" = " 'done'"
+0 ci(<span class="cm">⎋</span>    → print()                                         （光标在 p 上，不在任何括号里）</span></pre></div>
+<ul>
+<li><code>da'</code> 删掉的是 <code> 'done'</code>。around 还带走了一侧的空白。</li>
+<li>看最后一行。光标在行首，并不在括号里。Vim 9.2 的 <code>ci(</code> 会往后找这一行里<strong>最近的一对括号</strong>。讲师开场演示时说的正是“改后面那对括号里的内容”。<code>ci"</code> 也一样。讲师修 FizzBuzz 时，就利用了它会往后找引号。较老的 Vim 版本里，<code>ci(</code> 不一定往后找。这一条是补充，没在老版本上实测。</li>
+</ul>
+<div class="code term"><div class="cap">vim · 本机实测：计数</div><pre><span class="p">起始: </span><span class="cmd">alpha beta gamma delta epsilon zeta eta theta iota kappa</span>   <span class="cm">（下面还有 line 2 … line 7）</span>
+<span class="o">3w   → C18（delta）
+7dw  → alpha beta gamma                    "" = delta epsilon zeta eta theta iota kappa
+u    → 恢复
+5j   → L6
+10j  → L7（只剩 1 行可走，就停在最后一行）</span></pre></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）：本页的 Vim 结果怎么实测</div>
+<p>用 <code>vim -u NONE -i NONE -N -Es -S trace.vim 文件</code> 在后台启动 Vim，不读任何配置。脚本用 <code>:normal</code> 执行每组按键。执行完记下光标行列、整个缓冲区和无名寄存器。练习 2 的回放器也是这样跑的。</p>
+<p>脚本连续执行时，所有修改会并成一个撤销块。所以每步之后用 <code>:let &amp;undolevels = &amp;undolevels</code> 切一刀。这样 <code>u</code> 的效果就和你手敲时一样。</p></div>
+<div data-vz="ch03-counts"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>光标不在括号里时，<code>ci(</code> 也会动手。Vim 9.2 会往后找最近的一对括号。改的未必是你想的那对。上面实测里，光标在行首，<code>print()</code> 括号里的内容全没了。所以先把光标放进要改的括号里，再按 <code>ci(</code>。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s9" data-nav="怎么学 Vim" data-t="21:32">学 Vim 的办法：处处开 Vim 模式，硬用一个月 <span class="ts">21:32</span></h2>
+<p class="lead">讲师的办法很直接。把你用的所有软件都切成 Vim 模式，强迫自己用一个月。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>vimtutor     <span class="cm"># 装了 Vim 就有的交互式教程，先过一遍</span>
+set -o vi    <span class="cm"># bash 的命令行也切成 Vim 键位（练习 1 实测）</span>
+<span class="cm"># 发现自己在重复按同一串键？停下来，查一查有没有更短的按法</span></pre></div>
+<p class="like"><b>打个比方</b>像学骑自行车。头几天比走路还慢，还老摔。熬过去以后，就再也不想走路了。</p>
+<p>讲师说“你们得相信我”。三位讲师都用了很多年 Vim，都认为这笔投入非常值。这正是练习 1。</p>
+<p>学生问（<span class="ts">23:22</span>）：撤销和重做，别的编辑器也有。可有些操作别处没有，比如跳到配对括号。我怎么知道 Vim 能做？讲师给了两个办法。</p>
+<ul class="keys">
+<li><strong>做一遍教程</strong>：把按键练成肌肉记忆。装了 Vim 就有 <code>vimtutor</code>，本机实测在 <code>/usr/bin/vimtutor</code>。</li>
+<li><strong>边用边留意</strong>：发现自己在做重复又烦人的操作？那<strong>一定有更好的办法</strong>。去 Google，问 LLM，或者到课程 Discord 提问。讲师说：“最好的程序员里，有一些是很懒的人。”</li>
+</ul>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>讲义推荐的资源</th><th>说明</th></tr>
+<tr><td><a href="https://missing.csail.mit.edu/2020/editors/" target="_blank" rel="noopener">2020 版 Vim 讲座</a></td><td>上一期课程，Vim 讲得更深</td></tr>
+<tr><td><code>vimtutor</code></td><td>随 Vim 一起装好的交互式教程</td></tr>
+<tr><td><a href="https://vim-adventures.com/" target="_blank" rel="noopener">Vim Adventures</a></td><td>学 Vim 的游戏</td></tr>
+<tr><td><a href="https://vim.fandom.com/wiki/Vim_Tips_Wiki" target="_blank" rel="noopener">Vim Tips Wiki</a>、<a href="https://vimways.org/2019/" target="_blank" rel="noopener">Vim Advent Calendar</a></td><td>各种技巧</td></tr>
+<tr><td><a href="https://www.vimgolf.com/" target="_blank" rel="noopener">VimGolf</a></td><td>代码高尔夫，只不过“编程语言”是 Vim 的界面。比谁的按键最少（练习 2）</td></tr>
+<tr><td><a href="https://vi.stackexchange.com/" target="_blank" rel="noopener">Vi/Vim Stack Exchange</a>、<a href="http://vimcasts.org/" target="_blank" rel="noopener">Vimcasts</a>、<a href="https://pragprog.com/titles/dnvim2/" target="_blank" rel="noopener">Practical Vim</a></td><td>问答社区、录屏、书</td></tr>
+</table></div>
+<div class="callout tip"><div class="ct">讲义建议</div><p>学完基础，就在所有软件里开启 Vim 模式，在实践中用。忍住别用鼠标和方向键。有些编辑器可以直接解绑方向键，逼自己养成好习惯。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>最常见的半途而废：嫌慢，又偷偷用回鼠标和方向键。这样永远练不成肌肉记忆。所以讲义建议直接解绑方向键，断了退路。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s10" data-nav="修 FizzBuzz" data-t="24:13">实战：用 Vim 修好有 3 个 bug 的 FizzBuzz <span class="ts">24:13</span></h2>
+<p class="lead">修 bug 的节奏是固定的。在 Normal 模式里跳到位置，进 Insert 改一点，马上回来。</p>
+<div class="code"><div class="cap">练习 2 的 lecture.keys 拆成三行（注释是笔记加的）</div><pre>Goif __name__ == "__main__": main()&lt;Esc&gt;   <span class="cm"># bug 1：main 从没被调用</span>
+/range&lt;CR&gt;wwi1, &lt;Esc&gt;ea + 1&lt;Esc&gt;           <span class="cm"># bug 2：应该从 1 数到 limit</span>
+:6&lt;CR&gt;ci"buzz&lt;Esc&gt;                         <span class="cm"># bug 3：5 的倍数也打印成了 fizz</span></pre></div>
+<p class="like"><b>打个比方</b>修 bug 像外科手术。先精准找到病灶，切一刀就收手。Normal 模式负责定位，Insert 模式只管那一刀。</p>
+<p>FizzBuzz 是“确认你会写代码”的经典题。打印 1 到 n。3 的倍数打印 fizz，5 的倍数打印 buzz。同时是 3 和 5 的倍数，打印 fizzbuzz。讲义给了一个有 3 个 bug 的版本：</p>
+<div class="code"><div class="cap">讲义原文：坏掉的 FizzBuzz</div><pre>def fizz_buzz(limit):
+    for i in range(limit):
+        if i % 3 == 0:
+            print("fizz", end="")
+        if i % 5 == 0:
+            print("fizz", end="")
+        if i % 3 and i % 5:
+            print(i, end="")
+        print()
+
+def main():
+    fizz_buzz(20)</pre></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>bug</th><th>按键（讲义）</th><th>本机 Vim 回放后的光标</th></tr>
+<tr><td>main 从没被调用。讲师先运行了一次，什么都没输出</td><td><code>G</code> 到最后一行，<code>o</code> 开新行。输入 <code>if __name__ == "__main__": main()</code>，再按 <kbd>Esc</kbd></td><td>L12 → L13</td></tr>
+<tr><td>从 0 开始，不是从 1</td><td><code>/range&lt;CR&gt;</code> 搜索。<code>ww</code> 前进两个词。也可以写 <code>2w</code>，小计数时人们常直接连按。<code>i</code> 输入 <code>1,</code>，<kbd>Esc</kbd>。<code>e</code> 跳到下个词尾。<code>a</code> 追加 <code>+ 1</code>，<kbd>Esc</kbd></td><td>L2 C14 → C20 → C22 → C27 → C31</td></tr>
+<tr><td>5 的倍数打印了 fizz</td><td><code>:6&lt;CR&gt;</code> 到第 6 行。<code>ci"</code> 把引号里的内容改成 <code>buzz</code>，<kbd>Esc</kbd></td><td>L6 C13 → C23</td></tr>
+</table></div>
+<ul>
+<li>讲师指出，<code>a</code> 和 <code>l</code> 加 <code>i</code> 效果一样，但少按一个键。他说这“省了 50% 的输入”（<span class="ts">26:45</span>）。这些重叠的专用按键，用一阵就成了肌肉记忆。</li>
+<li>工作节奏：<strong>平时待在 Normal 模式到处移动</strong>。要改的时候进 Insert 改一点，马上回到 Normal。</li>
+<li>讲师的 Vim 开了 Python 支持，<code>o</code> 之后自动缩进了，他按了退格。本机回放用的 Vim 不加载任何配置，没有自动缩进。最后 <code>:w</code> 保存。</li>
+</ul>
+<div class="code term"><div class="cap">bash · 本机实测（修好后运行，换行压成空格显示）</div><pre><span class="p">$ </span><span class="cmd">python fizz.py | tr '\n' ' '</span>
+<span class="o">1 2 fizz 4 buzz fizz 7 8 fizz buzz 11 fizz 13 14 fizzbuzz 16 17 fizz 19 buzz</span></pre></div>
+<p>下面的演示逐键回放整个修复过程。光标位置全部来自本机 Vim 的真实记录。练习 2 把它改成了一道 VimGolf。讲义解法 70 键，还能压到 64 键。</p>
+<div data-vz="ch03-fizz"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>第 2 个 bug 最容易只修一半。把 <code>range(limit)</code> 改成 <code>range(1, limit)</code> 还不够。range 不含右端点，最后一个数会丢。要写成 <code>range(1, limit + 1)</code>，才会数到 limit 本身。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">python -c "print(list(range(5)))"</span>          <span class="cm"># 从 0 开始，到 4 为止</span>
+<span class="o">[0, 1, 2, 3, 4]</span>
+<span class="p">$ </span><span class="cmd">python -c "print(list(range(1, 5)))"</span>       <span class="cm"># 只改起点，5 还是没有</span>
+<span class="o">[1, 2, 3, 4]</span>
+<span class="p">$ </span><span class="cmd">python -c "print(list(range(1, 5 + 1)))"</span>   <span class="cm"># 讲义的修法：右端点加 1</span>
+<span class="o">[1, 2, 3, 4, 5]</span></pre></div></div>
+
+<!-- ============================================================ -->
+<h2 id="s11" data-nav="语言服务器" data-t="28:56">IDE 靠语言服务器看懂代码，LSP 把 M×N 变成 M+N <span class="ts">28:56</span></h2>
+<p class="lead">IDE 不会为每种语言各写一套支持。它和各语言的<strong>语言服务器</strong>之间，说一种通用协议，叫 LSP。</p>
+<div class="code"><div class="cap">LSP · 最小例子（示意，练习 3 有完整的真实会话）</div><pre>编辑器 → 服务器：textDocument/completion   <span class="cm"># 在 r. 后面，能补全什么</span>
+服务器 → 编辑器：Area, H, W                 <span class="cm"># 服务器推断出 r 是 Rect，列出它的成员</span>
+编辑器 → 服务器：textDocument/definition   <span class="cm"># Println 定义在哪</span>
+服务器 → 编辑器：publishDiagnostics         <span class="cm"># 发现错误时，服务器主动推送，不用你问</span></pre></div>
+<p class="like"><b>打个比方</b>LSP 像电源插座的国家标准。电器厂只管做标准插头，装修队只管装标准插座。M 种电器配 N 种房子，不用做 M×N 种转接头。</p>
+<p>补全、跳转这些功能，都要对代码有语义层面的理解。这套协议叫<a href="https://microsoft.github.io/language-server-protocol/" target="_blank" rel="noopener">语言服务器协议</a>，英文是 Language Server Protocol。IDE 实现协议的一端，语言服务器实现另一端。两边就能互通。讲师的说法是，把 <strong>M×N 问题变成 M+N 问题</strong>（<span class="ts">30:06</span>）。</p>
+<p>比如 VS Code 的 Python 扩展依赖 <a href="https://marketplace.visualstudio.com/items?itemName=ms-python.vscode-pylance" target="_blank" rel="noopener">Pylance</a>，Go 扩展依赖官方的 <a href="https://go.dev/gopls/" target="_blank" rel="noopener">gopls</a>。</p>
+<figure class="fig"><script>
+DG('flow', { nodeH: 44, cols: [
+  [ { id: 'e1', l: 'VS Code', tone: 'info' }, { id: 'e2', l: 'Vim / Neovim', tone: 'info' }, { id: 'e3', l: 'Emacs', tone: 'info' } ],
+  [ { id: 'p', l: 'LSP', s: 'JSON-RPC 消息', tone: 'warn', shape: 'pill' } ],
+  [ { id: 's1', l: 'gopls', s: 'Go', tone: 'teal' }, { id: 's2', l: 'Pylance / pyright', s: 'Python', tone: 'teal' }, { id: 's3', l: 'clangd', s: 'C / C++', tone: 'teal' } ]
+], edges: [ ['e1', 'p'], ['e2', 'p'], ['e3', 'p'], ['p', 's1'], ['p', 's2'], ['p', 's3'] ] });
+</script><figcaption>3 个编辑器配 3 种语言。没有协议要做 9 份集成。有了 LSP，各实现一次协议，一共 3 + 3 份。clangd 等例子是补充</figcaption></figure>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>语言服务器带来的功能（讲义）</th><th>讲师在 VS Code 里的演示</th></tr>
+<tr><td><strong>代码补全</strong>：输入 <code>object.</code> 后看到字段和方法</td><td>在一个对象后敲点号，列出所有字段和方法（<span class="ts">31:15</span>）</td></tr>
+<tr><td><strong>行内文档</strong>：悬停或补全时显示文档</td><td>字段有 docstring 时会直接显示</td></tr>
+<tr><td><strong>跳转到定义</strong></td><td>右键选 Go to Definition，跳到结构体定义。不然只能全局搜索，到处翻</td></tr>
+<tr><td><strong>查找引用</strong>：跳转定义反过来</td><td>“我定义的这个结构体，都在哪里用了？”</td></tr>
+<tr><td><strong>帮你管 import</strong>：整理、删掉没用的、标出缺的</td><td>用了 fmt 却没导入，出现红色波浪线。保存时自动加上 import（<span class="ts">33:05</span>）</td></tr>
+<tr><td><strong>代码质量</strong>：格式化、类型检查、lint，边写边查错</td><td>调用不存在的方法，立刻提示“该类型没有这个方法”。不用等编译或跑测试，第 9 讲细讲</td></tr>
+</table></div>
+<p>本机装了 Go 和 gopls。于是练习 3 写了一个<strong>最小的 LSP 客户端</strong>，大约 100 行 Python。它扮演编辑器一方，和 gopls 逐条交换消息。上面每一项都真跑验证过：</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习 3 · ex03-a 节选）</div><pre><span class="p">$ </span><span class="cmd">python -u lsp_client.py shapes</span>
+<span class="o">--&gt; initialize  #1
+&lt;-- 服务器能力: completionProvider, hoverProvider, definitionProvider, referencesProvider, codeActionProvider
+--&gt; textDocument/didOpen
+&lt;-- publishDiagnostics: 1 条
+      L18:16 r.Perimeter undefined (type Rect has no field or method Perimeter)
+--&gt; textDocument/completion  #2
+&lt;-- 补全: Area, H, W
+--&gt; textDocument/definition  #5
+&lt;-- 库函数定义: fmt/print.go L306:6</span></pre></div>
+<div data-vz="ch03-lsp"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>没有语言服务器，跳转定义只能按文本全局搜索。同名的函数、字段一多，就跳到别处去了。这时别急着怪 IDE。先看语言服务器装没装、配没配好。</p></div>
+
+<h3 id="s11b" class="side">配置语言服务器（讲义）</h3>
+<p>有的语言，装好扩展和语言服务器就能用。有的还要告诉 IDE 你的<strong>环境</strong>，才能发挥全部作用。比如在 VS Code 里，要先<a href="https://code.visualstudio.com/docs/python/environments" target="_blank" rel="noopener">指定 Python 环境</a>。这样语言服务器才看得到你装的包。环境在第 6 讲细讲。</p>
+<p>不同的语言服务器还有各自的设置。比如项目不用类型注解。那就可以在 VS Code 的 Python 支持里，关掉静态类型检查。讲师建议，用到哪种语言，就把它的支持配好。不会就搜 “how to set up Go support for VS Code”。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>装了 Python 扩展，<code>import numpy</code> 还是一条红线。多半是 IDE 选错了 Python 环境。语言服务器看不到你装的包。先在 VS Code 里选对解释器，再看红线还在不在。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s12" data-nav="AI 三种形态" data-t="33:54">AI 写代码有三种形态，能改的范围一个比一个大 <span class="ts">33:54</span></h2>
+<p class="lead">补全只能往光标后面续写。行内对话能改选中的代码。编码智能体能跨文件、分多步干活。</p>
+<div class="code"><div class="cap">最小例子（示意）</div><pre>def extract_links(md: str) -&gt; list[str]:   <span class="cm"># 补全：写到这里，它接着往下写函数体</span>
+<span class="cm"># 行内对话：选中几行，Ctrl+I，输入“不要用第三方库”</span>
+<span class="cm"># 编码智能体：在对话框里说需求，它自己翻文件、改多处</span></pre></div>
+<p class="like"><b>打个比方</b>补全像帮你接话的同桌，只能接你的下半句。行内对话像改作文的老师，只改你圈出来的那段。智能体像坐在旁边的搭档。它能自己翻整个项目，也能和你商量。</p>
+<p>讲师说这是最难准备的一部分，因为不确定大家的背景。他现场问，谁用过专门写代码的 AI 工具？ChatGPT 这类独立聊天不算。只有约 20% 的人举手，于是重点讲基础。</p>
+<p>2021 年中，<a href="https://github.com/features/copilot/ai-code-editor" target="_blank" rel="noopener">GitHub Copilot</a> 推出，用的是 OpenAI 的 <a href="https://openai.com/index/openai-codex/" target="_blank" rel="noopener">Codex</a> 模型。从那以后，<a href="https://en.wikipedia.org/wiki/Large_language_model" target="_blank" rel="noopener">大语言模型</a>在软件工程里被广泛采用。目前主要有三种形态：</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>形态</th><th>你怎么用</th><th>能改哪里</th></tr>
+<tr><td><strong>自动补全</strong> autocomplete</td><td>边打字边出现灰色建议，按 <kbd>Tab</kbd> 接受。可以用注释“引导”它</td><td>只能在<strong>光标之后</strong>续写</td></tr>
+<tr><td><strong>行内对话</strong> inline chat</td><td>选中一行或一块，直接用自然语言下指令</td><td>能改已有的代码，通常限于选区</td></tr>
+<tr><td><strong>编码智能体</strong> coding agents</td><td>对话式，像接入了你代码库的 ChatGPT</td><td>多文件、多步骤。第 7 讲专讲</td></tr>
+</table></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>拿补全去干需要改别处的活，它只会在光标后面硬写。下一节的 <code>import re</code> 被塞进函数中间，就是这么来的。动手前先想清楚改动范围，再挑形态。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s13" data-nav="AI 自动补全" data-t="35:25">补全只看上下文，名字起清楚它才补得对 <span class="ts">35:25</span></h2>
+<p class="lead">AI 补全只在光标处往后续写。它补的是最可能的写法。所以函数名和注释，决定了它补出什么。</p>
+<div class="code"><div class="cap">python · 最小例子（示意，签名取自讲义）</div><pre>def extract(contents: str) -&gt; list[str]:
+    <span class="cm"># 名字太含糊：模型只会把内容按行切开</span>
+    <span class="cm"># 加一行英文注释，说明要提取 Markdown 链接，它就补对了</span>
+def extract_links(contents: str) -&gt; list[str]:
+    <span class="cm"># 更好：名字自己说清楚，用不着临时注释</span></pre></div>
+<p class="like"><b>打个比方</b>补全像一个听半句话就抢答的同学。你只说“提取”，他不知道提取什么。说成“提取链接”，他就答对了。</p>
+<p>补全的形式和传统补全一样，在光标处给出续写建议。可以开着它被动地用。也可以用代码注释来<strong>提示</strong>（prompt）它。讲师用 VS Code 加 GitHub Copilot 演示。他强调不推荐具体产品，Cursor 里效果一样。演示任务是写一个脚本。它下载本讲讲义，再提取里面所有的链接。</p>
+<div class="code"><div class="cap">讲义原文：只写了函数签名</div><pre>import requests
+
+def download_contents(url: str) -&gt; str:</pre></div>
+<p>模型补全了函数体。讲师还用快捷键在几个候选之间切换（<span class="ts">37:09</span>）：</p>
+<div class="code"><div class="cap">讲义原文：模型的补全</div><pre>    response = requests.get(url)
+    return response.text</pre></div>
+<p>接着写一个名字含糊的函数 <code>def extract(contents: str) -&gt; list[str]:</code>。模型只能按最可能的方式补，结果是把内容按行切开。这对“提取链接”毫无用处。加一行注释 <code># extract all Markdown links from the content</code>，补全就对了。下面是讲义原文：</p>
+<div class="code"><div class="cap">讲义原文：注释引导后的补全</div><pre>    import re
+    pattern = r'\[.*?\]\((.*?)\)'
+    return re.findall(pattern, content)</pre></div>
+<ul class="keys">
+<li><strong>只能补光标之后</strong>：<code>import re</code> 被塞进了函数中间。按惯例，它应该在模块顶部。这是补全形态固有的局限（<span class="ts">40:35</span>）。</li>
+<li><strong>更好的做法</strong>：函数名起得有描述性，比如 <code>extract_links</code>，再写个 docstring。模型同样能一次补对，docstring 对以后读代码的人也有用。只为引导 AI 写的临时注释，事后删掉（<span class="ts">41:45</span>）。</li>
+<li><strong>务必检查</strong>：模型只是在大量数据上训练出来的概率模型。它没有人那样的智能。接受补全前，要看它是否真做了你想要的。有时得改一改，或者自己重写（<span class="ts">37:45</span>）。</li>
+</ul>
+<div class="code"><div class="cap">讲义原文：把脚本补完</div><pre>print(extract(download_contents("https://raw.githubusercontent.com/missing-semester/missing-semester/refs/heads/master/_2026/development-environment.md")))</pre></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）：引导后的正则在本机真跑</div>
+<p>本机没接 Copilot，没法复现“补全”这个动作。但可以验证补出来的代码对不对。拿一小段示例 Markdown 跑一下：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">python -c "import re; print(re.findall(r'\[.*?\]\((.*?)\)', 'See [VS Code](https://code.visualstudio.com/) and [Vim](https://www.vim.org/).'))"</span>
+<span class="o">['https://code.visualstudio.com/', 'https://www.vim.org/']</span></pre></div></div>
+<p>下面的演示画出两件事。一是补全只能在光标后续写，二是注释怎么改变上下文。模型输出逐字取自讲义。</p>
+<div data-vz="ch03-complete"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>按 <kbd>Tab</kbd> 太顺手，最容易漏看。补出来的代码有时看着对，其实有问题。本节的 <code>import re</code> 被塞进了函数中间，就是一例。接受之前一定要读一遍。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s14" data-nav="行内对话" data-t="42:25">行内对话能改已有代码，但通常只改选区 <span class="ts">42:25</span></h2>
+<p class="lead">选中一段代码，用自然语言下指令，模型就改这一段。编辑器用 diff 显示改动，你审完再决定留不留。</p>
+<div class="code"><div class="cap">最小例子（示意）</div><pre>Vj                               <span class="cm"># Vim 键位：按行选中，j 往下扩</span>
+Ctrl+I                           <span class="cm"># 唤起行内对话，Mac 上是 Cmd+I</span>
+use built-in libraries instead   <span class="cm"># 讲义里的指令：别用第三方库</span>
+<span class="cm"># 红色是要删的行，绿色是新增的行，审完再接受</span></pre></div>
+<p class="like"><b>打个比方</b>行内对话像在文档上圈一段，旁边批注“改成这样”。批注只管圈里的字，圈外的一个不动。</p>
+<p>行内对话（inline chat）也是用自然语言让模型写代码。和补全不同，它能<strong>改已有的代码</strong>。接着上面的例子，假设不想依赖第三方库 requests。讲师在 VS Code 里用 Vim 键位 <code>V</code> 加 <code>j</code>，选中那三行。再按 <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>I</kbd> 唤起行内对话，输入“不要用第三方库”。讲义里写的是 <code>use built-in libraries instead</code>。</p>
+<div class="code"><div class="cap">讲义原文：模型的提议</div><pre>from urllib.request import urlopen
+
+def download_contents(url: str) -&gt; str:
+    with urlopen(url) as response:
+        return response.read().decode('utf-8')</pre></div>
+<p>编辑器用 diff 显示改动。红色是删除，绿色是新增。你审完再选择保留（<span class="ts">43:38</span>）。</p>
+<div class="callout warn"><div class="ct">学生提问：改动要用到选区外的代码呢？（视频 44:14）</div>
+<p>要看具体实现。讲师现场试了一下。他把光标放在函数里，让它把 import 移到外面。在这个实现里，它只改选区内的内容，没做成有用的事。别的编辑器的行内对话，可能允许改其他地方。这个领域很新，变化很快。</p></div>
+<div data-vz="ch03-inline"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>想让它“把 import 移到文件顶部”，可能做不成。有些实现只改选区里的内容，文件顶部不在选区里。这种跨位置的改动，交给编码智能体。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s15" data-nav="联网与隐私" data-t="45:25">AI 工具基本都要联网，要真隐私只能本地跑 <span class="ts">45:25</span></h2>
+<p class="lead">主流模型太大，只能跑在云端。你的代码和提示词都会发过去。想完全不上传，就得在本地跑模型。</p>
+<div class="code"><div class="cap">三种选择（示意）</div><pre><span class="cm"># 云端模型：代码和提示词发到服务商的 GPU 上算，能力最强</span>
+<span class="cm"># 打开隐私选项：服务商承诺不保留数据，但你只能选择信任</span>
+<span class="cm"># 本地模型：数据不出电脑，代价是能力差一截、很耗电</span></pre></div>
+<p class="like"><b>打个比方</b>云端模型像去餐馆吃饭，菜好，但后厨你看不见。本地模型像在家做饭，放心，就是手艺差点。</p>
+<ul class="keys">
+<li><strong>要联网吗？</strong>基本都要。这些工具用的模型非常大，有的上万亿参数。要大量显存和高级 GPU 才跑得动。也有能在笔记本上跑的本地小模型。但能力差一截，而且很耗电（<span class="ts">46:02</span>）。</li>
+<li><strong>能不让代码上传到云端吗？</strong>讲师说“可以，但有星号”。有些工具能在设置里打开额外的隐私选项。提供方承诺不保留你的代码和提示词。但你是在<strong>信任</strong>他们这么做，常见的技术保障手段还很少。真要隐私，只能在本地跑模型（<span class="ts">47:08</span>）。</li>
+<li><strong>在 Python 以外、没那么灵活的语言里，效果差吗？</strong>讲师的经验是“还行”。有些补全模型还会预测<strong>光标下一步要去哪</strong>。比如它发现你需要 <code>import re</code>。它会先建议光标跳到顶部写 import。写完再跳回来补函数体（<span class="ts">48:32</span>）。</li>
+<li><strong>在合适的抽象层次上工作</strong>：简单的事让 AI 直接搞定。任务超出它的能力，它会写出看着对、其实有 bug 的代码。或者彻底糊涂（<span class="ts">49:10</span>）。工具每隔几个月就进步一截。三个月前做不到的事，现在可能轻松完成。所以要一直用，不断试探它的边界。这样你对它擅长什么的直觉，才不会过时。</li>
+</ul>
+<div class="callout ai"><div class="ct">讲师的提醒（视频 50:52）</div>
+<p>这些 LLM 不像人那样有智能。它们是“概率性的下一个 token 预测器”。有时说得合理也正确，有时乍看合理，却完全错误。所以用它们，和把任务交给一位员工不一样。讲师说，希望员工别像这些模型那样，试图对你 gaslight。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>AI 写的代码有时看着合理，其实是错的。任务越超出它的能力，越容易这样。别像信任同事那样直接合并，每一行都要自己审。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s16" data-nav="编码智能体" data-t="50:19">要 AI 解释、反问、说把握，得用编码智能体 <span class="ts">50:19</span></h2>
+<p class="lead">补全和行内对话只管写代码。想让 AI 先问你问题、解释思路，得用编码智能体。它是对话式的。</p>
+<div class="code"><div class="cap">对话示意</div><pre>你：先别写代码。问我几个问题，弄清需求再动手。       <span class="cm"># 补全和行内对话做不到这一步</span>
+智能体：链接要去重吗？相对路径要不要转成绝对路径？   <span class="cm"># 对话式工具可以反过来问你</span>
+你：要去重，相对路径不用管。                         <span class="cm"># 答完它再动手，第 7 讲细讲</span></pre></div>
+<p class="like"><b>打个比方</b>补全和行内对话像自动铅笔，你写到哪它补到哪。智能体像一个能聊天的搭档，可以先商量，再动笔。</p>
+<p>学生问：能不能让 AI 解释它为什么这么写？能不能先问我问题，再说说它有多确定？讲师说，补全和行内对话做不到，<strong>编码智能体</strong>可以。它们是对话式工具。讲师说，它“大致相当于接入了你代码库的 ChatGPT”。你可以让它先问你问题，也可以随时问它。</p>
+<p>之前有学生问侧边栏的 “Build with agent” 聊天框（<span class="ts">40:02</span>）。它和写注释有什么区别？答案也在这里。补全只在光标后补一小段。改文件别处的事，要交给对话或智能体。</p>
+<p>编码智能体在<a href="https://missing.csail.mit.edu/2026/agentic-coding/" target="_blank" rel="noopener">第 7 讲</a>深入展开。这次讲座超时了。讲师现场举手投票，不少人想深入了解（<span class="ts">46:35</span>）。他表示会考虑调整课表。最终的课表里，第 7 讲就是《智能体编程》。</p>
+<div class="callout tool"><div class="ct">讲义推荐的软件</div>
+<p>流行的 AI IDE 有两类。一是 <a href="https://code.visualstudio.com/" target="_blank" rel="noopener">VS Code</a> 加 <a href="https://github.com/features/copilot/ai-code-editor" target="_blank" rel="noopener">GitHub Copilot</a> 扩展，二是 <a href="https://cursor.com/" target="_blank" rel="noopener">Cursor</a>。</p>
+<p>GitHub Copilot 对学生、教师和热门开源项目的维护者<a href="https://github.com/education/students" target="_blank" rel="noopener">免费</a>。但要先通过 GitHub Education 认证身份。讲师记得，要交学生证之类的材料。别的很多工具每月约 20 美元。</p>
+<p>讲师的看法是，这个领域变化很快。主流产品的功能大致相当（<span class="ts">52:32</span>）。入门阶段尤其如此。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>问补全“你为什么这么写”，它答不了。补全只会续写代码，行内对话也只会改选区。想要解释和追问，得换成对话式的智能体。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s17" data-nav="扩展">IDE 的很多本事，来自扩展 <span class="tag">讲义</span></h2>
+<p class="lead">视频没来得及讲这部分。IDE 因为<strong>扩展</strong>而更强大。比如在容器里开发、远程开发、多人同时编辑。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>code --install-extension vscodevim.vim              <span class="cm"># VS Code：命令行装扩展，参数是发布者.名字</span>
+git clone 仓库地址 ~/.vim/pack/plugins/start/名字   <span class="cm"># Vim 8 起：放进这个目录就算装好</span>
+:scriptnames                                        <span class="cm"># 在 Vim 里列出已加载的脚本，确认插件在里面</span></pre></div>
+<p class="like"><b>打个比方</b>扩展像手机里的 App。手机出厂只会打电话、发短信。装上 App，才能导航、记账。</p>
+<p>可以浏览扩展榜单。Vim 插件看 <a href="https://vimawesome.com/" target="_blank" rel="noopener">Vim Awesome</a>，VS Code 看<a href="https://marketplace.visualstudio.com/search?target=VSCode&amp;category=All%20categories&amp;sortBy=Installs" target="_blank" rel="noopener">按安装量排序的扩展</a>。讲义点名了这几个：</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>功能</th><th>做什么</th><th>例子</th></tr>
+<tr><td><a href="https://containers.dev/" target="_blank" rel="noopener">开发容器</a></td><td>在容器里运行开发工具，方便移植或隔离。容器见第 6 讲</td><td><a href="https://code.visualstudio.com/docs/devcontainers/containers" target="_blank" rel="noopener">VS Code 支持</a></td></tr>
+<tr><td>远程开发</td><td>通过 SSH 在远程机器上开发。比如在云上的强力 GPU 机器上写代码、跑代码</td><td><a href="https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh" target="_blank" rel="noopener">Remote - SSH</a>。用的就是第 2 讲的 SSH 和 ~/.ssh/config</td></tr>
+<tr><td>协同编辑</td><td>像 Google Docs 一样，多人同时编辑一个文件</td><td><a href="https://marketplace.visualstudio.com/items?itemName=MS-vsliveshare.vsliveshare" target="_blank" rel="noopener">Live Share</a></td></tr>
+</table></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）：扩展本质上是什么</div>
+<p>以 Vim 为例，扩展就是一些脚本。它们放在约定的目录里，启动时会被执行。Vim 8 起自带包机制，<code>~/.vim/pack/*/start/*/plugin/*.vim</code> 会自动加载。练习 4 在沙箱里写了一个 7 行的插件。实测加载前 <code>:Hello</code> 报错，返回 1。加载后正常工作。</p>
+<p>VS Code 扩展是装在扩展目录里的 JavaScript 包。由扩展主机进程负责加载。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑（补充，非视频内容）</div>
+<p>扩展能读你的代码，也能运行程序。来路不明的扩展，和第 2 讲的 <code>curl | bash</code> 一样危险。装之前看看发布者、安装量和更新时间。一次只装一个，确认真在用再留下。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s18" data-nav="一页带走" data-t="53:46">一页带走：本讲结论都在这几行里 <span class="ts">53:46</span></h2>
+<p class="lead">把本讲浓缩成几行按键和命令。每行的注释就是结论和考点。</p>
+<div class="code"><div class="cap">本讲速查（注释即考点）</div><pre>x / ix&lt;Esc&gt; / vex   <span class="cm"># 同一个 x：Normal 删字符，Insert 打字，Visual 删选区</span>
+7dw                  <span class="cm"># 计数加动词加名词：删掉 7 个词，一次 u 全回来</span>
+cw                   <span class="cm"># 等于 d 加移动再按 i。光标在词上时像 ce，不吃后面的空格</span>
+x = dl   s = cl      <span class="cm"># 讲义给的等价写法</span>
+ci(   da'            <span class="cm"># i 只动里面，a 连外壳一起</span>
+ci"                  <span class="cm"># 光标在行首：改 "fizz"。光标在 end= 后面：改的是 ""</span>
+6G   :6&lt;CR&gt;   4j     <span class="cm"># 前两个落在第一个非空字符。4j 保持列号，练习 2 就错在这</span>
+<span class="cm"># LSP：编辑器实现一次客户端（M），语言实现一次服务器（N），M×N 变 M+N</span>
+<span class="cm"># AI 补全只能续写光标之后，所以 import re 被塞进了函数中间</span>
+<span class="cm"># 隐私：设置里的“不保留数据”靠信任，真隐私只能本地跑模型</span></pre></div>
+<ul class="keys">
+<li>写代码主要是跳转、阅读和小改。Vim 为此优化，核心思想在各种软件的 Vim 模式里通用。</li>
+<li>模态编辑：Normal 是大本营。<code>i</code>、<code>R</code>、<code>v</code>、<code>V</code>、<kbd>Ctrl</kbd>+<kbd>v</kbd>、<code>:</code> 进入其他模式，<kbd>Esc</kbd> 回来。</li>
+<li>编辑语言：<strong>动词</strong> <code>d c y</code>，<strong>计数</strong> <code>3 5 7</code>，<strong>名词</strong> <code>w e $ %</code>，<strong>修饰符</strong> <code>i a</code>。<code>7dw</code>、<code>ci(</code>、<code>da'</code> 都是这么拼出来的。</li>
+<li>语言服务器协议把 M×N 变成 M+N。功能有补全、悬停文档、跳转定义和查找引用。还能整理 import，边写边查错。</li>
+<li>AI 有三种形态。补全只续写光标之后，行内对话改选区。编码智能体能对话、走多步，第 7 讲细讲。不管哪种，结果都要审。</li>
+<li>主流模型在云端。要真正的隐私，只能在本地跑模型。</li>
+</ul>
+<div class="callout key"><div class="ct">下一步</div>
+<p>第 1、2 讲在 shell 里组合程序。这一讲转向<strong>写代码本身的工具</strong>。也就是编辑器、语言服务器和 AI。下一讲是调试与性能分析。讲代码写出来以后，怎么找 bug，怎么让它跑得快。AI 编程在第 7 讲深入。</p>
+<p>现在先去做<a href="labs/lab03.html">本讲练习的可视化笔记</a>。开启 Vim 模式，打一局 VimGolf。再用 100 行的 LSP 客户端和 gopls 对话，最后装一个扩展。</p></div>
+
+</article></main>
+<script src="assets/vz.js"></script>
+<script src="assets/viz/ch03-vim.js"></script>
+<script src="assets/viz/ch03-ai.js"></script>
+</body>
+</html>

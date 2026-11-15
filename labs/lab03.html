@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>练习 03 · 开发环境与工具 · Missing Semester 2026</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="../assets/vz.css">
+<link rel="stylesheet" href="../assets/lab.css">
+<script>window.PAGE = { key: 'lab03', ch: 'ch03', type: 'lab', base: '../' };</script>
+<script src="../assets/course.js"></script>
+<script src="../assets/dg.js"></script>
+<script src="../assets/app.js"></script>
+<script src="data/lab03.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<header class="lab-head">
+  <div class="k">LAB 03 · 对应 <a href="../ch03.html">第 3 讲 · 开发环境与工具</a></div>
+  <h1>练习可视化笔记 · 开发环境与工具</h1>
+  <p class="lede">讲义第 3 讲一共 4 道练习，都是“去做”的开放题。这里每题先亮结论，再给具体做法。能在本机验证的部分，都真跑了一遍。包括 bash 的 Vim 模式和一局本地 VimGolf。还有一个 100 行的 LSP 客户端，和一个亲手写的编辑器扩展。考点都写在代码注释里。<strong>所有输出都由脚本在本机真跑后自动收集</strong>。生成时间是 <b id="labGen">…</b>。</p>
+  <div class="lab-prog" id="labProg"><span class="t"></span><div class="bar"><div class="f"></div></div><button class="btn sm" id="labGo" type="button">定位到第一道未完成的题</button></div>
+  <div class="lab-legend">
+    <span><span class="wb gb">Git Bash 5.3 · Windows 本机</span> 真跑</span>
+    <span><span class="ec na">未实测</span> 本机没有对应环境，写明原因</span>
+    <span><span class="ann" style="display:inline-flex;margin:0;padding:1px 8px"><span class="ar">L3</span></span> 注释层（不可选中，复制不会带上）</span>
+  </div>
+</header>
+
+<h2 id="env" data-nav="环境检查">环境检查：图形界面的操作，改用命令行验证</h2>
+<p class="lead">VS Code 里的点点按按没法脚本化。本页用命令行，把同样的功能真跑一遍。</p>
+<p>动手前先确认工具链。下面是生成本页时，在本机真跑的检查命令和输出：</p>
+<div data-env="gitbash"></div>
+<div class="callout warn"><div class="ct">本机限制与处理办法</div>
+<ul>
+<li><strong>图形界面没法脚本化</strong>：VS Code 里的操作，都得你自己点。本页给出具体步骤和检验标准。再用命令行，把同样的功能验证一遍。Vim 用 <code>vim -Es</code> 批量回放按键。语言服务器部分，用一个自写的 LSP 客户端。它直接和 gopls 对话。扩展部分，用 Vim 自带的包机制。在沙箱里装一个自己写的插件。</li>
+<li><strong>不读你的编辑器配置</strong>：本机装有 VS Code。但本页<strong>没有</strong>列它的扩展，也没读它的设置。那是你的私人配置。所有命令都在临时目录里跑，HOME 指向临时目录。Vim 用 <code>-u NONE</code> 或演示用的 vimrc 启动，不加载你的 ~/.vimrc。</li>
+<li><strong>VimGolf 网站</strong>：提交成绩要注册账号。还要装它的命令行客户端，这需要 Ruby。本笔记不替你注册账号。练习 2 拿讲义的 FizzBuzz，出了一道同样规则的本地高尔夫。还写了一个计数回放器。真正的 VimGolf 题目怎么做，见该题步骤。</li>
+<li><strong>不联网</strong>：讲义建议的 spf13/cobra 项目要联网下载 Go 模块。练习 3 改用一个只依赖标准库的小项目。检查的功能一样。</li>
+</ul></div>
+<div class="callout tip"><div class="ct">怎么用这一页</div>
+<p>代码块右上角有个“复制”。它复制的是源文件的原始字节。“注释”按钮能隐藏或显示注释层。每道题标题右边可以勾“完成”。想自己验证，就按<a href="#selfcheck">页尾“自查”</a>的方法重跑。</p></div>
+
+<!-- ======================= 1 ======================= -->
+<h2 id="ex01" data-nav="1 · 处处开启 Vim 模式">练习 1 · 处处开 Vim 模式，shell 里一行 set -o vi 就行 <label class="ex-done"><input type="checkbox" data-ex="ex01">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Exercises · 1</span><span class="tag gb">Git Bash 实测（shell 部分）</span><span class="tag lnx">图形软件未实测</span></div>
+<p class="q-orig"><b>原题</b>：在所有支持 Vim 模式的软件里开启它，比如编辑器和 shell。接下来一个月，所有文本编辑都用 Vim 模式。觉得某个操作效率低时，你会想“一定有更好的办法”。那就去 Google 一下，多半真的有。</p>
+<p class="lead">bash 里一行 <code>set -o vi</code>，就切到 Vim 键位。写进 <code>~/.inputrc</code>，所有用 readline 的程序一起切。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>模态编辑和 Vim 的编辑语言，见<a href="../ch03.html#s3">第 3 讲第 3 节</a>到<a href="../ch03.html#s8">第 8 节</a>。讲师建议“强迫自己用一个月”，见<a href="../ch03.html#s9">第 9 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>怎么开</div>
+<div class="tbl-wrap"><table class="tbl"><tr><th>软件</th><th>做法</th><th>本页</th></tr>
+<tr><td>bash</td><td>当前会话用 <code>set -o vi</code>。长期生效就写进 <code>~/.bashrc</code></td><td>实测</td></tr>
+<tr><td>所有 readline 程序，比如 bash 和 python 交互界面</td><td>在 <code>~/.inputrc</code> 里写 <code>set editing-mode vi</code>，见下面的文件</td><td>实测</td></tr>
+<tr><td>zsh</td><td><code>bindkey -v</code>。讲义链接了 zsh 的<a href="https://zsh.sourceforge.io/Guide/zshguide04.html" target="_blank" rel="noopener">内建 Vim 模拟</a></td><td>未实测，本机没有 zsh</td></tr>
+<tr><td>VS Code</td><td>扩展市场装 <a href="https://marketplace.visualstudio.com/items?itemName=vscodevim.vim" target="_blank" rel="noopener">VSCodeVim</a></td><td>未实测，要图形界面</td></tr>
+<tr><td>Claude Code</td><td>有 <a href="https://code.claude.com/docs/en/interactive-mode#vim-editor-mode" target="_blank" rel="noopener">Vim 编辑模式</a>，在它的配置里打开</td><td>未实测</td></tr>
+<tr><td>学习</td><td>先跑一遍 <code>vimtutor</code>，装了 Vim 就有</td><td>确认存在</td></tr>
+</table></div></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="ex01/inputrc" data-new="1-4"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex01-a"></div>
+<p>交互式 bash 默认是 emacs 键位。就是 Ctrl-A 到行首、Ctrl-E 到行尾那一套。<code>set -o vi</code> 之后换成 vi 键位。这时按 Esc 进入命令模式。可以用 <code>b</code>、<code>w</code>、<code>0</code>、<code>$</code>、<code>dw</code>、<code>ciw</code> 编辑命令行。</p>
+<div data-run="ex01-b"></div>
+<p>用 inputrc 开启时，提示符前多了 <code>(ins)</code>，表示当前在插入模式。按 Esc 后会变成 <code>(cmd)</code>。本页的命令是批量喂进去的，所以看不到切换。</p>
+<div data-run="ex01-c"></div></div>
+<p class="like"><b>打个比方</b>Vim 键位像一门外语。只在一个软件里用，就像只在课堂上说外语。处处都开，才是把自己扔进语言环境。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：set -o vi 一关终端就没了</div>
+<div class="pit-card"><div class="row bad"><b>误解</b><div>在终端里敲了 <code>set -o vi</code>，以为从此都是 Vim 键位。</div></div>
+<div class="row"><b>实际</b><div>它只改当前这个 shell。新开一个终端，又回到默认的 emacs 键位。上面 ex01-a 里，改之前显示的就是 <code>emacs on</code>。</div></div>
+<div class="row good"><b>正确写法</b><div>写进 <code>~/.bashrc</code>，只管 bash。写进 <code>~/.inputrc</code>，所有用 readline 的程序都生效。</div></div></div></div>
+<div class="callout extra"><div class="ct">补充（非讲义内容）：一个月怎么算练成</div>
+<ul>
+<li><strong>第 1 周</strong>：不看表也能做到这些。i、a、o 进插入，Esc 回来。hjkl、w、b、e 移动。dw、cw、u 编辑。</li>
+<li><strong>第 2 到 3 周</strong>：开始自然地用计数 <code>3w</code> 和行内查找 <code>f(</code>。还有文本对象，比如 <code>ci"</code> 和 <code>da(</code>。</li>
+<li><strong>第 4 周</strong>：遇到重复操作会停下来。想想有没有更短的按法，并真的去查。这就是讲师说的那种“懒”。</li>
+</ul>
+<p>阶段划分是笔记作者给的参考。你的体验以实际为准。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>set -o vi                  <span class="cm"># 只管当前 shell，关掉终端就失效</span>
+set -o | grep '^vi '       <span class="cm"># 打开后显示 vi on。emacs 同时变成 off，两者互斥</span>
+set editing-mode vi        <span class="cm"># 写在 ~/.inputrc 里：bash、python 交互界面一起生效</span>
+<span class="cm"># 不用 Vim 也值得学 Vim：VS Code、zsh、bash、Claude Code 都有 Vim 模式</span>
+<span class="cm"># 学一次，到处用（第 3 讲第 2 节）</span></pre></div>
+
+<!-- ======================= 2 ======================= -->
+<h2 id="ex02" data-nav="2 · VimGolf">练习 2 · 本地 VimGolf：讲义 70 键，能压到 64 键 <label class="ex-done"><input type="checkbox" data-ex="ex02">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Exercises · 2</span><span class="tag gb">Git Bash 实测（本地高尔夫）</span><span class="tag lnx">VimGolf 网站未实测</span></div>
+<p class="q-orig"><b>原题</b>：完成 <a href="https://www.vimgolf.com/" target="_blank" rel="noopener">VimGolf</a> 上的一道挑战。</p>
+<p class="lead">VimGolf 比谁用的按键最少。同一个任务有很多种按法。按键数能比，也能优化。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>讲义修 FizzBuzz 的按键，见<a href="../ch03.html#s10">第 3 讲第 10 节</a>。<code>j</code> 保持列号、<code>ci"</code> 往后找引号，见<a href="../ch03.html#s5">第 5 节</a>和<a href="../ch03.html#s8">第 8 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>规则和做法</div>
+<p>每道题给一个起始文件和一个目标文件。你在 Vim 里把前者改成后者，<strong>按键越少越好</strong>。<kbd>Esc</kbd> 和回车各算 1 键，保存退出也要算。</p>
+<p>在 vimgolf.com 上做题的流程如下。这是补充内容，依据网站首页的说明。本页没有实际操作：</p>
+<ol>
+<li>挑一道题。网页上有起始文本、目标文本和排行榜。</li>
+<li>安装官方命令行客户端 <code>gem install vimgolf</code>，这需要 Ruby。在网站上用 GitHub 账号登录，拿到 API key。再用 <code>vimgolf setup</code> 填进去。</li>
+<li><code>vimgolf put 挑战ID</code>：它用一个干净的 Vim 打开起始文件。然后记下你的每次按键。改完按 <code>:wq</code>，它比对结果并显示按键数。你可以选择提交。</li>
+</ol>
+<p>本笔记不替你注册账号。下面拿<strong>讲义的 FizzBuzz 修复</strong>当一道本地题。起始文件是讲义的坏代码。目标文件是按讲义按键修好的结果。再写一个回放器，按 VimGolf 的规则计数。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：题目</div>
+<div data-file="ex02/start.py"></div><div data-file="ex02/end.py"></div></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：两份解法（VimGolf 记法）</div>
+<div data-file="ex02/lecture.keys"></div><div data-file="ex02/golf.keys"></div></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：回放器</div>
+<div data-file="ex02/golf.vim" data-new="1-17"></div><div data-file="ex02/check.sh" data-new="1-10"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex02-a"></div>
+<p>输出怎么读。第一行是 Ex 模式执行 <code>:6</code> 时顺手打出的第 6 行。Ex 模式跳到某行会打印它，不影响结果。讲义的解 70 键，通过。本笔记的解 64 键，也通过。修好的程序输出正确。下面的演示逐组回放这 64 键，并手算省在了哪里。</p></div>
+<div data-vz="lab03-golf"></div>
+<p class="like"><b>打个比方</b>VimGolf 像真的高尔夫，比谁杆数少。可光数杆数不够，球停在哪也得算清楚。下一杆怎么打，全看上一杆停在哪。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：同样 2 键，4j 和 6G 不一样</div><div data-run="ex02-b"></div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div>用 <code>4j</code> 从第 2 行下到第 6 行，也是 2 键。</div></div>
+<div class="row"><b>现象</b><div>diff 显示第 6 行变成了 <code>print("fizz", end="buzz")</code>，结果 FAIL。</div></div>
+<div class="row"><b>原因</b><div><code>j</code> 会尽量保持列号。上一步光标在第 2 行 C31，到第 6 行还是 C31。那里正好在 <code>end=""</code> 那对空引号里。<code>ci"</code> 改的是光标所在的，或者后面最近的那对引号。<code>6G</code> 和 <code>:6&lt;CR&gt;</code> 会把光标放在第一个非空字符上。后面第一对引号才是 "fizz"。</div></div>
+<div class="row good"><b>教训</b><div>高尔夫解法要算上光标的隐含状态。比如列号、寄存器和上次搜索。这也是回放器每次都从同一个干净状态开始的原因。</div></div></div></div>
+<div class="code term"><div class="cap">bash · 本机实测（把 golf.keys 里的 6G 换成 :6&lt;CR&gt;）</div><pre><span class="p">$ </span><span class="cmd">sed 's/6G/:6&lt;CR&gt;/' golf.keys &gt; colon.keys</span>   <span class="cm"># 只换这一处，其余按键不动</span>
+<span class="p">$ </span><span class="cmd">bash check.sh colon.keys</span>                    <span class="cm"># 第一行还是 Ex 模式顺手打出的第 6 行</span>
+<span class="o">            print("fizz", end="")
+PASS  65 keystrokes  (colon.keys)</span></pre></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>ww   2w       <span class="cm"># 都是 2 键，一样。计数到 3 以上，3w 才比 www 省</span>
+6G   :6&lt;CR&gt;   <span class="cm"># 落点相同，6G 少 1 键。换成 :6&lt;CR&gt; 实测 PASS 65 键</span>
+4j            <span class="cm"># 也是 2 键，但保持列号，落进 end="" 里，FAIL</span>
+<span class="cm"># 日常编辑里讲师更在意不用想，打高尔夫才斤斤计较</span></pre></div>
+
+<!-- ======================= 3 ======================= -->
+<h2 id="ex03" data-nav="3 · 配置语言服务器">练习 3 · IDE 的每个功能，背后都是一条 LSP 请求 <label class="ex-done"><input type="checkbox" data-ex="ex03">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Exercises · 3</span><span class="tag gb">Git Bash 实测（gopls）</span><span class="tag lnx">VS Code 操作未实测</span></div>
+<p class="q-orig"><b>原题</b>：为你正在做的项目配置 IDE 扩展和语言服务器。确认预期的功能都正常，比如<strong>跳转到依赖库里的定义</strong>。手头没有代码，可以用 GitHub 上的开源项目，比如 <a href="https://github.com/spf13/cobra" target="_blank" rel="noopener">spf13/cobra</a>。</p>
+<p class="lead">IDE 里点一下鼠标，背后就是一条 LSP 消息。本页写了个 100 行的客户端，把这些消息逐条发给 gopls。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>语言服务器和 LSP，见<a href="../ch03.html#s11">第 3 讲第 11 节</a>。那里的演示第 2 幕，就是下面这次真实会话。还会用到进程的 stdin 和 stdout，见第 2 讲。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>在 VS Code 里怎么做（以 Go 和 cobra 为例）</div>
+<ol>
+<li>装 Go。<code>git clone https://github.com/spf13/cobra</code>，用 VS Code 打开。</li>
+<li>扩展市场装官方 Go 扩展 golang.go。它会提示安装 gopls 等工具，点安装。Python 项目就装 Python 扩展，它自带 Pylance。再按讲义<a href="https://code.visualstudio.com/docs/python/environments" target="_blank" rel="noopener">选择 Python 环境</a>。不然语言服务器看不到你装的包。</li>
+<li>逐项检查。下表就是检验标准：
+<div class="tbl-wrap"><table class="tbl"><tr><th>功能</th><th>在 IDE 里怎么试</th><th>背后的 LSP 请求</th></tr>
+<tr><td>补全</td><td>在变量后敲 <code>.</code></td><td>textDocument/completion</td></tr>
+<tr><td>行内文档</td><td>鼠标悬停在函数上</td><td>textDocument/hover</td></tr>
+<tr><td>跳转到定义，包括依赖库</td><td>按 F12 或右键 Go to Definition。能跳进 <code>fmt.Println</code> 这类库函数里</td><td>textDocument/definition</td></tr>
+<tr><td>查找引用</td><td>按 Shift+F12 或 Find All References</td><td>textDocument/references</td></tr>
+<tr><td>边写边查错</td><td>故意调用不存在的方法，出现红色波浪线</td><td>textDocument/publishDiagnostics，由服务器推送</td></tr>
+<tr><td>import 帮助</td><td>用了没导入的包，保存时自动补 import</td><td>textDocument/codeAction，类型是 source.organizeImports</td></tr>
+</table></div></li>
+</ol></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：一个小 Go 项目（第 18 行故意写错）</div><div data-file="ex03/shapes/go.mod"></div><div data-file="ex03/shapes/main.go"></div></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：最小 LSP 客户端，把点鼠标变成一条条请求</div><div data-file="ex03/lsp_client.py" data-new="1-107"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex03-a"></div>
+<p>输出怎么读。<code>--&gt;</code> 是客户端发出的消息。带 <code>#编号</code> 的是请求，不带的是通知。<code>&lt;--</code> 是服务器的回应或推送。</p>
+<p>上表 6 项全部验证通过。补全得到 Area、H、W。悬停得到签名和文档注释。<strong>库函数定义跳到了 Go 标准库的 fmt/print.go 第 306 行</strong>。这是题目特别点名的一项。引用找到 2 处。再改出一个“用了 strings 却没 import”的版本。服务器推来新诊断，organizeImports 代码操作把 <code>"strings"</code> 加进了 import 块。</p>
+<p>对照一下。同一个错误，命令行的 <code>go vet</code> 也能查出来。但它要先完整分析一遍包。语言服务器在你打开文件时，就把错误推过来了：</p>
+<div data-run="ex03-b"></div><div data-run="ex03-vsc"></div></div>
+<p class="like"><b>打个比方</b>IDE 像一台自动点菜机。你按一下按钮，它就在后台给后厨发一张单子。这个脚本把点菜机拆开，让你看见每一张单子。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：写客户端时遇到的两个坑</div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>第一版客户端发完 didOpen 就一直等诊断，偶尔卡住不动。</div></div>
+<div class="row"><b>原因</b><div>gopls 会<strong>反过来</strong>向客户端发请求。比如 <code>workspace/configuration</code>，问你的设置是什么。客户端不回复，它可能一直等。第 45 到 47 行对这类请求一律回复“没有设置”。真正的编辑器当然会认真回答。这就是“配置语言服务器”在协议层面的样子。</div></div>
+<div class="row"><b>另一个坑</b><div>行列号在 LSP 里从 0 开始，人习惯从 1 开始。第 64 到 65 行的 <code>at()</code> 专门做这个转换。打印时再加回 1。差一位，就会在错误的位置请求补全。结果莫名其妙。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>textDocument/completion   <span class="cm"># 请求：带 id，服务器用同一个 id 回复</span>
+textDocument/didOpen      <span class="cm"># 通知：没有 id，服务器不回复</span>
+publishDiagnostics        <span class="cm"># 服务器主动推送：文件一打开、一修改，它就重新分析</span>
+<span class="cm"># 为什么是推送：错误随内容变，编辑器不用轮询，红波浪线跟着打字更新</span>
+workspace/configuration   <span class="cm"># 服务器反过来问客户端。不回复，它可能一直等</span></pre></div>
+
+<!-- ======================= 4 ======================= -->
+<h2 id="ex04" data-nav="4 · 装一个扩展">练习 4 · 装扩展，就是把脚本放进编辑器会扫描的目录 <label class="ex-done"><input type="checkbox" data-ex="ex04">完成</label></h2>
+<div class="ex-meta"><span class="tag">讲义 · Exercises · 4</span><span class="tag gb">Git Bash 实测（Vim 插件）</span><span class="tag lnx">VS Code 未实测</span></div>
+<p class="q-orig"><b>原题</b>：浏览一个 IDE 扩展列表，装一个看起来对你有用的。</p>
+<p class="lead">Vim 启动时会扫描 <code>pack/*/start/*</code> 目录，执行里面 <code>plugin/</code> 下的脚本。放进去就算装好，不需要安装程序。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>去哪找扩展、讲义点名了哪几个，见<a href="../ch03.html#s17">第 3 讲第 17 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>去哪找、怎么选</div>
+<ul>
+<li>列表：Vim 插件看 <a href="https://vimawesome.com/" target="_blank" rel="noopener">Vim Awesome</a>，VS Code 看<a href="https://marketplace.visualstudio.com/search?target=VSCode&amp;category=All%20categories&amp;sortBy=Installs" target="_blank" rel="noopener">按安装量排序的扩展</a>。这是讲义给的。</li>
+<li>讲义点名的方向有三个：<a href="https://containers.dev/" target="_blank" rel="noopener">开发容器</a>、<a href="https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh" target="_blank" rel="noopener">Remote - SSH</a> 和 <a href="https://marketplace.visualstudio.com/items?itemName=MS-vsliveshare.vsliveshare" target="_blank" rel="noopener">Live Share</a>。Remote - SSH 用的就是第 2 讲的 SSH。练习 1 的 VSCodeVim、练习 3 的语言扩展也算。</li>
+<li><strong>判断标准</strong>（补充）：先看发布者可不可信。再看安装量、更新时间和要的权限。扩展能读你的代码，也能运行程序。和第 2 讲的 <code>curl | bash</code> 一样，要谨慎。讲师对 shell 插件的建议也适用。一次只装一个，确认真在用再留下。</li>
+<li>VS Code 里怎么装：扩展面板搜索后点 Install。或者在命令行用 <code>code --install-extension 发布者.名字</code>。</li>
+</ul></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：自己做一个最小的 Vim 扩展</div>
+<p>想看清装扩展的本质，就在沙箱里写个 7 行的 Vim 插件。按 Vim 8 自带的包（packages）约定放好目录，再让 Vim 加载它：</p>
+<div data-file="ex04/vimfiles/pack/demo/start/hello/plugin/hello.vim" data-new="1-7"></div><div data-file="ex04/vimrc" data-new="1-3"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex04-a"></div>
+<p>输出怎么读。不加载配置时，<code>:Hello</code> 不存在，Vim 以返回码 1 退出。用演示 vimrc 启动后，插件被自动加载，<code>:scriptnames</code> 列出了 hello.vim。<code>:Hello MIT</code> 在文件末尾追加了一行。</p>
+<div data-run="ex04-vsc"></div></div>
+<div data-vz="lab03-pack"></div>
+<p class="like"><b>打个比方</b>pack 目录像一排固定的快递柜。插件放进对的格子，Vim 每次开门都会取件。不用签收，也不用安装程序。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：目录少了一层，插件不加载</div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div>把 hello.vim 直接放进 <code>pack/demo/start/</code>。没有插件自己的目录，也没有 <code>plugin/</code>。</div></div>
+<div class="row"><b>现象</b><div>不报“找不到插件”，只是 <code>:Hello</code> 不存在。Vim 以返回码 1 退出，文件没被改动。</div></div>
+<div class="row"><b>原因</b><div>Vim 只把 <code>start/</code> 下的每个<strong>子目录</strong>当成一个插件。再执行它里面 <code>plugin/</code> 下的脚本。直接放在 <code>start/</code> 下的文件，不会被执行。</div></div>
+<div class="row good"><b>正确写法</b><div>放成 <code>pack/demo/start/hello/plugin/hello.vim</code>。git clone 一个插件仓库到 <code>start/</code> 下，正好就是这个结构。</div></div></div>
+<div class="code term"><div class="cap">bash · 本机实测（flat_vimrc 和演示 vimrc 一样，只是 packpath 指向 flat 目录）</div><pre><span class="p">$ </span><span class="cmd">find flat -type f</span>   <span class="cm"># 少了 hello/plugin/ 这两层</span>
+<span class="o">flat/pack/demo/start/hello.vim</span>
+<span class="p">$ </span><span class="cmd">vim -u flat_vimrc -i NONE -Es -c 'Hello MIT' -c 'wq' n2.txt; echo "flat layout: exit=$?"</span>
+<span class="o">flat layout: exit=1</span>
+<span class="p">$ </span><span class="cmd">cat n2.txt</span>          <span class="cm"># 没有追加 Hello 那一行</span>
+<span class="o">notes</span></pre></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>~/.vim/pack/plugins/start/名字/plugin/x.vim   <span class="cm"># 启动时自动执行。git clone 到 start/ 下就算装好</span>
+~/.vim/pack/plugins/start/x.vim               <span class="cm"># 少了两层目录，不会被执行</span>
+~/.vim/pack/plugins/opt/名字/                 <span class="cm"># opt 下的不自动加载，要手动 :packadd 名字（补充）</span>
+let g:loaded_hello = 1                        <span class="cm"># 防重复加载的标记：已加载过就 finish</span>
+:scriptnames                                  <span class="cm"># 列出已加载的脚本，确认插件真的进来了</span></pre></div>
+
+<!-- ======================= 自查 ======================= -->
+<h2 id="selfcheck" data-nav="自查">自查：自己重跑一遍</h2>
+<p class="lead">本页的代码和输出，都是生成笔记时在本机真跑收集的。想验证，就把题解复制到空目录，在 Git Bash 里重跑。</p>
+<p>生成脚本和题解源文件都已删除，<strong>代码以本页为准</strong>。代码块的“复制”按钮，拿到的是原文件的原始字节。生成时间见页头。</p>
+<p>练习 3 需要 PATH 里有 go 和 gopls。想试自己的 VimGolf 解，先复制练习 2 的四个文件。分别是 <code>start.py</code>、<code>end.py</code>、<code>golf.vim</code> 和 <code>check.sh</code>，放进同一个目录。再放一个 <code>mine.keys</code>，在该目录运行 <code>bash check.sh mine.keys</code>。</p>
+<div class="code"><div class="cap">考点速查（注释里写着答案）</div><pre>golf.keys 里 6G 换成 :6&lt;CR&gt;    <span class="cm"># PASS 65 键：多 1 键，落点相同（练习 2 实测）</span>
+golf.keys 里 6G 换成 4j         <span class="cm"># FAIL：j 保持列号，ci" 改错了引号（练习 2 实测）</span>
+lsp_client.py 第 45 到 47 行    <span class="cm"># 服务器也会发请求，不回复它可能一直等（练习 3）</span>
+set -o vi; set -o | grep '^vi '  <span class="cm"># 显示 vi on，emacs 同时变成 off（练习 1 实测）</span>
+vim -u NONE                     <span class="cm"># 不读个人配置，回放结果在谁的电脑上都一样（练习 2）</span>
+<span class="cm"># VimGolf 官方客户端也是用干净的 Vim 记录按键</span></pre></div>
+
+</article></main>
+<script src="../assets/vz.js"></script>
+<script src="../assets/viz/lab03-run.js"></script>
+<script src="../assets/lab.js"></script>
+</body>
+</html>

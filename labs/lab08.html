@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>练习 08 · 代码之外 · Missing Semester 2026</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="../assets/vz.css">
+<link rel="stylesheet" href="../assets/lab.css">
+<script>window.PAGE = { key: 'lab08', ch: 'ch08', type: 'lab', base: '../' };</script>
+<script src="../assets/course.js"></script>
+<script src="../assets/dg.js"></script>
+<script src="../assets/app.js"></script>
+<script src="data/lab08.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<header class="lab-head">
+  <div class="k">LAB 08 · 对应 <a href="../ch08.html">第 8 讲 · 代码之外</a></div>
+  <h1>练习可视化笔记 · 代码之外</h1>
+  <p class="lede">讲义第 8 讲一共 7 道练习，这里逐题讲。每题先亮结论，再给真跑的代码和输出。接着打个比方，最后指出坑在哪。考点都写在代码注释里。这些练习大多要你去真实的开源社区“看”。读源码注释，翻提交历史，比较 README。再评估 issue 和 PR，看 Stack Overflow。本页把<strong>能在本机复现的部分</strong>做成了能真跑的脚本和示例。所有输出都由脚本在本机真跑后自动收集。生成时间是 <b id="labGen">…</b>。要去真实社区的部分，给出了步骤、模板和验收标准。这些都标明了“需你本人完成”。</p>
+  <div class="lab-prog" id="labProg"><span class="t"></span><div class="bar"><div class="f"></div></div><button class="btn sm" id="labGo" type="button">定位到第一道未完成的题</button></div>
+  <div class="lab-legend">
+    <span><span class="wb gb">Git Bash 5.3 · Windows 本机</span> 真跑</span>
+    <span><span class="ec na">未实测</span> 需要联网或需你本人完成，写明原因</span>
+    <span><span class="ann" style="display:inline-flex;margin:0;padding:1px 8px"><span class="ar">L3</span></span> 注释层（不可选中，复制不会带上）</span>
+  </div>
+</header>
+
+<h2 id="env" data-nav="环境检查">环境检查：只在本机真跑，不对外发任何东西</h2>
+<p class="lead">本页命令都在 Windows 的 Git Bash 里真跑。要联网或要你本人去社区做的部分，标成了未实测。</p>
+<p>动手前先确认工具链。下面是生成本页时，在本机真跑的检查命令和输出：</p>
+<div data-env="gitbash"></div>
+<div class="callout warn"><div class="ct">本页的边界与替代做法</div>
+<ul>
+<li><strong>不做任何对外动作</strong>：不在真实项目里发 issue、评论或 PR。也不点赞。练习 4、6、7 要去真实项目找例子。这部分标成<strong>需你本人完成</strong>，给出操作步骤和判断标准。</li>
+<li><strong>不批量联网</strong>：练习 1 原题建议看 Redis 或 curl 的源码。本页改用<strong>本机已装的 CPython 标准库源码</strong>，版本是 Python 3.13.5。它同样是知名开源项目。练习 3 的 README，取自本机已装的 requests、rich 和 flask 包。它们在 GitHub 上都远超 1000 星，元数据里自带 README，不用下载。</li>
+<li><strong>示例仓库可复现</strong>：练习 2 的仓库由 <code>make_repo.sh</code> 现场生成。作者、邮箱和提交时间都固定了。邮箱用的是 <code>example.com</code> 示例身份。脚本还用 <code>GIT_CONFIG_GLOBAL=/dev/null</code> 隔离了你的 git 配置。所以谁跑出来的哈希，都和本页一致。</li>
+<li><strong>检查脚本是启发式</strong>：练习 4、6、7 各有一个 <code>*_check.py</code>。它们把讲义的清单写成了正则。它们只能查“有没有”，判断不了“好不好”。这是用来练眼光的，不是自动评分器。</li>
+</ul></div>
+
+<!-- ======================= 1 ======================= -->
+<h2 id="ex01" data-nav="1 · 源码里的好注释">练习 1 · 好注释删掉了，后人就得重踩一遍坑 <label class="ex-done"><input type="checkbox" data-ex="ex01">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span><span class="tag lnx">改用 CPython 源码</span></div>
+<p class="q-orig"><b>原题</b>：浏览一个知名项目的源码，比如 <a href="https://github.com/redis/redis" target="_blank" rel="noopener">Redis</a> 或 <a href="https://github.com/curl/curl" target="_blank" rel="noopener">curl</a>。找出讲座提到的几类注释。比如有用的 TODO，对外部文档的引用。还有讲“为什么不用显而易见做法”的注释。以及来之不易的教训。如果这条注释不在了，会失去什么？</p>
+<p class="lead">好注释交代的，是代码里看不出的东西。比如现状、原因、出处，以及和原文的差异。删掉它，后来者要么把对的改错，要么重做一遍实验。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>七类值得写的注释，见<a href="../ch08.html#s2">第 8 讲第 2 节</a>。<code>grep -n -A/-B</code> 显示行号和上下文，见第 1 讲。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理：怎么找</div>
+<p>注释有固定的“记号”，可以 grep。<code>TODO</code>、<code>XXX</code>、<code>FIXME</code> 最常见。引用常带 <code>Reference</code>、<code>RFC</code>、<code>See</code>，或者作者名、论文名。教训常带 issue 编号，CPython 里是 <code>bpo-</code> 和 <code>GH-</code>。why-not 常出现 <code>instead of</code>、<code>avoid</code>、<code>don't</code>，或者 <code>could … but</code>。先 grep 出候选，再带上下文读。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：带上下文的 TODO（smtplib.py）</div><div data-run="ex01-todo"></div>
+<p>输出怎么读。TODO 之前的 5 行解释了<strong>现状和原因</strong>。有多个 Resent 块时，没法确定哪个最新。所以宁可抛 ValueError，也不去猜。TODO 本身说了<strong>要做什么</strong>：加启发式，让用户选择开启。还说了<strong>为什么值得做</strong>：几乎总能猜对。</p>
+<p>删掉它，后来者可能把 ValueError 当成 bug“修”掉。或者重新论证一遍能不能猜。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：引用外部文献，并注明和原文的差异（random.py）</div><div data-run="ex01-ref"></div>
+<p>第 540 行给出完整的论文出处。读者可以对照原文验证算法。第 863 行更值钱：<strong>原论文漏了一个 log(v)</strong>。这正是讲义说的“注明和参考资料的差异”。</p>
+<p>没有它，下一个对照论文的人会以为代码写错了。他会把正确的代码，“改”成论文里的错误版本。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：why-not 与 issue 编号（heapq.py、_pyio.py）</div><div data-run="ex01-whynot"></div>
+<p>heapq 这段是教科书式的 why-not。它说我们<em>本可以</em>提前跳出循环。但事实证明这不是好主意，尽管很多书都这样写。接着给了原因。弹出时被筛进来的元素通常很大，提前比较往往不划算。最后给了出处：Knuth 卷 3。</p>
+<p><code>GH-95782</code> 则把一行看似多余的 <code>max(…, 0)</code>，和一个 issue 关联起来。这是“来之不易的教训”的常见写法。删掉注释，有人会觉得 <code>max</code> 多此一举。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：给一条“只说不要”的注释补上原因</div>
+<p><code>base64.py</code> 第 179 行写着 <code>s = s + … # Don't use += !</code>，却没说为什么。下面的小实验把“为什么”找了回来：</p>
+<div data-file="ex01/why_not_plus_eq.py" data-new="1-21"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex01-plus"></div>
+<p>输出怎么读。调用者传进来的，可能是可变的 <code>bytearray</code>。<code>s = s + …</code> 会生成新对象，调用者的数据不变。<code>s += …</code> 对 bytearray 是<strong>就地追加</strong>，会悄悄改掉调用者的缓冲区。真正的 <code>b32encode</code> 处理完，缓冲区仍是 <code>abc</code>。</p>
+<p>这就是那行注释的原因吗？这是笔记作者根据实验做的推断。CPython 源码里没写。这条注释防住了“看起来更短”的改法。可惜没留下原因，后人只能像这样重做实验。这正是练习要你体会的“会失去什么”。</p></div>
+<p class="like"><b>打个比方</b>好注释像山路边的警示牌：“此处塌方，请绕行”。拆了牌子，路面看着挺平，下一个人照样开下去。</p>
+<div class="blk run"><div class="bh"><i>▶</i>跑：原题的 curl 做法（未实测）</div><div data-run="ex01-curl"></div></div>
+<div class="callout extra"><div class="ct">需你本人完成：在 Redis 或 curl 里找</div>
+<ol><li>在浏览器里打开仓库，用 GitHub 的代码搜索。也可以克隆后 <code>grep -rn</code>。搜 <code>TODO</code>、<code>XXX</code>、<code>RFC</code> 和 <code>workaround</code>。</li>
+<li>每类挑一条，记下文件、行号和永久链接。在 GitHub 上按 <kbd>y</kbd>，链接会换成带提交哈希的永久链接。</li>
+<li>每条写一句“如果没有它，后来者会……”。</li></ol>
+<p><b>验收标准</b>：至少 4 条，覆盖 TODO、引用、why-not 和教训四类。每条都能说出具体的损失，不能只说“会更难懂”。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre># TODO: optimize                  <span class="cm"># 坏：没说优化什么，为什么现在不做，到什么程度才要做</span>
+# TODO implement heuristics ...   <span class="cm"># 好：smtplib 这条交代了现状、原因、要做的事和预期效果</span>
+<span class="cm"># 任何人看完都能接着做。讲义的反例和正例，差的就是这些</span></pre></div>
+
+<!-- ======================= 2 ======================= -->
+<h2 id="ex02" data-nav="2 · 好坏提交信息">练习 2 · 提交信息事后补很难，要在提交时写好 <label class="ex-done"><input type="checkbox" data-ex="ex02">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（示例仓库）</span><span class="tag lnx">真实项目需你本人完成</span></div>
+<p class="q-orig"><b>原题</b>：挑一个你感兴趣的开源项目。看它最近的提交历史（<code>git log</code>）。找一条解释了<em>为什么</em>的好提交信息。再找一条只描述<em>改了什么</em>的弱信息。对弱的那条，看它的 diff（<code>git show &lt;hash&gt;</code>）。按 Problem → Solution → Implications 结构，重写一条更好的信息。注意事后重建上下文要花多少功夫！</p>
+<p class="lead">用 <code>awk 'NF &lt;= 2'</code> 能快速筛出只有一个词的提交信息。可要补写“为什么”，diff 帮不上忙。只能去翻 PR、issue，或者去问人。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>提交信息的四个问题，以及 P、S、I 结构。见<a href="../ch08.html#s4">第 8 讲第 4 节</a>。git blame 和 log -S 也在那一节。Git 基础见第 5 讲。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：造一个可复现的示例仓库</div>
+<div data-file="ex02/make_repo.sh" data-new="1-61"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：看历史</div><div data-run="ex02-log"></div>
+<p>输出怎么读。5 次提交里，ff12122 和 0e606e9 解释了为什么。7809933 <code>fix</code> 和 4140218 <code>update</code> 什么都没说。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：自动筛出弱信息，再看 diff</div><div data-run="ex02-weak"></div>
+<p><code>awk 'NF &lt;= 2'</code> 只留“哈希加一个词”的行。这个筛子粗糙，但好用。真实项目里，还可以筛 <code>wip</code>、<code>fix</code>、<code>update</code>、<code>misc</code> 这类词。</p>
+<p><code>git show HEAD</code> 告诉我们改了什么：64 变成 16。可为什么是 16？diff 里没有任何线索。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：按 Problem → Solution → Implications 重写</div>
+<div data-file="ex02/better_msg.txt"></div>
+<div class="callout warn"><div class="ct">诚实地说</div><p>这条信息里写了“网关固件只缓存 16 个包”。能写出来，是因为示例场景是笔记作者编的。真实项目里的弱提交，你通常只能去翻资料。比如对应的 PR、issue 和邮件列表。或者直接去问作者。这正是练习想让你体会的成本。找不到依据的地方，在信息里如实写“推测”，不要编。</p></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：用 --amend 改写最后一次提交的信息</div><div data-run="ex02-amend"></div>
+<p>哈希从 4140218 变成了 ed8824e。amend 不是“修改”提交。它造了一个新提交，替换掉分支末端。为了让新哈希也能复现，准备步骤里固定了 <code>GIT_COMMITTER_DATE</code>。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：好信息与坏信息对 blame 的差别</div><div data-run="ex02-blame"></div>
+<p>第 3 到 5 行追到 ff12122，信息完整解释了 1464 的由来。第 6 行追到 7809933，只有一个 <code>fix</code>。下面的演示把筛选和改写的过程画了出来。</p></div>
+<div data-vz="lab08-log"></div>
+<p class="like"><b>打个比方</b>事后补提交信息，像隔了半年再补旅行日记。照片都在，可当时为什么改道，你已经想不起来了。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：隔离了配置就没有身份</div>
+<div data-run="ex02-noid"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div><code>Committer identity unknown … fatal: no email was given and auto-detection is disabled</code>，退出码 128。</div></div>
+<div class="row"><b>原因</b><div>为了不碰你的真实配置，这里让 git 不读全局配置。于是它不知道“你是谁”。amend 会保留原作者，但<strong>提交者</strong>换成了当前用户。提交者必须有名字和邮箱。<code>user.useConfigOnly=true</code> 让 git 不去猜身份。</div></div>
+<div class="row"><b>补充</b><div>不加这个选项会怎样？git 会用“系统用户名@主机名”拼一个邮箱。本机拼出来的不合法，所以同样报错。在主机名完整的系统上，它可能“成功”。你的主机名就被悄悄写进了提交。</div></div>
+<div class="row good"><b>正确写法</b><div>先在<strong>这个仓库</strong>里设身份：<code>git config user.name …</code> 和 <code>git config user.email …</code>。不加 <code>--global</code>，就只影响当前仓库。见上面的 ex02-amend。</div></div></div>
+<div class="pit-card"><div class="row bad"><b>误区</b><div>想用 <code>--amend</code> 去改 7809933 那条 <code>fix</code>。</div></div>
+<div class="row"><b>实际</b><div>amend 只能改分支最末端的提交。改更早的要用交互式 rebase，这是补充。而且它会重写之后所有提交的哈希。已经推送、别人在用的历史，不该这样改。所以提交信息要在提交时就写好。</div></div></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：在真实项目上（未实测）</div><div data-run="ex02-real"></div></div>
+<div class="callout extra"><div class="ct">需你本人完成：在真实项目上做一遍</div>
+<ol><li>克隆一个你用过的项目，用 <code>git log --format='%h %s' -n 200</code> 浏览标题。再用上面的 awk 筛一遍。</li>
+<li>挑一条弱信息，运行 <code>git show &lt;hash&gt;</code>。再去 GitHub 上找它对应的 PR 和 issue，收集“为什么”。提交页面通常会显示关联的 PR。</li>
+<li>按 P、S、I 写一条新信息。拿不准的地方写“推测”。</li></ol>
+<p><b>验收标准</b>：新信息的正文能回答两件事。什么问题逼着改动？有什么取舍或影响？再记下你花了多少分钟重建上下文，查了哪些地方。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>git log --format='%h %s' | awk 'NF &lt;= 2'   <span class="cm"># 只留“哈希加一个词”的行</span>
+<span class="cm"># 为什么写 NF &lt;= 2，不写 NF == 2？</span>
+<span class="cm"># 标题为空的提交（--allow-empty-message）只剩哈希，NF = 1</span>
+<span class="cm"># 那是最差的提交信息，也该被筛出来</span>
+git commit --amend                         <span class="cm"># 只能改最末端的提交，而且哈希会变</span></pre></div>
+
+<!-- ======================= 3 ======================= -->
+<h2 id="ex03" data-nav="3 · 比较 README">练习 3 · 千星项目的 README 也有好有坏，先用法后安装 <label class="ex-done"><input type="checkbox" data-ex="ex03">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：比较 GitHub 上三个 1000 星以上项目的 README。它们都一样有用吗？找出那些你看来主要是噪声的东西。把它们当成你以后写 README 的教训。</p>
+<p class="lead">三个千星项目的 README 差别很大。requests 第 5 行就给代码，rich 先讲安装，flask 干脆不提安装。哪些是噪声，要你站在读者的角度判断。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>README 漏斗：是什么，为什么关心，怎么用，怎么装。见<a href="../ch08.html#s3">第 8 讲第 3 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理：不联网也能拿到 README</div><p>Python 包发布到 PyPI 时，通常把 README 当“长描述”写进元数据。装好后，它就在 <code>site-packages/&lt;包&gt;-&lt;版本&gt;.dist-info/METADATA</code> 里。用 <code>importlib.metadata</code> 就能读出来。本机装有 requests、rich 和 flask，它们在 GitHub 上都远超 1000 星。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="ex03/readme_funnel.py" data-new="1-28"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex03-a"></div>
+<p>输出怎么读。数字对应本机这几个版本的 README：</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>项目</th><th>是什么</th><th>用法和安装谁先</th><th>可能的噪声</th></tr>
+<tr><td>requests 2.32.5</td><td>第 3 行一句话。元数据里是 “Python HTTP for Humans.”</td><td>第 5 行就是代码示例，第 28 行才讲安装。<strong>先用法</strong></td><td>下载量、徽章。“Cloning the repository” 更像是给贡献者看的</td></tr>
+<tr><td>rich 14.3.2</td><td>第 30 行才有一句话介绍</td><td>第 46 行 “Installing” 在前。第 60 行起才是用法</td><td>开头 28 行是徽章和 18 种语言的 README 链接。第 34 行有张功能演示图。这正是讲义推荐的可视化演示</td></tr>
+<tr><td>flask 3.1.2</td><td>第 5 到 9 行一段介绍</td><td>第 20 行是 “A Simple Example”。整份 README 不提安装</td><td>很短。Donate 和 Contributing 各占一节</td></tr>
+</table></div>
+<p>脚本只能给出位置和顺序。哪些是噪声，要你以读者的身份判断。同一段徽章，对想看项目活不活跃的人，可能就有用。</p></div>
+<p class="like"><b>打个比方</b>比 README 像比三家店的门面。一家橱窗里摆着样品，一家门口贴满了奖状。还有一家只挂了块招牌。路人几秒钟就决定进不进。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：把代码块里的注释当成标题</div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>第一版脚本把 flask README 代码块里的 <code># save this as app.py</code>，也当成了 Markdown 标题。</div></div>
+<div class="row"><b>原因</b><div>Markdown 标题和 Python、shell 的注释，都以 <code>#</code> 开头。</div></div>
+<div class="row good"><b>正确写法</b><div>先标记每行在不在 <code>```</code> 代码块里，见第 18 到 21 行。只在块外找标题。拿正则“半解析”结构化文本，这种边界情况到处都是。第 9 讲会讲正则的局限。</div></div></div></div>
+<div class="callout extra"><div class="ct">需你本人完成：看 GitHub 上渲染后的页面</div><p>METADATA 里的 README，可能和 GitHub 主页上的最新版略有不同。图片和徽章，也只有在浏览器里才看得到效果。打开三个项目的 GitHub 主页，计时。看你多少秒内能回答“这是什么、我该不该关心”。<b>验收标准</b>：每个项目写一条“我会删掉或挪走的内容”。再写一条“值得学的做法”。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>first code/usage: L5  first 'install': L28  -&gt; usage first     <span class="cm"># requests：先用法后安装，符合讲义</span>
+first code/usage: L50  first 'install': L46  -&gt; install first  <span class="cm"># rich：读者还没决定用不用，就得先看安装</span>
+<span class="cm"># 为什么讲义主张先用法、后安装？</span>
+<span class="cm"># 读者还没决定要不要用，安装步骤对他没意义。先让他看到效果，再决定值不值得装</span></pre></div>
+
+<!-- ======================= 4 ======================= -->
+<h2 id="ex04" data-nav="4 · 评估一个 issue">练习 4 · issue 每缺一项，维护者就要多追问一轮 <label class="ex-done"><input type="checkbox" data-ex="ex04">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（样本）</span><span class="tag lnx">真实 issue 需你本人完成</span></div>
+<p class="q-orig"><b>原题</b>：在你用的项目里，找一个 open 的 issue。有 “good first issue” 或 “help wanted” 标签的优先。按讲座的标准评估它。它尊重维护者的时间吗？调试要的信息都给全了吗？还是说，维护者得和提交者来回好几轮，才找得到根因？</p>
+<p class="lead">把讲义的清单写成 7 条正则，就能粗查一份 issue 缺了什么。坏样本 0/7，至少要追问 7 轮。好样本 7/7，第一次读就能复现。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>bug 报告清单、最小复现和搜重复，见<a href="../ch08.html#s10">第 8 讲第 10 节</a>。正则的 <code>re.I</code> 和 <code>re.M</code> 见第 9 讲。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：把清单变成脚本</div>
+<div data-file="ex04/issue_check.py" data-new="1-25"></div>
+<p>两份样本是示意，围绕练习 5 的真实 bug 写成：</p>
+<div data-file="ex04/issue_bad.txt"></div><div data-file="ex04/issue_good.txt"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex04-a"></div>
+<p>坏的那份 0/7。维护者至少要问 7 次，才能开始调试。每一轮往返，可能就是几天。好的那份 7/7，第一次读就能复现。下面的演示逐条画出了正则的匹配。</p></div>
+<div data-vz="lab08-issue"></div>
+<p class="like"><b>打个比方</b>issue 像一张报修单。写着“空调坏了”的，师傅得打电话问三遍。另一张写着“302 不出冷风，滤网洗过了”。师傅带对工具直接上门。</p>
+<div class="callout extra"><div class="ct">需你本人完成：评估一个真实的 issue</div>
+<ol><li>在你常用的项目的 Issues 页，按标签筛 <code>good first issue</code> 或 <code>help wanted</code>。挑一个 open 的 bug 类 issue。</li>
+<li>把正文复制到本地文件，只用于自己分析。运行 <code>python ex04/issue_check.py 你的文件.txt</code>。再人工逐项核对：脚本说“有”的项，内容真的够用吗？</li>
+<li>读下面的评论。维护者追问了什么？和你预测的缺失项一致吗？</li></ol>
+<p><b>验收标准</b>：写出缺哪几项、预计几轮往返。再和评论区的实际往返对比。<b>不要</b>为了练习去评论或 +1。那正是讲座说的噪声。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>Expected: `analytics`   <span class="cm"># 为什么要写期望？光写实际发生了什么不行吗</span>
+<span class="cm"># 你看到的可能正是设计如此。那就不是代码 bug，而是文档没说清</span>
+<span class="cm"># 写出期望和实际的差值，维护者才能判断是哪一种（视频 23:21）</span></pre></div>
+
+<!-- ======================= 5 ======================= -->
+<h2 id="ex05" data-nav="5 · 最小复现">练习 5 · 最小复现：删一块跑一次，bug 还在才算数 <label class="ex-done"><input type="checkbox" data-ex="ex05">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：想一个你在软件里遇到过的 bug，或在 issue 跟踪器里找一个。练习做最小可复现示例。剥掉一切和 bug 无关的东西。直到剩下的用例最小，又仍能展示问题。写下你删了什么，为什么删。</p>
+<p class="lead">缩减的套路是删一块、跑一次，bug 还在才接受。脚本能把 31 行自动缩到 17 行。剩下的要人工看懂 bug 再收尾，最后一行就能复现。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>最小可复现示例见<a href="../ch08.html#s10">第 8 讲第 10 节</a>。subprocess 和正则的先行断言 <code>(?!…)</code> 见第 9 讲。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：一个带 bug 的程序</div><div data-file="ex05/report.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：看到症状</div><div data-run="ex05-bug"></div>
+<p>analytics.csv 的标题成了 <code>Analyti</code>。仔细看，Sale 和 Cost 也都少了字母，只是不那么显眼。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：自动缩减器</div><div data-file="ex05/reduce.py" data-new="1-39"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex05-reduce"></div>
+<p>缩减器一共运行了 50 次候选程序。块大小 15、7、3 全部失败，逐行删时成功了 14 次。31 行缩到了 17 行。下面的演示逐步画出了这个循环。</p></div>
+<div data-vz="lab08-reduce"></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：人工收尾</div><div data-file="ex05/mre.py" data-new="1-3"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex05-mre"></div></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>删了什么</th><th>为什么能删</th><th>谁删的</th></tr>
+<tr><td>文档字符串、注释、9 个空行、<code>return 0</code></td><td>不影响运行结果</td><td>reduce.py</td></tr>
+<tr><td>sales.csv、costs.csv 两份数据</td><td>bug 只要一个文件名就能出现</td><td>reduce.py</td></tr>
+<tr><td>csv 和 io 的导入、<code>total()</code>、数字列、<code>main()</code> 循环、<code>sys.exit</code></td><td>和 bug 无关，但它们互相调用，单删一行就报错。得先看懂 bug 在 <code>title_for</code> 里，再整体拿掉</td><td>人工</td></tr>
+<tr><td><code>title_for</code> 函数本身、<code>.title()</code></td><td>把 <code>rstrip(".csv")</code> 直接用在字符串上，症状不变</td><td>人工</td></tr>
+</table></div>
+<p class="like"><b>打个比方</b>最小复现像拆一团乱线找断头。一根根剪下来，每剪一根就通一次电。灯还亮，说明这根和故障无关，扔掉。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：rstrip 换成 strip 也修不好</div>
+<div data-run="ex05-pit"></div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>name.strip(".csv")</code></div></div>
+<div class="row"><b>实际</b><div><code>csv_export.csv</code> 变成了 <code>_export</code>。strip 从<strong>两端</strong>删掉字符集合 {. c s v} 里的字符。开头的 csv 也被删了。</div></div>
+<div class="row good"><b>正确写法</b><div>用 <code>name.removesuffix(".csv")</code>，要 Python 3.9 以上。也可以用 <code>os.path.splitext(name)[0]</code>，这条是补充。有了最小复现，修法对不对，一行就能验证。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>SYMPTOM = re.compile(r"analyti(?!cs)", re.IGNORECASE)   <span class="cm"># reduce.py 第 9 行：analyti 后面不能跟 cs</span>
+<span class="cm"># 只写 analyti 会怎样？正确的输出 analytics 也包含 analyti</span>
+<span class="cm"># 判定永远为真，修好的程序也会被当成“有 bug”</span>
+<span class="cm"># 甚至可能删出一个碰巧打印 analytics 的程序。判定越精确，缩出来的才越是同一个 bug</span></pre></div>
+
+<!-- ======================= 6 ======================= -->
+<h2 id="ex06" data-nav="6 · 读一次评审">练习 6 · 好评审意见：针对代码、给替代方案、讲原因 <label class="ex-done"><input type="checkbox" data-ex="ex06">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（样本）</span><span class="tag lnx">真实 PR 需你本人完成</span></div>
+<p class="q-orig"><b>原题</b>：在你熟悉的项目里，找一个已合并的 PR。它的评审意见要有实质内容，不只是 “LGTM”。通读评审。所有评论都同样有建设性吗？如果你是 PR 作者，收到这些评论会是什么感受？</p>
+<p class="lead">给每条评论贴标签。看它针对人还是代码，是提问还是命令。再看讲没讲原因，给没给替代方案。一个标签都贴不上的，就该改写。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>代码评审的建议，见<a href="../ch08.html#s14">第 8 讲第 14 节</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：评论样本与打标签脚本</div>
+<div data-file="ex06/comments.txt"></div>
+<p>前 8 条是讲义里成对出现的坏、好示例。其中第 4 条按视频补上了原因。最后两条 nit 和肯定是示意。</p>
+<div data-file="ex06/review_check.py" data-new="1-24"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex06-a"></div>
+<p>输出怎么读。“You wrote…” 被标成针对人。“Don't use globals here.” 和 “Handle the null case.” 没有标签。脚本提示改写。</p>
+<p>注意 “This function is confusing.” 也被要求改写。它已经从针对人改成了针对代码，这是讲义的正例。但它还是没说<strong>哪里</strong>不好懂，希望怎么改。启发式脚本在这里，反而帮你多想了一步。</p></div>
+<p class="like"><b>打个比方</b>评审意见像导航语音。“你走错了”没用。“前方 200 米掉头，这条路在修”，才让人知道怎么办。</p>
+<div class="callout extra"><div class="ct">需你本人完成：读一个真实的评审</div>
+<ol><li>在 GitHub 的 Pull requests 页筛 <code>is:pr is:merged</code>，按评论数排序。挑一个评论多、讨论具体的。</li>
+<li>给每条评审意见归类。针对代码还是人？能不能直接动手？是提问还是命令？讲原因了吗？是阻塞还是 nit？有没有肯定？</li>
+<li>以作者的身份写一句感受。再把最差的一条改写成好的版本。</li></ol>
+<p><b>验收标准</b>：一张归类表，一条改写。再写一句：评论减半的话，哪些该留下。只读，不评论。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre><span class="cm"># 一个 PR 里有 20 处命名不合约定，评审者该怎么写？</span>
+<span class="cm"># 只在第一处评一次：“本仓库的命名约定是……，请全局统一”</span>
+<span class="cm"># 别留 20 条重复评论（视频 48:36）。必要时标成 nit，让作者先改阻塞问题</span>
+This function is confusing.   <span class="cm"># 针对代码了，但没说哪里难懂、想怎么改</span></pre></div>
+
+<!-- ======================= 7 ======================= -->
+<h2 id="ex07" data-nav="7 · 好问题与坏问题">练习 7 · 具体的是非题，十行实验就能自己回答 <label class="ex-done"><input type="checkbox" data-ex="ex07">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（样本）</span><span class="tag lnx">真实帖子需你本人完成</span></div>
+<p class="q-orig"><b>原题</b>：去 Stack Overflow，在你熟悉的技术里找一个答案得票很高的问题。再找一个被关闭或被大量踩的问题。用讲座的建议对比它们。哪个问题能得到更好的回答，能事先预测吗？</p>
+<p class="lead">好问题说出了自己的理解，做过功课，问得具体。像“LEFT JOIN 会保留右表没匹配的行吗”这种是非题。十行 SQLite 就能自己验证。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>提问的建议，见<a href="../ch08.html#s15">第 8 讲第 15 节</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div>
+<div data-file="ex07/questions.txt"></div>
+<p>Q1 和 Q2 是讲义原句，一个太泛，一个具体。Q3 是示意。</p>
+<div data-file="ex07/question_check.py" data-new="1-22"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：检查三种问法</div><div data-run="ex07-a"></div></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：用实验回答是非题</div><div data-file="ex07/left_join.py" data-new="1-19"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex07-b"></div>
+<p>Q2 的答案是“是”。LEFT JOIN 里，ben 带着 None 出现，None 就是 SQL 的 NULL。条件恒为假时，三个人都在，右边全是 None。Q3 也就有了答案。</p>
+<p>这就是讲义说的“先做点功课”。很多具体的是非题，十行实验就能自己验证。问人时，就能带着结果去问更深一层的问题。</p></div>
+<p class="like"><b>打个比方</b>提问像问路。“火车站怎么走”只能换来一大段描述。“前面路口左转是火车站吗”，对方点个头你就走了。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：多追问一步就能发现</div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>… LEFT JOIN labs l ON s.id = l.student_id WHERE l.lab = 'lab01'</code></div></div>
+<div class="row"><b>现象</b><div>看上面 ex07-b 最后一行。ben 又消失了，结果和普通 JOIN 一样。</div></div>
+<div class="row"><b>原因</b><div>WHERE 在连接<strong>之后</strong>才过滤。ben 那行的 <code>l.lab</code> 是 NULL。<code>NULL = 'lab01'</code> 不为真，于是被滤掉了。这条是补充的 SQL 语义。</div></div>
+<div class="row good"><b>正确写法</b><div>把对右表的条件写进 ON：<code>ON s.id = l.student_id AND l.lab = 'lab01'</code>。这就是“别接受不完整的答案”的价值。多问一个是非题，就多学到一个坑。</div></div></div></div>
+<div class="callout extra"><div class="ct">需你本人完成：在 Stack Overflow 上对比</div>
+<ol><li>在你熟悉的标签下按 Votes 排序，打开一个高分问题。再用搜索语法 <code>[标签] closed:yes</code> 找，或者按分数升序找。目标是一个被关闭或被踩的问题。</li>
+<li>把两个问题的标题和正文，分别存成一行。用 <code>question_check.py</code> 跑一遍。再人工核对：有没有最小代码？有没有说试过什么？是不是一个能回答的具体问题？</li>
+<li>读关闭理由，比如 “Needs details or clarity”。看它对应清单里的哪一项。</li></ol>
+<p><b>验收标准</b>：说出两个问题在清单上的差异。再判断哪个能得到更好的回答，能不能事先预测。只读，不投票，不评论。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>How do SQL joins work?   <span class="cm"># 太泛：对方只能从头讲起</span>
+<span class="cm"># 为什么一串是非题比一个开放问题更快弄懂？</span>
+<span class="cm"># 每个是非题都有明确的是或否，你马上知道哪部分理解对了、哪部分错了</span>
+<span class="cm"># 开放问题容易引来长篇大论，很多你已经知道，或者并不相关（视频 55:22）</span></pre></div>
+
+<!-- ======================= 自查 ======================= -->
+<h2 id="selfcheck" data-nav="自查">自查：自己重跑一遍</h2>
+<p class="lead">本页的代码和输出，都是生成笔记时在本机真跑收集的。想验证，就把题解复制到空目录，在 Git Bash 里重跑。</p>
+<p>生成脚本和题解源文件都已删除，<strong>代码以本页为准</strong>。代码块的“复制”按钮，拿到的是原文件的原始字节。生成时间见页头。</p>
+<p>示例仓库固定了身份和时间，哈希是确定的。用练习 2 的 <code>make_repo.sh</code> 重建后，<code>git log --oneline</code> 应当和本页逐字相同。</p>
+<div class="code"><div class="cap">考点速查（注释里写着答案）</div><pre>export GIT_CONFIG_GLOBAL=/dev/null   <span class="cm"># 删掉 make_repo.sh 第 4 行，哈希多半不变：第 8 到 13 行已固定作者和时间</span>
+                                     <span class="cm"># 但你的 autocrlf、提交模板、钩子可能改掉内容或行为，结果就不可靠了（练习 2）</span>
+lines = trial                        <span class="cm"># reduce.py 接受删除后 i 不前进：后面的行前移，位置 i 上是新的一块（练习 5）</span>
+re.search(pat, text, re.I | re.M)    <span class="cm"># 去掉 re.M：^ 只匹配全文开头，编号步骤和代码围栏都找不到，好 issue 被误判缺 2 项（练习 4）</span>
+git log -S'MAX_IN_FLIGHT = 16' --format='%h %s'   <span class="cm"># 输出 4140218 update：找得到提交，找不回为什么（练习 2）</span>
+<span class="cm"># 本页为什么不直接去真实项目发 issue 或评论？对外发言会给维护者和订阅者制造噪声</span>
+<span class="cm"># 那正是讲座批评的 “+1”。练习的目的是学会读和判断，参不参与、怎么参与由你本人决定</span></pre></div>
+
+</article></main>
+<script src="../assets/vz.js"></script>
+<script src="../assets/viz/lab08-run.js"></script>
+<script src="../assets/lab.js"></script>
+</body>
+</html>

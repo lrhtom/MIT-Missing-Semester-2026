@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Missing Semester 2026 · 中文可视化笔记</title>
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/home.css">
+<script>window.PAGE = { key: 'index', type: 'index' };</script>
+<script src="assets/course.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main class="home"><article class="doc home-doc">
+
+<section class="hero">
+  <div class="hero-k">MIT IAP 2026 · The Missing Semester of Your CS Education</div>
+  <h1>计算机教育中缺失的一课 <span>2026</span></h1>
+  <p class="lede">课上讲的是 shell、命令行、编辑器、调试和 Git。还有打包交付、智能体编程、协作沟通和代码质量。这些工具课堂不教，却天天要用。
+  每讲一页中文笔记，配可交互的动画演示。每讲的练习另有一页可视化练习笔记。所有命令输出都在本机真跑过。</p>
+  <div class="stats" id="stats"></div>
+  <div class="home-prog" id="homeProg"><div class="hp-top"><span>学习进度（存本机浏览器）</span><span id="hpTxt"></span></div><div class="hp-bar"><div id="hpFill"></div></div></div>
+</section>
+
+<h2 class="hh">九讲笔记</h2>
+<div class="cards" id="cards"></div>
+
+<h2 class="hh">课程资料总览</h2>
+<p class="sub">下面的链接都指向官方或社区的原始资料。“讲义”是官方网页版讲义，含代码和练习题。“中文译文”是社区翻译，官方注明未审核。</p>
+
+<div class="tbl-wrap"><table class="tbl res" id="resTable">
+<tr><th>#</th><th>主题</th><th>视频</th><th>文字讲义</th><th>本笔记</th></tr>
+</table></div>
+
+<div class="res-grid">
+  <section class="res-card">
+    <h3><span class="ri v">▶</span>看视频</h3>
+    <a href="https://www.youtube.com/playlist?list=PLyzOVJj3bHQunmnnTXrNbZnBaCA-ieK4L" target="_blank" rel="noopener"><b>YouTube · 2026 官方播放列表</b><span>9 讲，官方人工英文字幕</span></a>
+    <a href="https://www.youtube.com/@MissingSemester" target="_blank" rel="noopener"><b>YouTube 频道 @MissingSemester</b><span>讲义中给出的频道地址</span></a>
+    <a href="https://www.bilibili.com/video/BV1CkArz1E4o/" target="_blank" rel="noopener"><b>B 站搬运 · 中英字幕</b><span>BV1CkArz1E4o（社区搬运，未逐集核对）</span></a>
+    <a href="https://www.bilibili.com/video/BV1vyzXB6Eps/" target="_blank" rel="noopener"><b>B 站搬运 · GPT 中英字幕</b><span>BV1vyzXB6Eps（社区搬运，未逐集核对）</span></a>
+    <a href="https://www.bilibili.com/video/BV1jsj86xE1X/" target="_blank" rel="noopener"><b>B 站搬运 · 中文配音</b><span>BV1jsj86xE1X（社区搬运，未逐集核对）</span></a>
+  </section>
+  <section class="res-card">
+    <h3><span class="ri t">≡</span>文字讲义与源码</h3>
+    <a href="https://missing.csail.mit.edu/" target="_blank" rel="noopener"><b>课程官网</b><span>missing.csail.mit.edu</span></a>
+    <a href="https://missing.csail.mit.edu/2026/" target="_blank" rel="noopener"><b>2026 讲义目录</b><span>每讲的完整讲义 + 练习题</span></a>
+    <a href="https://github.com/missing-semester/missing-semester" target="_blank" rel="noopener"><b>GitHub · 讲义源码</b><span>_2026/*.md 就是讲义原文（Jekyll 站点）</span></a>
+    <a href="https://missing.csail.mit.edu/about/" target="_blank" rel="noopener"><b>开课动机 About</b><span>为什么要有这门课</span></a>
+    <a href="https://missing.csail.mit.edu/license/" target="_blank" rel="noopener"><b>许可证</b><span>CC BY-NC-SA 4.0</span></a>
+  </section>
+  <section class="res-card">
+    <h3><span class="ri c">中</span>中文社区</h3>
+    <a href="https://missing-semester-cn.github.io/" target="_blank" rel="noopener"><b>社区中文译文站</b><span>missing-semester-cn，已含 2026 目录</span></a>
+    <a href="https://github.com/missing-semester-cn/missing-semester-cn.github.io" target="_blank" rel="noopener"><b>中文译文 GitHub</b><span>翻译进度与贡献</span></a>
+    <a href="https://missing-semester-cn.github.io/missing-notes-and-solutions/" target="_blank" rel="noopener"><b>社区笔记与习题解答</b><span>以往年版本为主</span></a>
+    <a href="https://ossu.dev/#community" target="_blank" rel="noopener"><b>OSSU Discord</b><span>官方答疑：#missing-semester-forum</span></a>
+  </section>
+  <section class="res-card">
+    <h3><span class="ri d">#</span>讨论与往年</h3>
+    <a href="https://news.ycombinator.com/item?id=47124171" target="_blank" rel="noopener"><b>Hacker News · 2026 讨论</b><span>news.ycombinator.com</span></a>
+    <a href="https://lobste.rs/s/q4ykw7/missing_semester_your_cs_education_2026" target="_blank" rel="noopener"><b>Lobsters · 2026 讨论</b><span>lobste.rs</span></a>
+    <a href="https://www.reddit.com/r/learnprogramming/comments/1r93yk6/the_missing_semester_of_your_cs_education_2026/" target="_blank" rel="noopener"><b>r/learnprogramming · 2026</b><span>reddit.com</span></a>
+    <a href="https://www.youtube.com/playlist?list=PLyzOVJj3bHQuloKGG59rS43e29ro7I57J" target="_blank" rel="noopener"><b>2020 版播放列表</b><span>含 Vim、数据整理、元编程、安全</span></a>
+    <a href="https://www.youtube.com/playlist?list=PLyzOVJj3bHQuiujH1lpn8cA9dsyulbYRv" target="_blank" rel="noopener"><b>2019 版播放列表</b><span>最早的一版</span></a>
+  </section>
+</div>
+
+<h3 class="hh3">往年专题（2026 版没有覆盖）</h3>
+<p class="sub">官网首页列出的往年专题，适合学完九讲后选读：</p>
+<div class="chips">
+  <a href="https://missing.csail.mit.edu/2020/data-wrangling/" target="_blank" rel="noopener">2020 · 数据整理</a>
+  <a href="https://missing.csail.mit.edu/2020/security/" target="_blank" rel="noopener">2020 · 安全与密码学</a>
+  <a href="https://missing.csail.mit.edu/2020/potpourri/" target="_blank" rel="noopener">2020 · 大杂烩</a>
+  <a href="https://missing.csail.mit.edu/2020/qa/" target="_blank" rel="noopener">2020 · 问答</a>
+  <a href="https://missing.csail.mit.edu/2019/backups/" target="_blank" rel="noopener">2019 · 备份</a>
+  <a href="https://missing.csail.mit.edu/2019/automation/" target="_blank" rel="noopener">2019 · 自动化</a>
+  <a href="https://missing.csail.mit.edu/2019/machine-introspection/" target="_blank" rel="noopener">2019 · 机器自省</a>
+  <a href="https://missing.csail.mit.edu/2019/os-customization/" target="_blank" rel="noopener">2019 · 系统定制</a>
+  <a href="https://missing.csail.mit.edu/2019/web/" target="_blank" rel="noopener">2019 · Web 与浏览器</a>
+  <a href="https://missing.csail.mit.edu/2019/security/" target="_blank" rel="noopener">2019 · 安全与隐私</a>
+</div>
+
+<h2 class="hh">怎么用这份笔记</h2>
+<div class="grid2">
+  <div class="mini"><h4>▶ 时间戳</h4><p>小节标题旁的红色时间戳，能跳到视频原处。侧栏每节右边的 ▶ 也一样。点了章节页的“页内播放”，时间戳就在页面里跳转。</p></div>
+  <div class="mini"><h4>可视化演示</h4><p>空格播放或暂停，→ 单步，← 回退。可以切 0.5×、1×、2× 三档速度。点进度条上的圆点，能跳到任意一步。右侧同步显示代码、数据和控制台。</p></div>
+  <div class="mini"><h4>编辑</h4><p>点顶栏的“编辑”，就能直接改正文文字。改动自动存进本机浏览器。“⋯”菜单里能导出、导入或撤销本页修改。</p></div>
+  <div class="mini"><h4>难度与重要程度</h4><p>每一节标题下都标了难度和重要程度，侧栏也看得到。难度从 1 入门到 5 硬核。重要程度从 5 必会到 1 可跳过。这是笔记作者的判断，不是官方标注。时间紧就先学“必会”的小节。</p></div>
+  <div class="mini"><h4>术语小卡片</h4><p>缩写和专有名词下面有淡淡的细下划线。鼠标移上去，会弹出全称和一句解释。手机上点一下就行。这些解释是笔记作者补的，不是课程原文。</p></div>
+  <div class="mini"><h4>标注约定</h4><p>“本机实测”是在 Windows Git Bash 5.3 里真跑的输出。“讲义原文”来自官方讲义。标着“补充（非视频内容）”的，是笔记自己加的。“示意”是演示用的假数据。</p></div>
+</div>
+
+<p class="foot-note">讲义与视频的版权归 Anish Athalye、Jon Gjengset 和 Jose Javier Gonzalez Ortiz。许可证是 CC BY-NC-SA 4.0。本笔记据官方讲义和英文字幕整理，仅供个人学习。</p>
+
+</article></main>
+<script>
+(function () {
+  var CO = window.COURSE, prog = (window.MS && MS.getProg) ? MS.getProg() : {};
+  function sec(t) { return t.split(':').reduce(function (a, b) { return a * 60 + +b; }, 0); }
+  function fmt(s) { var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h + ':' + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0'); }
+  var total = 0; CO.chapters.forEach(function (c) { total += sec(c.dur); });
+  document.getElementById('stats').innerHTML =
+    '<div class="stat"><b>9</b><span>讲</span></div><div class="stat"><b>' + fmt(total) + '</b><span>视频总时长</span></div>' +
+    '<div class="stat"><b id="vzTotal">…</b><span>个可视化演示</span></div><div class="stat"><b>9</b><span>页练习可视化笔记</span></div>';
+  var cards = document.getElementById('cards'), html = '';
+  CO.chapters.forEach(function (c) {
+    var n = String(c.n).padStart(2, '0'), lab = 'labs/lab' + n + '.html';
+    html += '<div class="card' + (prog[c.key] ? ' done' : '') + '"><a class="card-main" href="' + c.key + '.html">' +
+      '<div class="num">LECTURE ' + n + '<span>' + c.date.slice(5).replace('-', '/') + ' · ' + c.dur + '</span></div>' +
+      '<h3>' + c.title + '</h3><div class="en">' + c.en + '</div><p>' + c.blurb + '</p>' + (function () {
+        var r = (CO.ratings || {})[c.key] || {}, ks = Object.keys(r), m = ks.filter(function (k) { return r[k][1] === 5; }).length;
+        return ks.length ? '<p class="card-rate">必会 <b>' + m + ' 节</b> / 共 ' + ks.length + ' 节</p>' : '';
+      })() + '</a>' +
+      '<div class="foot"><a href="' + c.key + '.html">笔记</a><a href="' + lab + '">练习笔记' + (prog['lab' + n] ? '（已学）' : '') + '</a>' +
+      '<a href="https://youtu.be/' + c.vid + '" target="_blank" rel="noopener">▶ 视频</a></div></div>';
+  });
+  cards.innerHTML = html;
+  var tb = document.getElementById('resTable'), rows = '';
+  CO.chapters.forEach(function (c) {
+    var n = String(c.n).padStart(2, '0');
+    rows += '<tr><td class="mono">' + n + '</td><td><b>' + c.title + '</b><div class="en">' + c.en + '</div></td>' +
+      '<td><a href="https://youtu.be/' + c.vid + '" target="_blank" rel="noopener">YouTube</a> <span class="dim">' + c.dur + '</span></td>' +
+      '<td><a href="https://missing.csail.mit.edu/2026/' + c.slug + '/" target="_blank" rel="noopener">官方讲义</a> · ' +
+      '<a href="https://missing-semester-cn.github.io/2026/' + c.slug + '/" target="_blank" rel="noopener">中文译文</a> · ' +
+      '<a href="https://github.com/missing-semester/missing-semester/blob/master/_2026/' + c.slug + '.md" target="_blank" rel="noopener">源码</a></td>' +
+      '<td><a href="' + c.key + '.html">笔记</a> · <a href="labs/lab' + n + '.html">练习笔记</a></td></tr>';
+  });
+  tb.insertAdjacentHTML('beforeend', rows);
+  var done = CO.chapters.filter(function (c) { return prog[c.key]; }).length;
+  document.getElementById('hpTxt').textContent = done + ' / 9 讲';
+  document.getElementById('hpFill').style.width = (done / 9 * 100) + '%';
+  if (window.VZCOUNT) document.getElementById('vzTotal').textContent = window.VZCOUNT;
+})();
+</script>
+<script src="assets/vzcount.js"></script>
+</body>
+</html>

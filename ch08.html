@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 · 代码之外 · Missing Semester 2026 中文笔记</title>
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/vz.css">
+<script>window.PAGE = { key: 'ch08', type: 'ch', vzCount: 8 };</script>
+<script src="assets/course.js"></script>
+<script src="assets/dg.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<div class="callout key"><div class="ct">本讲结论</div>
+<p>工程师有一半时间在和人打交道。注释、README 和提交信息，都是写给未来读者的。它们要记<strong>为什么</strong>，不只记“是什么”。提 issue、提 PR、做评审、向人提问，都要<strong>尊重对方的时间</strong>。用了 AI，就要<strong>说出来</strong>。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s1" data-nav="沟通是另一半工作" data-t="0:01">好工程师一半靠代码，一半靠沟通 <span class="ts">0:01</span></h2>
+<p class="lead">这一讲不写代码，也不上白板。讲的是怎么和人协作。一类是写给后来者看的文字。一类是和别人一来一回的交流。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre><span class="cm"># 一个人写代码，电脑看得懂就行</span>
+<span class="cm"># 一群人写代码，还得让人看得懂</span>
+git blame chunker.py   <span class="cm"># 半年后，有人追查到你写的这一行</span>
+git show ff12122       <span class="cm"># 他能看到的，只有你当时写下的那段话</span></pre></div>
+<p class="like"><b>打个比方</b>代码像一台机器，沟通像它的说明书。机器再好，说明书没人看得懂，就没人敢接手修。</p>
+<p>讲师认识的工程师，大多技术都很强。真正吃力的，是和人协作。比如在开源社区里打交道。又比如在大代码库里和别人一起干活。还有向前辈学，再教给新人。</p>
+<p>他估计，做个好工程师，大约 50% 靠写好代码和系统。另外 50% 靠和人沟通（<span class="ts">1:16</span>）。</p>
+<figure class="fig"><script>
+DG('flow', { nodeH: 54, cols: [
+  [ { id: 'a', l: '单向沟通', s: '注释 · README · 提交信息', tone: 'data' } ],
+  [ { id: 'b', l: '双向沟通（协作）', s: 'issue · PR · 代码评审', tone: 'info' } ],
+  [ { id: 'c', l: '教与学', s: '提问 · 回答', tone: 'teal' } ],
+  [ { id: 'd', l: 'AI 礼仪', s: '披露 · 遵守规则 · 考试面试', tone: 'warn' } ]
+], edges: [ ['a', 'b', '', 'data'], ['b', 'c', '', 'data'], ['c', 'd', '', 'data'] ] });
+</script><figcaption>本讲四块内容。视频 1:54 把沟通分成单向和双向两类。讲义另列了教与学、AI 礼仪</figcaption></figure>
+<div class="callout tip"><div class="ct">讲义开篇</div><p>好工程师写的代码，别人要能看懂、能维护。还能在上面接着搭。这个“别人”也包括未来的你。好工程师还要把话说清楚，想好了再贡献。不管在开源社区还是公司内部，都做个好公民。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>很多人觉得代码能跑就完事了。可半年后接手的人，只看得到代码和你留下的文字。文字没写，他就只能猜。猜错了，就会把你的修复改回去。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s2" data-nav="代码注释" data-t="1:54">注释写代码里看不出的“为什么” <span class="ts">1:54</span></h2>
+<p class="lead">单向沟通是写给以后某个工程师看的。最主要的载体是代码注释。注释该写的，是读代码看不出来的东西。</p>
+<div class="code"><div class="cap">python · 最小例子（示意）</div><pre>CHUNK_SIZE = 1464   <span class="cm"># 坏：把代码念了一遍，读者早就知道</span>
+
+<span class="cm"># 好：交代这个数从哪来</span>
+<span class="cm"># 1492 (PPPoE MTU) - 20 (IPv4 头) - 8 (UDP 头) = 1464</span>
+CHUNK_SIZE = 1464</pre></div>
+<p class="like"><b>打个比方</b>注释像菜谱旁边的批注。“放两勺盐”菜谱上已经写了。值钱的批注是“别换成酱油，会发苦”。</p>
+<p><strong>单向沟通</strong>没有对话。读者可能很久以后才读到，那时你不在场。这个读者也可能是半年后的你自己（<span class="ts">2:27</span>）。</p>
+<p>讲师见过最多的注释，是解释代码做了什么。这也是最没用的。代码就在那儿，读一遍就知道（<span class="ts">2:58</span>）。值得写进注释的，是<strong>代码里不容易看出来</strong>的东西。讲义列了七类，几乎总是值得写：</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>类型</th><th>写什么</th><th>反例 → 正例（讲义的例子）</th></tr>
+<tr><td><strong>TODO</strong></td><td>标出没做完的地方。写清缺什么，为什么推迟</td><td><code>TODO: optimize</code> → <code>TODO: this O(n²) loop is fine for n&lt;100, but will need indexing if we scale</code></td></tr>
+<tr><td><strong>引用</strong></td><td>代码来自论文、别处的代码或某份文档时，贴上链接。用永久链接，并注明和原文的差异</td><td>视频 <span class="ts">3:29</span> 的例子。排序函数里有串怪代码。配上出处，读者就懂了</td></tr>
+<tr><td><strong>正确性论证</strong></td><td>不简单的代码为什么能算对。代码给出步骤，注释解释步骤为什么成立</td><td>讲义没给例子</td></tr>
+<tr><td><strong>来之不易的教训</strong></td><td>花了 30 分钟以上才调通，修法又不直观的地方</td><td>“过去的你没意识到需要它，未来的读者也不会”</td></tr>
+<tr><td><strong>常量的来历</strong></td><td>魔法数字是随便选的？测出来的？还是正确性要求的？</td><td>“为什么是 1492？为什么是 16 位？”哪怕写“随意选的”也有信息量</td></tr>
+<tr><td><strong>承重的选择</strong></td><td>正确性依赖一个看着不起眼的实现细节</td><td>“必须是 BTreeSet，因为下面依赖迭代顺序”</td></tr>
+<tr><td><strong>“为什么不”</strong></td><td>故意不用显而易见的做法时，写明原因。不然有人会“修”回去，然后弄坏</td><td>视频 <span class="ts">5:08</span>：明明是个 map，却没用标准库的 HashMap</td></tr>
+</table></div>
+<p>讲师最喜欢“为什么不”这类注释（<span class="ts">4:32</span>）。比如你花了两小时，才发现标准库的 map 在这里不行。于是换了别的结构。你不写下来，就会有个<strong>聪明的后来者</strong>把它改回标准库。然后把你踩过的坑再踩一遍（<span class="ts">5:42</span>）。</p>
+<div class="code"><div class="cap">chunker.py 节选（练习 2 的示例仓库，中文注释是笔记加的）</div><pre><span class="cm"># 1492 (PPPoE MTU) - 20 (IPv4 header) - 8 (UDP header).</span>
+<span class="cm"># Ethernet allows 1500, but on PPPoE (DSL) links 1472-byte chunks got fragmented.</span>
+CHUNK_SIZE = 1464          <span class="cm"># 上面两行英文注释：常量的来历</span>
+
+def retransmit(pending: list[bytes], send) -&gt; None:
+    <span class="cm"># A list, not a set: packets must be resent in their original send order.</span>
+    for packet in pending[:MAX_IN_FLIGHT]:      <span class="cm"># 上面那行：承重的选择，也是 why-not</span>
+        send(packet)</pre></div>
+<p>真实项目里的好注释长什么样？<a href="labs/lab08.html#ex01">练习 1</a> 在本机装的 CPython 标准库源码里真跑了 grep。每一类都找到了实例。</p>
+<p>比如 <code>heapq.py</code> 里有一段 why-not 注释。它说，我们<em>本可以</em>提前跳出循环。但这不是好主意，尽管很多书都这么写。<code>random.py</code> 里还有一句“原论文漏掉了对 log(v) 的调用”。这就是在注明和参考文献的差异。</p>
+<div class="callout tip"><div class="ct">TODO 写在代码里的好处</div><p>也可以记在 issue 跟踪器里。但 TODO 写在代码旁边更好找。用第 1 讲的 <code>grep</code> 一搜就有（<span class="ts">3:29</span>）。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>看到 <code>Don't use += !</code> 这种只说“不要”的注释，很多人会当它多余。顺手一“优化”，bug 就回来了。练习 1 做了实验。换成 <code>+=</code> 后，调用者传进来的 bytearray 被悄悄改了。所以写 why-not 注释时，原因也要写上。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s3" data-nav="README 漏斗" data-t="5:42">README 按漏斗写，先说是什么，最后才说怎么装 <span class="ts">5:42</span></h2>
+<p class="lead">README 通常是别人接触你项目的第一站。它要像漏斗。顶上让人几秒内判断“是不是我要的”。往下再一层层加深。</p>
+<div class="code"><div class="cap">markdown · 最小例子（示意）</div><pre># mytool                       <span class="cm">&lt;!-- 第 1 问：这是什么，一句话说完 --&gt;</span>
+Turn a CSV into a chart.       <span class="cm">&lt;!-- 第 2 问：凭什么值得你关心 --&gt;</span>
+    mytool plot data.csv       <span class="cm">&lt;!-- 第 3 问：先给用法，让人看到效果 --&gt;</span>
+    pip install mytool         <span class="cm">&lt;!-- 第 4 问：决定要用了，再看怎么装 --&gt;</span></pre></div>
+<p class="like"><b>打个比方</b>README 像商店橱窗。路人先看招牌和样品，觉得有意思才进门。你不能让他在门口先填会员表。</p>
+<p>README 后来成了什么都往里放的大杂烩。有的又长又没用，有的很短却正好够用（<span class="ts">6:15</span>）。讲师建议按顺序回答四个问题：</p>
+<figure class="fig"><script>
+DG('steps', { items: [
+  { l: '这是什么？', s: '一句话 + 也许一个可视化演示', tone: 'data' },
+  { l: '我为什么要关心？', s: '有什么用、有什么不平凡', tone: 'info' },
+  { l: '怎么用？', s: '先展示用法', tone: 'ok' },
+  { l: '怎么装？', s: '决定要用了再看', tone: 'teal' }
+] });
+</script><figcaption>漏斗顶部让人几秒钟内判断“是不是我要的”。往下再逐层加深（视频 6:50 到 7:24，讲义）</figcaption></figure>
+<ul class="keys">
+<li><strong>顺序很重要</strong>：很多项目一上来就给安装步骤（<span class="ts">7:24</span>）。可读者还没决定要不要用。讲义说要先展示用法。人们想先看到能得到什么，再花力气安装。</li>
+<li><strong>保持简洁</strong>：README 是拿来快速翻的参考。其他内容放到别的文件里。</li>
+<li><strong>CONTRIBUTING.md</strong>（<span class="ts">8:00</span>）：写怎么报 bug、怎么提 PR、怎么测试。还有项目里不常见的约定。README 写给<em>用户</em>，CONTRIBUTING 写给<em>协作者</em>。</li>
+</ul>
+<div class="callout extra"><div class="ct">本机实测：三个千星项目的 README 顺序</div>
+<p>用<a href="labs/lab08.html#ex03">练习 3</a> 的脚本，读本机已装包自带的 README。requests 第 5 行就给出代码示例，第 28 行才讲安装。rich 开头是 28 行徽章和多语言链接。它第 46 行讲完“Installing”，后面才有用法。不过它第 34 行有一张功能演示图。flask 根本没提安装。三份是否同样有用，留给你在练习里判断。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>很多 README 第一屏就是一长串徽章和安装命令。读者还不知道这是什么，就被劝退了。写 README 时，站在第一次路过的人的角度。看他前 10 秒能读到什么。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s4" data-nav="提交信息" data-t="8:34">提交信息记“为什么”，改了什么 diff 里都有 <span class="ts">8:34</span></h2>
+<p class="lead">提交信息很容易只写“改了什么”。可改了什么，看 diff 就知道。读者想知道的是<strong>为什么改、为什么这样改</strong>。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>git commit -m "fix"            <span class="cm"># 坏：blame 追到这里，线索就断了</span>
+git commit -m "Use 1464-byte chunks so packets fit PPPoE links"   <span class="cm"># 好：标题带着原因</span>
+git blame -L 5,5 chunker.py    <span class="cm"># 第 5 行最后是哪次提交改的</span>
+git log -S'1464' --oneline     <span class="cm"># 1464 这个数是哪次提交加进来的</span></pre></div>
+<p class="like"><b>打个比方</b>提交信息像病历。化验单上的数字谁都能看，那就是 diff。医生写的“为什么开这个药”，换个医生才接得上手。</p>
+<p>第 5 讲讲了 Git 的命令。这里讲 <strong>Git 卫生</strong>，也就是和别人协作时怎么用好它。提交信息连起来，就是代码库的变迁史。它记的是代码为什么变成这样（<span class="ts">9:09</span>）。</p>
+<p><code>git blame 文件</code> 给每一行标出最后改它的提交。你可以去看那次提交的信息，再一路往前追。但这类工具有个前提。提交信息得<strong>写清为什么</strong>（<span class="ts">9:43</span>）。</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习 2 的示例仓库，哈希可复现）</div><pre><span class="p">$ </span><span class="cmd">git blame --date=short -L 3,7 chunker.py</span>   <span class="cm"># 只看第 3 到 7 行，每行标出最后改它的提交</span>
+<span class="o">ff121228 (Alyssa P. Hacker 2026-01-12 3) # 1492 (PPPoE MTU) - 20 (IPv4 header) - 8 (UDP header).
+ff121228 (Alyssa P. Hacker 2026-01-12 4) # Ethernet allows 1500, but on PPPoE (DSL) links 1472-byte chunks got fragmented.
+ff121228 (Alyssa P. Hacker 2026-01-12 5) CHUNK_SIZE = 1464
+7809933e (Ben Bitdiddle    2026-01-08 6) RETRY_TIMEOUT = 30  # seconds
+4140218c (Ben Bitdiddle    2026-01-20 7) MAX_IN_FLIGHT = 16</span>
+<span class="p">$ </span><span class="cmd">git log -S'1464' --format='%h %s'</span>   <span class="cm"># 1464 是哪次加进来的：信息写得很清楚</span>
+<span class="o">ff12122 Use 1464-byte chunks so packets fit PPPoE links</span>
+<span class="p">$ </span><span class="cmd">git log -S'RETRY_TIMEOUT = 30' --format='%h %s'</span>   <span class="cm"># 这一行是哪次加的：只有 fix</span>
+<span class="o">7809933 fix</span></pre></div>
+<p>第 5 行追到一条写得很好的信息。第 6 行追到的只有一个 <code>fix</code>，线索就断了。</p>
+<p><code>git log -S'字符串'</code> 俗称 pickaxe，这一条是补充。它列出让这个字符串出现次数变了的提交。常用来查“这一行是哪次加进来的”。下面的演示先逐行追查。再用 -S 找出 1464 是哪次加进来的。</p>
+<div data-vz="ch08-blame"></div>
+<h3 id="s4b">正文要回答四个问题 <span class="ts">9:43</span></h3>
+<p class="lead">标题一行说清改了什么。正文回答下面四个问题。没有的项可以省。</p>
+<div class="grid2">
+  <div class="mini"><h4>什么问题逼你改？</h4><p>为什么非改不可。</p></div>
+  <div class="mini"><h4>考虑过哪些别的办法？</h4><p>为什么没用别的办法。修 off-by-one 这种没有备选的，可以省略（<span class="ts">10:14</span>）。</p></div>
+  <div class="mini"><h4>有什么取舍和影响？</h4><p>优化常常是常见情况变快，少数情况变慢。运行更快但编译更慢，也值得写。C、Rust 这类有单独构建步骤的语言就常这样（<span class="ts">10:49</span>）。</p></div>
+  <div class="mini"><h4>有什么出人意料的地方？</h4><p>看 diff 看不出的后果。评审者可能正好不同意这个取舍（<span class="ts">11:25</span>）。</p></div>
+</div>
+<figure class="fig"><script>
+DG('flow', { nodeH: 58, cols: [
+  [ { id: 'p', l: 'Problem', s: '迫使改动的问题或限制', tone: 'bad' } ],
+  [ { id: 's', l: 'Solution', s: '改了什么、关键设计决定', tone: 'data' } ],
+  [ { id: 'i', l: 'Implications', s: '值得注意的后果（好的坏的）', tone: 'warn' } ]
+], edges: [ ['p', 's', '', 'data'], ['s', 'i', '', 'data'] ] });
+</script><figcaption>讲义推荐这样写复杂改动。最后一段最要紧。写明取舍是有意的，后人才不会以为你漏了问题</figcaption></figure>
+<div class="code"><div class="cap">示例仓库里的好提交信息（git log 实测，场景示意）</div><pre>Use 1464-byte chunks so packets fit PPPoE links
+
+Problem: uploads from DSL customers stalled under ~3% packet loss.
+Their PPPoE links have an MTU of 1492 bytes, so every 1500-byte IP
+packet was split into two fragments, and losing either one lost both.
+
+Solution: size chunks for the smaller MTU (1492 - 20 - 8 = 1464) and
+write the arithmetic next to the constant.
+
+Implications: about 0.5% more packets on links that could carry 1500.</pre></div>
+<div class="callout warn"><div class="ct">详略跟着复杂度走</div><p>改一个错别字，只要一行标题。花了几个小时才查清的竞态 bug，值得写好几段（讲义）。就算项目只有你一个人，也别全写成 “fix foo”。更别写 “blah”。一两年后，你自己也想不起为什么（<span class="ts">11:58</span>）。</p></div>
+<p>下面的演示拿同一个 diff 来改。把只写了 <code>update</code> 的信息，补成一条好信息。照着四个问题和 P、S、I 三段来补。</p>
+<div data-vz="ch08-msg"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>赶时间时，大家都爱写 <code>fix</code> 和 <code>update</code>。当时觉得自己记得住。可 blame 追过来的，往往是几个月后的你。那时 diff 只告诉你 64 改成了 16。为什么改，没人知道。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s5" data-nav="LLM 写提交信息" data-t="12:34">让 LLM 写提交信息，得先把“为什么”喂给它 <span class="ts">12:34</span></h2>
+<p class="lead">直接让 LLM 根据 diff 写提交信息，它只看得到 what，看不到 why。于是写出一大段描述，正好和我们想要的相反。</p>
+<div class="code"><div class="cap">提示词 · 最小例子（示意）</div><pre><span class="cm"># 坏提示：它只看得到 diff，只能复述“改了什么”</span>
+给这个 diff 写一条提交信息。
+<span class="cm"># 好提示：点名要 why，缺信息就让它先问你</span>
+重点写为什么改、怎么取舍。哪里不清楚，先问我再写。</pre></div>
+<p class="like"><b>打个比方</b>只给 diff 让 LLM 写，像让快递员看包裹外形写贺卡。他只能写“一个方盒子”，写不出“生日快乐”。</p>
+<p>讲师给了两种用法：</p>
+<figure class="fig"><script>
+DG('seq', { actors: [ { l: '你', tone: 'neutral' }, { l: 'LLM', s: '编码智能体', tone: 'info' }, { l: 'git', tone: 'teal' } ], msgs: [
+  { sep: '做法 1：在做改动的同一个会话里让它提交（视频 13:09）' },
+  { f: 0, t: 1, l: '“为什么要改、怎么取舍”的整段对话' },
+  { f: 1, t: 2, l: '提交：信息里有 why 和取舍', tone: 'ok' },
+  { sep: '做法 2：给它 diff + 写作要求，并让它缺什么就问你（视频 13:41）' },
+  { f: 0, t: 1, l: 'diff + “重点写 why，不清楚就问我”' },
+  { f: 1, t: 0, l: '为什么是 16 而不是 32？', tone: 'warn' },
+  { f: 0, t: 1, l: '网关固件每会话只缓存 16 个包' },
+  { f: 1, t: 2, l: '提交', tone: 'ok' }
+] });
+</script><figcaption>做法 2 里，你就像智能体能调用的一个“工具”。讲义说，它像查 MCP 工具一样向你要上下文</figcaption></figure>
+<div class="callout ai"><div class="ct">讲师建议</div><p>LLM 默认不会这样做。你得明确告诉它想要什么，并让它去收集缺的信息。否则它会写出看着厉害、其实没用的信息（<span class="ts">14:16</span>）。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>diff 里只有 64 改成 16。LLM 很可能写出“调整参数以优化性能”这种话。“优化性能”是它猜的。真实原因是网关只缓存 16 个包，这只有你知道。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s6" data-nav="git add -p 拆提交" data-t="14:50">一次提交只做一件事，用 git add -p 拆开 <span class="ts">14:50</span></h2>
+<p class="lead">一周没提交，最后 <code>git add .</code> 一把梭。提交里就混满了不相关的改动。<code>git add -p</code> 按块逐个问你，能把它们拆成几个独立的提交。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>git add -p                   <span class="cm"># 逐块问你：这块要不要放进下一次提交</span>
+  y                          <span class="cm"># 要：这块是新功能</span>
+  n                          <span class="cm"># 不要：这块只是格式化，留到下一次</span>
+git commit -m 'Add mode()'   <span class="cm"># 这次提交只讲一件事</span></pre></div>
+<p class="like"><b>打个比方</b>git add -p 像收拾行李时一件件过手。这件放进今天的箱子，那件留到明天。最后每个箱子只装一类东西。</p>
+<p>最典型的是顺手跑了格式化器。diff 很大，大部分只是格式变化。只有少数是语义变化（<span class="ts">15:26</span>）。</p>
+<p>逻辑上独立的部分，应该拆成不同的提交。<code>git add -p</code> 是 patch 模式。它把 diff 切成块（hunk），逐块问你。这块要不要放进下一次提交？答 y 或 n 就行。</p>
+<div class="code term"><div class="cap">bash · 本机实测（stats.py 示例：块 1 是格式，块 2 是新功能）</div><pre><span class="p">$ </span><span class="cmd">printf 'n\ny\n' | git add -p</span>   <span class="cm"># 第 1 块答 n，第 2 块答 y</span>
+<span class="o">@@ -1,5 +1,5 @@
+ def mean(xs):
+-    return sum(xs)/len(xs)
++    return sum(xs) / len(xs)
+(1/2) Stage this hunk [y,n,q,a,d,k,K,j,J,g,/,e,p,P,?]? @@ -13,3 +13,7 @@ def median(xs):
+ def spread(xs):
+     return max(xs) - min(xs)
++
++
++def mode(xs):
++    return max(set(xs), key=xs.count)
+(2/2) Stage this hunk [y,n,q,a,d,K,J,g,/,e,p,P,?]?</span>
+<span class="p">$ </span><span class="cmd">git diff --cached --stat</span>   <span class="cm"># 暂存区里只有新功能那 4 行</span>
+<span class="o"> stats.py | 4 ++++
+ 1 file changed, 4 insertions(+)</span>
+<span class="p">$ </span><span class="cmd">git commit -q -m 'Add mode()'; git add -A; git commit -q -m 'Format mean() with spaces around /'</span>   <span class="cm"># 先提交功能，格式化单独再提交</span>
+<span class="p">$ </span><span class="cmd">git log --oneline</span>   <span class="cm"># 两件事成了两个提交</span>
+<span class="o">eceb177 Format mean() with spaces around /
+3cd2a59 Add mode()
+b9513e2 Add stats helpers</span></pre></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）</div><p>这里用 <code>printf 'n\ny\n' |</code> 代替手敲 n 和 y，只是为了能自动真跑。平时直接在终端里回答就行。输出里的提示没换行，是因为输入来自管道，不是终端。</p></div>
+<ul class="keys">
+<li><strong>LLM 也能帮忙拆</strong>：让它找出 diff 里语义相关的部分。再让它分别提交。之后你可能要做点清理（<span class="ts">16:06</span>）。</li>
+<li><strong>拆开的提交可以分成多个 PR</strong>（<span class="ts">16:45</span>）。开源项目收到混着无关改动的大 diff，会让你回去重整。拆开后，维护者能先合并没争议的部分。有争议的慢慢谈。你的改动反而进得更快。</li>
+<li>讲义说，别把重构和新功能混在一起。也别混进几个不相关的 bug 修复。拆好的提交还让 <code>git bisect</code> 好用得多，见<a href="#s8">第 8 节</a>。</li>
+</ul>
+<div data-vz="ch08-addp"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>格式化器一跑，几百行全变了。你只改了两行逻辑，却和格式变化一起提交。评审者要在几百行里找那两行，很容易漏看。日后 bisect 找到这个提交，也分不清是哪一行惹的祸。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s7" data-nav="别写太多" data-t="17:53">写太多等于没写，读者过了临界点就不读了 <span class="ts">17:53</span></h2>
+<p class="lead">认真写注释、提交信息和 README 之后，有个危险。钟摆会摆过头，写得太多。</p>
+<div class="code"><div class="cap">提交信息 · 最小例子（示意）</div><pre><span class="cm"># 太长：把 diff 又复述一遍，读者翻两行就放弃</span>
+This commit changes the value of MAX_IN_FLIGHT in chunker.py from 64 to 16 ...
+<span class="cm"># 刚好：标题说 what，正文只补 diff 里看不到的 why</span>
+Limit in-flight packets to 16 to match the gateway buffer</pre></div>
+<p class="like"><b>打个比方</b>文字像菜的分量。一碟刚好吃完。端上一大盆，客人看一眼就饱了，一口都不想动。</p>
+<p>读者的反应大致是这样。没有文字，就没得读。文字不多，会读完。超过某个临界点，就一个字都不读了。或者只读第一段（<span class="ts">18:27</span>）。</p>
+<div class="callout ai"><div class="ct">讲师建议</div><p>写之前先问自己：如果我是读者，会读吗？用 LLM 写东西时尤其要注意。它很擅长生成大量文字。你通常得明确要求“简洁的摘要，不要长篇大论”。讲义的说法是，只解释“为什么”。“怎么做”相信读者自己想得出。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>用 LLM 写 PR 描述最容易写长。它会把每个文件改了什么都复述一遍。维护者翻两屏还没看到重点，干脆不看了。真正要紧的那句 why，反而埋在了中间。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s8" data-nav="git bisect" data-t="19:05">bisect 二分找到坏提交，信息写得烂照样白找 <span class="ts">19:05</span></h2>
+<p class="lead"><code>git bisect</code> 在好版本和坏版本之间二分查找。几步就能找出引入 bug 的提交。可那个提交要是没写为什么，你还得从头调试。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>git bisect start HEAD v1.0     <span class="cm"># 告诉它：HEAD 是坏的，v1.0 是好的</span>
+git bisect run sh test.sh      <span class="cm"># 测试脚本退出码 0 算好，非 0 算坏</span>
+git bisect reset               <span class="cm"># 找完了，回到原来的分支</span>
+<span class="cm"># 16 个提交最多测 4 次。可找到的提交只写着 update，还是白找</span></pre></div>
+<p class="like"><b>打个比方</b>bisect 像查水管哪段漏水。从中间截断看一眼，漏的那半再从中间截。16 段水管查 4 次就够。可找到那段后，图纸上没写它为什么这么接。你还是不知道怎么修。</p>
+<p>你升级了某个软件，发现一个以前没有的 bug。告诉 bisect 哪个版本好、哪个版本坏。它就检出中间的提交让你测。你回答好或坏，范围减半，直到只剩一个（<span class="ts">19:40</span>）。</p>
+<p>如果能用测试复现 bug，还可以写 <code>git bisect run 脚本</code>。脚本用退出码表示好坏，整个过程全自动（<span class="ts">20:19</span>）。</p>
+<div class="code term"><div class="cap">bash · 本机实测（示意仓库共 16 个提交，第 11 个藏了 bug）</div><pre><span class="p">$ </span><span class="cmd">git bisect start HEAD &lt;第 1 个提交&gt;</span>   <span class="cm"># HEAD 坏，第 1 个提交好</span>
+<span class="o">Bisecting: 7 revisions left to test after this (roughly 3 steps)
+[580a77cde90ff6e2b343602f3c86c076d7543355] Release step 8</span>
+<span class="p">$ </span><span class="cmd">git bisect run sh test.sh</span>     <span class="cm"># test.sh: python -c 'from calc import add; assert add(2, 2) == 4'</span>
+<span class="o">running 'sh' 'test.sh'
+Bisecting: 3 revisions left to test after this (roughly 2 steps)
+[b1e99566e803c1c80f7a5ccf23e296d8308d1dd2] Release step 12
+running 'sh' 'test.sh'
+…
+AssertionError
+Bisecting: 1 revision left to test after this (roughly 1 step)
+[18f924a1f02b97f2fc3e0e8f39c534141dff1f33] Release step 10
+running 'sh' 'test.sh'
+Bisecting: 0 revisions left to test after this (roughly 0 steps)
+[e532b6c1a67c456289b442b4bb8255b98726cd33] Release step 11
+running 'sh' 'test.sh'
+…
+e532b6c1a67c456289b442b4bb8255b98726cd33 is the first 'bad' commit</span></pre></div>
+<p>示意仓库里，第 11 个提交把 <code>a + b</code> 改成了 <code>a - b</code>。15 个候选只测了 4 次（⌈log₂ 16⌉ = 4）。但讲师的重点在后半句。找到的提交要是没写原因，bisect 就帮不上多大忙。一次改了一堆不相关东西的提交，也一样。你还得花很多时间调试（<span class="ts">19:40</span>）。上面找到的 “Release step 11” 就是这样一个反例。</p>
+<p>下面的演示把这次真跑的二分过程一步步画出来。还会手推要测几次。</p>
+<div data-vz="ch08-bisect"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>bisect 最怕两种提交。一种信息什么都没说，比如 “Release step 11”。另一种一次改了十几个文件。前一种让你不知道为什么改。后一种让你不知道是哪一处惹的祸。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s9" data-nav="为别人的项目做贡献" data-t="20:52">维护者远少于用户，你提的东西要信息多、废话少 <span class="ts">20:52</span></h2>
+<p class="lead">最常见的协作是<strong>贡献</strong>。你提 bug 报告或代码改动，对方是这个项目的权威。维护者人少、时间少，所以要高信噪比。</p>
+<div class="code"><div class="cap">issue 标题 · 最小例子（示意）</div><pre>it doesn't work                                <span class="cm"># 坏：维护者得追问好几轮，才知道哪里坏了</span>
+Report is broken!!!                            <span class="cm"># 坏：感叹号再多，信息也是零</span>
+Report titles lose letters: "analytics.csv" is shown as "Analyti"   <span class="cm"># 好：一眼看出是什么问题</span></pre></div>
+<p class="like"><b>打个比方</b>维护者像小诊所里唯一的医生，门口排着几百个病人。你进门就说清症状、病史和用药，他几分钟就能开方。你只说“我不舒服”，他得一样样问。</p>
+<p>要记住一个比例。用户比贡献者多几个数量级。贡献者又比维护者多一个数量级。开源项目可能有上百万用户。维护者却只有一两个（<span class="ts">21:33</span>）。</p>
+<div class="callout warn"><div class="ct">为什么要“高信噪比”</div><p>一半是尊重对方的时间，一半是为了自己。格式糟糕的 issue 或 PR，维护者可能直接关掉。也可能不理，或者放一年再说。大家都知道，“以后有空”永远不会来（<span class="ts">22:13</span>）。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>提 issue 的人常觉得，“我只是报个错，维护者自然会查”。可维护者每天要看一堆 issue。信息不全的那个，最容易被跳过。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s10" data-nav="写好 bug 报告" data-t="22:49">bug 报告要让维护者读一遍就能复现 <span class="ts">22:49</span></h2>
+<p class="lead">好的 bug 报告带齐复现要的全部信息。最值钱的是最小可复现示例。它省下的，正是维护者本来要做的工作。</p>
+<div class="code"><div class="cap">issue 正文 · 最小例子（示意，改写自练习 4 的样本）</div><pre>Environment: Windows 11, Python 3.13.5      <span class="cm"># 环境：系统和版本号</span>
+1. Run `python report.py`                   <span class="cm"># 编号步骤，越具体越好</span>
+print("analytics.csv".rstrip(".csv"))       <span class="cm"># 一行最小复现，别人复制就能跑</span>
+Expected: `analytics`  Actual: `analyti`    <span class="cm"># 期望和实际都要写</span></pre></div>
+<p class="like"><b>打个比方</b>最小复现像修车时只带坏零件去店里。你把整辆车开去说“有异响”，师傅得先拆半天。你把那个会响的轴承递过去，他当场就能看。</p>
+<p>好的 bug 报告要带上让别人能复现的全部信息。讲义的清单如下：</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>项目</th><th>说明</th></tr>
+<tr><td>环境</td><td>操作系统、软件版本号、相关配置文件（<span class="ts">23:21</span>）</td></tr>
+<tr><td>期望和实际</td><td>两样都要写。有时你看到的正是设计如此，那就是文档的 bug。这个差值对维护者很有用</td></tr>
+<tr><td>复现步骤</td><td>可能是最重要的部分。写成编号的步骤，越具体越好。“点那个按钮”太含糊。比如“以管理员身份登录，在 /settings 页面点 Submit”（<span class="ts">23:55</span>）</td></tr>
+<tr><td>已经试过什么</td><td>免得别人重复建议，也表明你花了力气</td></tr>
+</table></div>
+<ul class="keys">
+<li><strong>最小可复现示例是金子</strong>（<span class="ts">24:33</span>）。甩一个十万行项目说“编译后不对”，毫无用处。要从你的程序出发，砍掉一切和 bug 无关的东西。这很费劲。可这本来就是维护者修 bug 前必须做的事。用户比维护者多，这份活最好由你来干。缩减的过程本身，也常让你看懂问题，甚至自己修好。</li>
+<li><strong>先搜重复</strong>（<span class="ts">25:41</span>）。重复的 issue 越多，已有的讨论越难找。维护者也得在噪声里找信号。</li>
+<li><strong>别发“+1”“我也是”</strong>（<span class="ts">26:24</span>）。它们会发邮件通知所有订阅者，却不带任何信息。要表态，就给首帖点个赞。维护者可以按赞数排序（<span class="ts">27:35</span>）。有用的跟帖是“我做出了最小复现”。或者“这样做每次都能复现”。</li>
+<li><strong>给维护者宽容</strong>（<span class="ts">28:16</span>）：他们多是志愿者。几周后礼貌跟进可以，每天催不行。讲师自己就有放了六个月没看的 PR。</li>
+<li><strong>安全漏洞别公开发</strong>：讲义说，先私下联系维护者。给他们合理的修复时间，再公开。很多项目有 SECURITY.md。</li>
+</ul>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>坏 issue（示意）</th><th>好 issue（示意，练习 4 的样本）</th></tr>
+<tr><td><code>Report is broken!!!</code><br>The titles in the report are wrong. Please fix ASAP… +1 from my team too</td>
+<td><code>Report titles lose letters: "analytics.csv" is shown as "Analyti"</code><br>搜过重复，写了环境：Windows 11，Python 3.13.5<br>编号步骤，加一行最小示例<br>期望 <code>analytics</code>，实际 <code>analyti</code><br>试过改成 .CSV</td></tr>
+<tr><td>清单 0/7：至少要追问 7 次（<a href="labs/lab08.html#ex04">练习 4</a> 本机实测）</td><td>清单 7/7：维护者第一次读就能复现</td></tr>
+</table></div>
+<div class="callout tip"><div class="ct">问答：有没有“标准的好 bug 报告”可以照着写？（<span class="ts">30:01</span>）</div>
+<p>讲师说，没有一份“照着看就行”的范本。本讲的练习就是让你自己去找。看维护者怎么回应，很快就能看出哪份报告好用。也能看出哪里有摩擦。这是耳濡目染学会的。</p>
+<p>很多项目有 issue 和 PR 模板。模板保证了格式，却补不上“不懂好报告的目的”。模板里的空，可以填得好，也可以填得差。好 bug 报告的目的，是<strong>省下维护者修 bug 的时间</strong>（<span class="ts">31:36</span>）。</p></div>
+<p>下面的演示分两幕。第 1 幕看 issue 缺几项，维护者就要追问几轮。第 2 幕用练习 5 的缩减器缩程序。31 行最后缩成一行最小复现。</p>
+<div data-vz="ch08-issue"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>做最小复现时，很多人删到一半就停了。觉得剩下的维护者能看懂。可剩下的几十行，维护者还得再找一遍。练习 5 里，自动缩减只缩到 17 行。看懂 bug 在 title_for 里之后，人工才缩到 1 行。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s11" data-nav="提 PR 之前" data-t="31:36">提 PR 前先读规矩、看许可证，一个 PR 只做一件事 <span class="ts">31:36</span></h2>
+<p class="lead">PR 就是带着几个提交去问维护者：能不能并进你的项目？所以先照项目的规矩来，再把为什么写清楚。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>cat CONTRIBUTING.md          <span class="cm"># 先读规矩：怎么测试，提交信息怎么写</span>
+cat LICENSE                  <span class="cm"># 合并后，你的代码按这个许可证发布</span>
+git switch -c fix-title      <span class="cm"># 一个分支只做一件事</span>
+git request-pull main ../fork.git fix-title   <span class="cm"># 生成一封“带附件的邮件”</span></pre></div>
+<p class="like"><b>打个比方</b>提 PR 像往别人家里送一件家具。先问清他家门多宽，东西归谁，这就是 CONTRIBUTING 和许可证。一次只送一件，再附张纸条，说明为什么适合他家。</p>
+<p>视频 <span class="ts">29:27</span> 有学生问“PR 是什么”。讲师说，别人有一个仓库。你带着一个或一组 git 提交去问他。能不能把这个并进你的项目？</p>
+<ol>
+<li><strong>读 CONTRIBUTING.md</strong>，照着做。讲义建议从小处开始。修个错别字、改改文档，就是熟悉项目流程的好起点。这样不用一边学流程，一边在内容上来回拉扯。</li>
+<li><strong>看许可证</strong>（<span class="ts">32:10</span>）。改动合并后，会按项目的许可证发布，比如 GPL。copyleft 许可证要求衍生作品也开源。你如果是公司员工，还要看公司的规定。上班时间写的代码，不一定能贡献出去（<span class="ts">32:46</span>）。讲义推荐 <a href="https://choosealicense.com/" target="_blank" rel="noopener">choosealicense.com</a>。</li>
+<li><strong>隔离改动</strong>：一个 PR 只放你真想被接受的改动。每个 PR 都能单独评审。有时几处看似无关的改动，得一起才能实现一个功能。那就放进同一个 PR，但要保持提交整洁。再告诉评审者“请逐个提交地看”。维护者很感激这种评审指引（<span class="ts">33:24</span>）。</li>
+<li><strong>写清为什么</strong>（<span class="ts">34:29</span>）。PR 描述像一封邮件，附件是你的 git 提交。要说明项目为什么该接受这个功能、修复或文档改动。主动指出需要特别留意的地方。看 CONTRIBUTING.md 的要求，可能还要写取舍和测试方法。</li>
+</ol>
+<div class="callout warn"><div class="ct">合并 PR，维护者就接下了长期责任（<span class="ts">35:01</span>）</div><p>你加了一千行，维护者就要永远维护这一千行。你却可以拿到功能就走。所以他们不光要考虑想不想要这个功能。还要考虑这种实现自己能不能长期扛。会不会和以后的功能冲突。</p>
+<p>好意的改动也可能被拒。可能是方向不合，也可能是加了不想要的复杂度。还可能是需求没说清。讲义说，证明它值得维护成本，是<strong>贡献者</strong>的责任。</p></div>
+<div class="callout tip"><div class="ct">收到评审意见时（讲义）</div><p>你的代码不是你！评审者想让代码变好，不是在批评你本人。不同意就问清楚。你可能会学到东西，对方也可能会。</p></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）：“带附件的邮件”在 git 里真的存在</div>
+<p>GitHub 出现之前，贡献者用 <code>git request-pull</code> 生成拉取请求。再用邮件发给维护者。Linux 内核至今还这样做。下面在本机用两个裸仓库，模拟上游和你的副本。示例提交修的是练习 5 的 rstrip bug。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">git request-pull main ../fork.git fix-title</span>
+<span class="o">The following changes since commit c862d6f577748fd323f73a693609c47ba8888e15:
+
+  Add report (2026-01-22 10:00:00 +0000)
+
+are available in the Git repository at:
+
+  ../fork.git fix-title
+
+for you to fetch changes up to b4073679f4185259f8db98b8321d5646973a327b:
+
+  Use removesuffix() so titles keep their last letters (2026-01-22 10:00:00 +0000)
+
+----------------------------------------------------------------
+Alyssa P. Hacker (1):
+      Use removesuffix() so titles keep their last letters
+
+ report.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)</span></pre></div>
+<p>PR 页面上有的，它都有。从哪个提交开始，去哪里拉，有哪些提交，改了多少。“为什么”还是要你自己写。写在邮件正文或提交信息里。</p></div>
+<p>下面的演示走一遍贡献的全过程，从读 CONTRIBUTING 到被合并。看代码怎么在上游、你的副本和你的电脑之间往返。再看 PR 的状态怎么变。右侧是本地模拟的真跑输出。</p>
+<div data-vz="ch08-pr-flow"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>第一次提 PR，很多人把格式、改名和新功能一起塞进去。维护者没法只收其中一部分，只好让你拆开重来。还有人不看许可证，就贡献了公司不让外传的代码。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s12" data-nav="另起炉灶 fork" data-t="35:43">另起炉灶的 fork 很贵，只能当最后手段 <span class="ts">35:43</span></h2>
+<p class="lead">PR 被拒后，你可以把项目复制一份。作为独立项目长期维护。但这很昂贵，需要很好的理由。</p>
+<div class="code"><div class="cap">最小例子（示意）</div><pre><span class="cm"># PR 被拒了，fork 之前先问自己两个问题</span>
+<span class="cm"># 1. 我要的和原项目的目标范围，本质上不同吗？</span>
+<span class="cm"># 2. 我愿意一个人长期维护、同步上游、处理 issue 吗？</span>
+<span class="cm"># 两个都是“是”，才 fork，并注明原项目。只是“我的功能没进”，就别 fork</span></pre></div>
+<p class="like"><b>打个比方</b>fork 像和合伙人闹翻后自己另开一家店。招牌、进货、账本都得自己扛。原来那家的改进，你这边也用不上。</p>
+<div class="callout extra"><div class="ct">先分清两个“fork”（补充）</div><p>GitHub 上提 PR 的常规流程里，也有一步叫 fork。它在你的账号下复制一份仓库，改完再向原仓库提 PR。那只是工作副本。讲师这里说的 fork 是另一回事。它是把项目复制一份，换个名字。然后<strong>作为独立项目长期维护</strong>。</p></div>
+<p>维护者可能会说“超出范围”或“太多了”。也可能说“我不想要这个功能”。这时你可以另起炉灶（<span class="ts">36:14</span>）。但这很昂贵。两个项目各有一个维护者，代码却大量重叠。维护者的时间被分摊了。一边的改进，另一边享受不到。</p>
+<p>所以它被视为<strong>最后手段</strong>，需要很好的理由（<span class="ts">36:51</span>）。讲义也建议优先贡献给上游。确实要 fork，而且许可证允许，就注明原项目。</p>
+<figure class="fig"><script>
+DG('flow', { nodeH: 50, cols: [
+  [ { id: 'a', l: 'PR 被拒绝', tone: 'bad' } ],
+  [ { id: 'b', l: '目标范围本质不同？', shape: 'diamond', tone: 'warn', w: 170 } ],
+  [ { id: 'c', l: '愿意长期独自维护？', s: '同步上游、测试、处理 issue', shape: 'diamond', tone: 'warn', w: 170 }, { id: 'd', l: '别 fork', s: '改进方案、与维护者沟通', tone: 'ok' } ],
+  [ { id: 'e', l: '可以 fork', s: '注明原项目', tone: 'info' }, { id: 'f', l: '别 fork', s: '只是“我的功能没进”不够', tone: 'ok' } ]
+], edges: [ ['a', 'b'], ['b', 'c', '是', 'warn'], ['b', 'd', '否', 'ok'], ['c', 'e', '是', 'info'], ['c', 'f', '否', 'ok'] ] });
+</script><figcaption>讲师的判断标准（视频 36:51 到 37:59）。只因为“我的功能没被接受”就 fork，最后你会不开心</figcaption></figure>
+<div class="callout tip"><div class="ct">问答：有人会主动申请当某部分的维护者吗？（<span class="ts">37:59</span>）</div>
+<p>看项目规模。Linux 内核有很多子系统，各有维护者。带来一整个新子系统的人，几乎默认要负责维护它。小项目就少见了。2000 行的项目里，说“我来维护这 50 行”没有意义。改动会扩散到整个代码库，多个维护者还有协调成本。</p>
+<p>不过，持续贡献正是成为维护者的路。维护者往往就是贡献最多的人。某天原维护者可能会问你，愿不愿意接手（<span class="ts">39:43</span>）。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>PR 被拒的那一刻，最容易冲动 fork。可几个月后，上游又修了一堆 bug。你得一个个手动合过来。合不动了，你的 fork 就成了没人维护的旧版本。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s13" data-nav="AI 生成的 PR" data-t="40:18">AI 写的 PR 可以交，但你得答得上为什么 <span class="ts">40:18</span></h2>
+<p class="lead">LLM 生成的 PR 大多没用，因为提交者没当好过滤器。用 AI 可以，前提是你理解每处改动，并为它负责。</p>
+<div class="code"><div class="cap">最小例子（示意）</div><pre><span class="cm"># 维护者在 PR 下面问：为什么用 removesuffix，不用 rsplit？</span>
+<span class="cm"># 答不上来：说明改动不是你做的，PR 多半会被关</span>
+<span class="cm"># 答得上来：AI 只是帮你打字，你仍然为它负责</span></pre></div>
+<p class="like"><b>打个比方</b>AI 像一个手很快的实习生。他写的东西可以交上去，但签字的是你。客户问起来你答不上，丢的是你的信用。</p>
+<p>现在开源项目里有大量 LLM 生成的 PR。少数有用，多数没用。提交者只说一句“实现这个功能，提交并开 PR”。结果往往不够精简，夹带无关改动，why 也写得不好。</p>
+<p>维护者问“为什么这样改”，提交者答不上来。因为改动不是他做的（<span class="ts">40:51</span>）。所以维护者普遍怀疑 AI 写的 PR。</p>
+<div class="callout ai"><div class="ct">讲师与讲义的态度</div><p>不是说不能用 LLM。它在实现改动、写提交信息、写 PR 描述上都很有用。它甚至能帮你处理评审意见。但<strong>你必须参与其中</strong>。你得理解为什么要改，为什么这样改。</p>
+<p>如果你只是描述了 bug，按下回车，再把结果贴进 PR。那维护者自己也能做。他们没做，多半是有原因的（<span class="ts">41:27</span> 到 <span class="ts">42:02</span>）。</p>
+<p>讲义说，用 AI 找问题、写修复都可以。前提是你仍然做足功课，把它打磨成值得合并的贡献。别把这份活转嫁给本就超负荷的维护者。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>让 AI 改一个 bug，它可能顺手改了别处。你没细看就提交，diff 里就混进一堆无关改动。维护者一问“这几行为什么改”，你也答不上来。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s14" data-nav="代码评审" data-t="42:42">评审针对代码不针对人，还要给能动手的建议 <span class="ts">42:42</span></h2>
+<p class="lead">评审是关于代码的一场异步对话。好意见针对代码，能直接动手改。它用提问的口气，讲清原因，还分清哪些必须改。</p>
+<div class="code"><div class="cap">评审意见 · 最小例子（讲义的例子，注释是笔记加的）</div><pre>You wrote confusing code.            <span class="cm"># 坏：评判的是人</span>
+Don't use globals here.              <span class="cm"># 坏：只说不要，对方不知道怎么改</span>
+Can you replace these globals with a config dataclass,
+so that tests can run in parallel?   <span class="cm"># 好：提问、给替代方案、讲原因</span>
+nit: maybe call this retry_timeout_s <span class="cm"># nit 开头：可改可不改（这一条是示意）</span></pre></div>
+<p class="like"><b>打个比方</b>评审像两个厨师试同一锅汤。说“你不会做饭”没用。说“盐是不是少了？客人口味偏重”，对方马上就能改。</p>
+<p>评审常被想象成“新人提 PR，前辈挑错，直到 PR 变好”。但那不是评审的本意。评审只是<strong>一场关于代码的异步对话</strong>。有人提出改动，另一个人思考它。两人像头脑风暴一样，讨论好在哪、不好在哪。</p>
+<p>正因为有“前辈挑错”的心态，评审的话常像在评判人。要记住，评审针对的是<strong>代码</strong>（<span class="ts">43:17</span> 到 <span class="ts">43:51</span>）。看它在这个项目里、为这个目的、在此时是否合理。</p>
+<p>你被要求评审的时间，会比想象中早得多。哪怕只是大学的小组项目，也至少应该互相评审。评审还是最快的学习方式之一。你能看到别人的做法，学到模式和惯用法。看到别人犯的错，以后自己就不犯。</p>
+<p>新鲜的眼光还能发现老手忽略的问题。讲义还说，你的疑问往往暴露出一些假设。它们该写成文档，或者该简化掉。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>建议</th><th>不好的写法</th><th>更好的写法</th></tr>
+<tr><td>评审代码，不评审人</td><td>You wrote confusing code.</td><td>This function is confusing.</td></tr>
+<tr><td>给出能动手的意见（<span class="ts">44:26</span>）</td><td>Don't use globals here.</td><td>Can you replace these globals with a config dataclass?（视频补上了原因：这样测试能并行跑）</td></tr>
+<tr><td>提问，不下命令（<span class="ts">46:16</span>）</td><td>Handle the null case.</td><td>What happens if X is null here?</td></tr>
+<tr><td>解释为什么（<span class="ts">46:47</span>）</td><td>Consider using a constant here.</td><td>Consider using a constant here so we can easily adjust the timeout based on environment.</td></tr>
+<tr><td>分清阻塞和建议（<span class="ts">48:36</span>）</td><td>所有意见混在一起</td><td>不阻塞的意见用 <code>nit:</code> 开头。nit 在英语里指不要紧的小事</td></tr>
+<tr><td>肯定好的地方（<span class="ts">50:18</span>）</td><td>只挑错</td><td>指出巧妙的解法、干净的实现</td></tr>
+<tr><td>知道何时停（<span class="ts">47:26</span>）</td><td>留一百条评论</td><td>抓大放小。细枝末节，事后自己顺手整理</td></tr>
+</table></div>
+<ul class="keys">
+<li><strong>为什么给替代方案</strong>：光说“别用全局变量”不够。它没说该怎么做，也没说错在哪。有条经验是“全局变量让测试没法并行”。对方要是不知道，就无从下手。也许对方用全局变量有充分理由。这时一个能动手的问题，能把讨论打开。“别用全局变量”只会让对话从负面开始（<span class="ts">45:34</span>）。</li>
+<li><strong>为什么别留太多</strong>：对方会累，会拖延。还分不清哪条最要紧。改了一处，别处的意见可能就失效了。留一百条，可能只有五十条值得处理。同一种命名问题，在第一处说一次就够了。比如“本仓库用这种命名，请全局统一”（<span class="ts">48:00</span>）。</li>
+<li><strong>为什么要夸</strong>：想象结对编程时，对方一开口就说你错了。评审也一样。一句肯定不用对方做任何事，点一下 resolve 就行。但它让评审更平衡，对方也更愿意照你的意见改。在开源项目里，这还决定他们会不会再来。见视频 <span class="ts">46:47</span> 和 <span class="ts">50:50</span>。</li>
+</ul>
+<div class="callout ai"><div class="ct">AI 评审不能代替人（<span class="ts">51:21</span>）</div><p>现在很多人用 AI 做评审，效果可以很好。但它做的基本是“零上下文”评审，只看描述和 diff。评审里真正要紧的意见，往往不在 diff 里。这个改动适不适合整个代码库和产品方向？有没有破坏向后兼容，而项目还没准备发破坏性版本？这些 AI 不知道。</p>
+<p>所以 AI 满意，不代表维护者满意（<span class="ts">52:30</span>）。讲义说，AI 适合做第一轮，不能代替用心的人工评审。</p>
+<p>学生追问，给它更多上下文行不行？讲师认为在一定程度上可以，但会碰到边界。比如你可以给它讲破坏性变更。它能用英语复述一遍。可它不一定懂这个项目的破坏性变更策略。他不认为给够上下文，就能得到完美评审（<span class="ts">53:06</span>）。</p></div>
+<p>下面的演示把讲义的反例逐条改成好的评审意见。再看留太多评论和 AI 零上下文评审有什么问题。</p>
+<div data-vz="ch08-review"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>评审别人时，很容易一口气留几十条“这里不对”。写的人觉得自己很认真。收到的人只觉得被否定，还分不清哪条最要紧。结果改得更慢，下次也不想找你评审了。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s15" data-nav="提问与回答" data-t="54:14">先说你懂多少，再问具体的是非题 <span class="ts">54:14</span></h2>
+<p class="lead">问好问题，能让对方一下子找到你的知识缺口。先做功课，说出你的理解，问具体的是非题。没听懂就接着追问。</p>
+<div class="code"><div class="cap">提问 · 最小例子（讲义的例子，注释是笔记加的）</div><pre>How do SQL joins work?
+<span class="cm"># 太泛：对方只能从头讲起，多半讲到你不关心的地方</span>
+Does a LEFT JOIN include rows where the right table has no match?
+<span class="cm"># 具体的是非题：对方一个字就能答，还能顺手纠正你的误解</span></pre></div>
+<p class="like"><b>打个比方</b>提问像看病。你说“我哪里都不舒服”，医生只能从头查。你说“右膝上楼时疼，没摔过”。医生马上就知道往哪查。</p>
+<p>工程师不写代码的时间里，很大一部分在提问或回答。对象有导师、老师、助教，还有做完了实验的同学。讲师最希望大家先学会<strong>问好问题</strong>，这是第一阶段。回答好问题是第二阶段（<span class="ts">54:47</span>）。</p>
+<p>讲义推荐了 Julia Evans 的两篇文章。一篇是 <a href="https://jvns.ca/blog/good-questions/" target="_blank" rel="noopener">How to ask good questions</a>，另一篇是 <a href="https://jvns.ca/blog/2021/10/21/how-to-get-useful-answers-to-your-questions/" target="_blank" rel="noopener">How to get useful answers to your questions</a>。</p>
+<figure class="fig"><script>
+DG('steps', { items: [
+  { l: '先做点功课', s: '搜一搜、问问 LLM，三秒能查到的别占用别人', tone: 'teal' },
+  { l: '先说你的理解', s: '“我知道这些，对吗？”', tone: 'data' },
+  { l: '问具体的是非题', s: '一连串是非题比开放问题更快', tone: 'info' },
+  { l: '承认不懂', s: '不懂的术语当场打断问', tone: 'warn' },
+  { l: '别接受不完整的答案', s: '追问到真的懂为止', tone: 'ok' }
+] });
+</script><figcaption>讲义列出的建议，按“问之前 → 问的时候 → 问之后”排序</figcaption></figure>
+<ul class="keys">
+<li><strong>说出理解</strong>（<span class="ts">55:22</span>）。对方就知道哪些不用重复，能直接找到你的知识缺口。</li>
+<li><strong>是非题</strong>：有点反直觉。可一串是非题能很快确认，你哪里对、哪里错。这样也不会扯得太远。问题要具体。“SQL join 怎么工作？”太泛。“LEFT JOIN 会包含右表没有匹配的行吗？”就能回答（讲义例子）。</li>
+<li><strong>承认不懂</strong>（<span class="ts">55:58</span>）。装懂只会让对方没法判断你的水平。反过来，被问到不会的，就说“我不知道”。讲义说，后面还可以接一句。比如“但我觉得……”，或者“我可以去查”。</li>
+<li><strong>别接受不完整的答案</strong>（<span class="ts">56:36</span>）。很多人没听懂，说声“好的谢谢”就走了。那等于没学到。要问到懂为止，或者问到明显待太久了。</li>
+<li><strong>先做功课</strong>（<span class="ts">57:17</span>）：同事之间随口一问没关系。但什么都没查就问，对方会有点烦。</li>
+</ul>
+<div class="callout ai"><div class="ct">对 LLM 同样适用（<span class="ts">57:58</span>）</div><p>告诉它你知道什么，问具体的问题。别因为它给了答案就停下，用是非题接着追问。在 Stack Overflow 或论坛上也这样问。后来搜到这个帖子的人也会受益，这叫水涨船高。</p></div>
+<p>下面的演示把讲义里太泛的问题，一步步问具体。再用十行 SQLite 实验自己回答它。结果来自练习 7 的真跑。</p>
+<div data-vz="ch08-ask"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>很多人怕显得笨，不懂也点头。回去一写代码就卡住，只好再问一遍。其实当场多问一个是非题，成本最低。练习 7 里多追问了一句。结果发现 WHERE 会把 LEFT JOIN 补出的 NULL 行滤掉。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s16" data-nav="AI 礼仪" data-t="58:33">用了 AI 就说出来，还要说清用在哪部分 <span class="ts">58:33</span></h2>
+<p class="lead">AI 用得越来越多，相关规范却还没定型。讲师给了几条底线。用了就披露，并说清用在哪。守团队的规矩，考试面试别偷用。</p>
+<div class="code"><div class="cap">PR 描述 · 最小例子（示意）</div><pre>Tests in test_report.py were generated by an LLM and reviewed by me.
+The fix in report.py is hand-written.
+<span class="cm"># 说清哪部分用了 AI，审查者才知道该细看哪里</span>
+<span class="cm"># 只写一句“用了 AI”不够，对方不知道该细看哪部分</span></pre></div>
+<p class="like"><b>打个比方</b>披露 AI 像论文里写清分工。谁做了实验，谁写了初稿，都写明白。审稿人才知道该在哪里多看两眼。</p>
+<p>AI 在软件工程乃至整个社会里，用得越来越多。第 7 讲讲了战术层面的事。这里讲“软”的部分：</p>
+<ul class="keys">
+<li><strong>用了就披露</strong>（<span class="ts">59:05</span>）：这不是羞耻的事。目的是设定预期，让作品得到合适程度的审查。有些代码你没细读、没完全弄懂。别人得知道，要多看几眼（<span class="ts">59:43</span>）。讲师自己就在用 LLM 写一个大项目，毫不避讳。但交付时他会说明：“这些代码我没全读过，是个起点。”</li>
+<li><strong>说清用在哪部分</strong>（<span class="ts">1:00:17</span>）。只说“全是 vibe coding 出来的”，信息太少。换个说法就清楚了。“备份工具是我写的，前端样式用 LLM 做。”又比如“测试是 LLM 生成的，实现是我写的”。这种区分对审查者很有用。讲义也坦白，它的部分内容用了 LLM。包括校对、头脑风暴，以及代码片段和练习的初稿。</li>
+<li><strong>遵守团队和项目的规范</strong>（<span class="ts">1:00:53</span>）。有些规定出于法律原因。比如健康、金融数据不能离开公司。智能体却可能把它们传到云端（<span class="ts">1:01:56</span>）。那里你管不了。有些规定只是尊重项目开发者的意愿。公开说明你的用法，能避免代价高昂的错误。</li>
+<li><strong>学习时要有意取舍</strong>（<span class="ts">1:01:56</span> 到 <span class="ts">1:02:33</span>）。用 AI，你会学得少一些。有时这没关系，但应该是有意的选择。讲义说，学习时让 AI 替你快速拿答案，恰恰适得其反。你学到的多半是提示词技巧，不是任务本身。</li>
+<li><strong>考试与面试</strong>（<span class="ts">1:03:07</span>）。这些场合本来就是评估<em>你</em>的能力。少数公司允许面试时用 AI，前提是让他们看你怎么用。拿不准就问。明确禁止外部工具时，就别用。讲义说，偷偷用“<strong>一定会</strong>反噬你”。</li>
+</ul>
+<div class="callout warn"><div class="ct">本页的 AI 披露</div><p>按本讲的建议说明一下。这份中文笔记由 AI 根据官方讲义和人工字幕整理撰写。所有标着“本机实测”的输出，都是在本机真跑得到的。示意内容已逐处标注。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>有人担心说了用 AI 会被看低，就悄悄不提。审查者以为每一行都是你亲手写的，就会少看几眼。等 AI 写的那段出了问题，信任也一起没了。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s17" data-nav="一页带走" data-t="1:04:18">一页带走：写给人看的东西，都要写清为什么 <span class="ts">1:04:18</span></h2>
+<p class="lead">把本讲浓缩成几行。每行的注释就是结论和考点。</p>
+<div class="code"><div class="cap">本讲速查（注释即考点）</div><pre>CHUNK_SIZE = 1464  # 1492-20-8     <span class="cm"># 注释写代码里看不出的 why。只复述代码的注释最没用</span>
+git commit -m "fix"                 <span class="cm"># 坏：blame 追到这里就断了。复杂改动按 P、S、I 三段写</span>
+"给这个 diff 写提交信息"            <span class="cm"># LLM 只看得到 what。在同一会话里让它提交，或让它缺什么就问你</span>
+git add -p                          <span class="cm"># 一次提交只做一件事，格式化和新功能分开提交</span>
+git log -S'1464' --oneline          <span class="cm"># 查某个字符串是哪次提交加进来的</span>
+git bisect run sh test.sh           <span class="cm"># 16 个提交最多测 4 次。信息写得烂，找到了也帮助不大</span>
+"analytics.csv".rstrip(".csv")      <span class="cm"># 最小复现：用户远多于维护者，缩减的活由你来干</span>
+Can you replace these globals ...?  <span class="cm"># 好评审：针对代码、用提问、给替代方案、讲原因</span>
+nit: ...                            <span class="cm"># nit 开头表示不阻塞，作者先处理必须改的</span>
+Tests were generated by an LLM.     <span class="cm"># 披露要说清用在哪部分，再守住团队和考试的规矩</span></pre></div>
+<ul class="keys">
+<li>注释、README 和提交信息，是写给未来读者的单向沟通。要记 <strong>why</strong>。what 读代码、看 diff 就知道，why 会随时间流失。</li>
+<li>值得写的注释有七类。带上下文的 TODO、引用、正确性论证、教训。还有常量来历、承重选择和 why-not。</li>
+<li>README 按漏斗写：是什么，为什么关心，怎么用，怎么装。CONTRIBUTING.md 写给协作者。</li>
+<li>复杂提交按 Problem、Solution、Implications 写。用 <code>git add -p</code> 拆成逻辑独立的提交。git blame、log -S 和 bisect 好不好用，全看提交信息。</li>
+<li>维护者远少于用户。bug 报告写清环境、期望和实际、步骤、试过什么。最好附上最小复现。先搜重复，不发 +1，礼貌跟进，漏洞私下报。</li>
+<li>PR 先读 CONTRIBUTING，看许可证，只做一件事，写清为什么。被拒时，fork 是最后手段。用 AI 可以，但你得理解它，并为它负责。</li>
+<li>评审要针对代码、能动手、用提问、讲原因。分清阻塞和 nit，肯定优点，别留太多。AI 评审只能做第一轮。</li>
+<li>提问前先做功课。说出理解，问具体的是非题，承认不懂，追问到懂。用了 AI 就披露，并遵守规则。</li>
+</ul>
+<div class="callout key"><div class="ct">在整门课里的位置，下一步</div>
+<p>前七讲教你和计算机打交道，这一讲教你和人打交道。第 5 讲的 Git，在这里成了沟通工具。第 7 讲的智能体，在这里多了礼仪。最后一讲是代码质量。它会补齐格式化、lint、测试和 CI 这些<strong>自动化的协作约定</strong>。</p>
+<p>现在去做<a href="labs/lab08.html">本讲练习的可视化笔记</a>。能在本机真跑的部分都已真跑。比如示例仓库的 git 历史和最小复现缩减器。还有 issue、评审、提问三个检查脚本。要去真实开源社区的部分，给出了步骤和验收标准。</p></div>
+
+</article></main>
+<script src="assets/vz.js"></script>
+<script src="assets/viz/ch08-history.js"></script>
+<script src="assets/viz/ch08-collab.js"></script>
+</body>
+</html>

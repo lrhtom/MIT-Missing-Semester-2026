@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>02 · 命令行环境 · Missing Semester 2026 中文笔记</title>
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/vz.css">
+<script>window.PAGE = { key: 'ch02', type: 'ch', vzCount: 12 };</script>
+<script src="assets/course.js"></script>
+<script src="assets/dg.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<div class="callout key"><div class="ct">本讲结论</div>
+<p>命令行程序靠一组约定和外界打交道。输入有参数、stdin 和环境变量。输出有 stdout、stderr 和退出码。跑到一半，它还可能收到信号。看懂这几样，再学会 SSH、tmux 和 dotfiles。换到哪台机器上，你都能舒服地干活。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s1" data-nav="输入与输出" data-t="1:17">CLI 程序没有函数签名，进出口全靠约定 <span class="ts">1:17</span></h2>
+<p class="lead">命令行程序没有类型签名可看。它从哪拿输入、往哪交结果，全靠大家默认遵守的约定。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">{ echo "data"; echo "oops" &gt;&amp;2; } | wc -l</span>   <span class="cm"># 一句走 stdout，一句走 stderr。管道只接 stdout</span>
+<span class="e">oops</span>
+<span class="o">1</span></pre></div>
+<p class="like"><b>打个比方</b>CLI 程序像一台标准接口的机器。进料口、出料口、报警灯的位置全都统一。所以几台机器能直接首尾相连。</p>
+<p>上一讲说过，shell 是一门完整的编程语言。它和普通语言不一样。它的设计只围着两件事转。一是运行程序，二是让程序之间高效通信。这套设计高度依赖约定（conventions）。一个 CLI 程序想和别人配合好，就得守这些约定。</p>
+<p>Python 函数 <code>def add(x: int, y: int) -&gt; int</code> 一眼就能看出输入输出。shell 脚本没这么直白。讲义开头的例子，几乎用上了本讲所有概念。讲师说，现在看不懂没关系。</p>
+<div class="code"><div class="cap">讲义例子（注释是笔记加的，先别急着看懂）</div><pre>#!/usr/bin/env bash
+
+if [[ -f $1 ]]; then                 <span class="cm"># $1：第 1 个参数</span>
+    echo "Target file already exists"
+    exit 1                           <span class="cm"># 退出码，非 0 表示失败</span>
+else
+    if $DEBUG; then                  <span class="cm"># 环境变量</span>
+        grep 'error' - | tee $1      <span class="cm"># - 表示读 stdin，| 是管道</span>
+    else
+        grep 'error' - &gt; $1          <span class="cm"># 重定向 stdout</span>
+    fi
+    exit 0
+fi</pre></div>
+<figure class="fig"><script>
+DG('flow', { nodeH: 46, cols: [
+  [ { id: 'arg', l: '参数 arguments', s: '$1 $2 … $@ $#', tone: 'data' }, { id: 'in', l: '标准输入 stdin', s: '管道 / < 文件 / 键盘', tone: 'data' }, { id: 'env', l: '环境变量', s: 'HOME TZ DEBUG …', tone: 'teal' }, { id: 'sig', l: '信号 signals', s: 'Ctrl-C → SIGINT …', tone: 'warn' } ],
+  [ { id: 'p', l: '一个 CLI 程序', s: '按约定读取、按约定输出', tone: 'info', w: 170 } ],
+  [ { id: 'out', l: '标准输出 stdout', s: '交给下一个程序', tone: 'data' }, { id: 'err', l: '标准错误 stderr', s: '警告与报错', tone: 'bad' }, { id: 'rc', l: '退出码 return code', s: '0 = 成功', tone: 'ok' }, { id: 'fs', l: '文件副作用', s: '写文件、删文件', tone: 'neutral' } ]
+], edges: [ ['arg', 'p'], ['in', 'p'], ['env', 'p'], ['sig', 'p', '', 'warn', { dash: '4 3' }], ['p', 'out'], ['p', 'err', '', 'bad'], ['p', 'rc', '', 'ok'], ['p', 'fs'] ] });
+</script><figcaption>本讲的骨架。左边 4 种输入，右边 4 种输出。文件副作用出自讲义“返回码”一节的开头</figcaption></figure>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>自己写脚本时，报错常被随手 echo 到 stdout。下游程序会把报错当成数据接着处理。报错要写进 stderr，写法是 <code>echo "出错了" &gt;&amp;2</code>。上面的实测里，oops 就没进管道。失败时还要 <code>exit 1</code>，调用方才知道出了事。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s2" data-nav="参数与 flag" data-t="2:37">参数只是一串字符串，怎么解释归程序 <span class="ts">2:37</span></h2>
+<p class="lead">shell 把命令行切成一串字符串，原样交给程序。哪个算选项、哪个算文件名，由程序自己说了算。</p>
+<div class="code term"><div class="cap">bash · 本机实测（args.py 只有一行 print(sys.argv)）</div><pre><span class="p">$ </span><span class="cmd">python args.py -l project1</span>   <span class="cm"># -l 对 shell 来说只是个普通字符串</span>
+<span class="o">['args.py', '-l', 'project1']</span></pre></div>
+<p class="like"><b>打个比方</b>shell 像快递分拣员。它只按空格把包裹分好，一件件递进去。包裹里是衣服还是书，由收件的程序自己拆开看。</p>
+<p>所以 <code>ls -l folder/</code> 就是用参数 <code>['-l', 'folder/']</code> 运行 <code>/bin/ls</code>。讲师写了个只打印 <code>sys.argv</code> 的 Python 脚本，验证了这一点。在 shell 脚本里，用特殊变量取参数：</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>写法</th><th>含义</th></tr>
+<tr><td><code>$1</code> … <code>$9</code></td><td>第 1 到第 9 个参数</td></tr>
+<tr><td><code>$@</code></td><td>全部参数。写成 <code>"$@"</code> 时，每个参数各自完整</td></tr>
+<tr><td><code>$#</code></td><td>参数个数</td></tr>
+<tr><td><code>$0</code></td><td>脚本自己的名字</td></tr>
+</table></div>
+<div class="code term"><div class="cap">bash · 本机实测（p.sh 打印上面几个变量）</div><pre><span class="p">$ </span><span class="cmd">bash p.sh -l "my folder" x</span>   <span class="cm"># 引号让 my folder 保持为一个参数</span>
+<span class="o">$0=p.sh $1=-l $2=my folder $#=3
+arg: [-l]
+arg: [my folder]
+arg: [x]</span></pre></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>脚本把参数往下传时，最常见的错是 <code>$@</code> 没加引号。它会把 my folder 重新切成两个。写成 <code>"$@"</code>，每个参数才原样保持：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">set -- -l "my folder"; for a in $@; do echo "[$a]"; done</span>     <span class="cm"># set -- 设定位置参数。没加引号</span>
+<span class="o">[-l]
+[my]
+[folder]</span>
+<span class="p">$ </span><span class="cmd">set -- -l "my folder"; for a in "$@"; do echo "[$a]"; done</span>   <span class="cm"># 加了引号，还是 2 个参数</span>
+<span class="o">[-l]
+[my folder]</span></pre></div></div>
+<h3 id="s2b">flag 是程序的约定，不是 shell 的语法</h3>
+<p class="lead"><code>-a</code>、<code>--all</code> 这些写法，shell 一概不管。是 <code>ls</code> 自己解析参数，才认得它们。</p>
+<div class="code term"><div class="cap">bash · 本机实测（目录里有隐藏文件 .a 和 main.py）</div><pre><span class="p">$ </span><span class="cmd">ls</span>                   <span class="cm"># 默认不显示 . 开头的文件</span>
+<span class="o">main.py</span>
+<span class="p">$ </span><span class="cmd">ls -a | tr '\n' ' '</span>  <span class="cm"># -a：隐藏文件也列出来</span>
+<span class="o">. .. .a main.py</span>
+<span class="p">$ </span><span class="cmd">diff &lt;(ls -l -a) &lt;(ls -la) &amp;&amp; diff &lt;(ls -la) &lt;(ls -al) &amp;&amp; diff &lt;(ls -a) &lt;(ls --all) &amp;&amp; echo "all same"</span>   <span class="cm"># 合并、换序、长短写法，结果全一样</span>
+<span class="o">all same</span></pre></div>
+<p class="like"><b>打个比方</b>flag 像点菜时说的“少辣、去葱”。服务员 shell 只管把话传进后厨。听不听得懂，看厨师自己。</p>
+<ul class="keys">
+<li>以 <code>-</code> 或 <code>--</code> 开头的参数叫 <strong>flag</strong>，也就是选项。它通常可选，用来改程序的默认行为。</li>
+<li>单横线后面一般跟一个字母，比如 <code>-a</code>。双横线跟长名字，比如 <code>--all</code>。同一个选项常常两种写法都有，<code>ls -a</code> 就等于 <code>ls --all</code>。</li>
+<li>单字母 flag 能合并，顺序也无所谓。<code>ls -l -a</code>、<code>ls -la</code>、<code>ls -al</code> 是一回事。</li>
+<li>几乎人人都支持 <code>--help</code>、<code>--verbose</code> 和 <code>--version</code>。<code>-a</code> 常表示 all，<code>-h</code> 常表示 help。</li>
+</ul>
+<div class="callout warn"><div class="ct">关键点（视频 5:09）</div><p>这些便利<strong>不是 shell 给的</strong>，是 <code>ls</code> 自己解析参数实现的。shell 并不要求程序用 <code>-</code> 或 <code>--</code>。你完全可以写一个 <code>myprogram +myoption myfile</code>，只是会让人困惑。真写程序时，用现成的解析库，比如 Python 的 <code>argparse</code>。</p></div>
+<p>还有一个常见约定。同类参数可以给任意多个，程序对每个都做同样的事。<code>mkdir src</code> 加 <code>mkdir docs</code>，等于 <code>mkdir src docs</code>。这个语法糖单看不起眼。和 glob 一结合，就很强大。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>以为 <code>-la</code> 这种合并写法是 shell 的功能，到哪都能用。其实每个程序各有各的规矩。比如 find 的 <code>-name</code> 是单横线加长名字。所以 flag 怎么写，以 man 或 <code>--help</code> 为准。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s3" data-nav="glob 展开" data-t="7:29">glob 由 shell 先展开，程序只看到文件名 <span class="ts">7:29</span></h2>
+<p class="lead"><code>rm *.py</code> 里的 rm 收不到 <code>*.py</code>。shell 先把它换成匹配到的文件名，再去启动 rm。</p>
+<div class="code term"><div class="cap">bash · 本机实测（目录：args.py main.py utils.py notes.md run.sh）</div><pre><span class="p">$ </span><span class="cmd">python args.py *.py</span>     <span class="cm"># shell 先展开，args.py 收到 3 个文件名</span>
+<span class="o">['args.py', 'args.py', 'main.py', 'utils.py']</span>
+<span class="p">$ </span><span class="cmd">python args.py "*.py"</span>   <span class="cm"># 加了引号不展开，收到的是字面的 *.py</span>
+<span class="o">['args.py', '*.py']</span></pre></div>
+<p class="like"><b>打个比方</b>glob 像出发前点名。shell 先按名单把人叫齐，再把整队交给程序。程序看不到名单规则，只看到来了谁。</p>
+<p>想删掉当前目录里所有 .py 文件，不递归。用上一讲的东西，可以写个 for 循环：<code>for file in $(ls | grep -P '\.py$'); do rm "$file"; done</code>。其实只要 <code>rm *.py</code>。</p>
+<p>关键在于，<strong>rm 收到的不是 <code>'*.py'</code></strong>。shell 先在当前目录里找匹配的文件。找到后替换进命令行，再去调用程序。目录里有 main.py 和 utils.py，rm 收到的就是 <code>['main.py', 'utils.py']</code>。讲师用打印 argv 的脚本验证了这一点（<span class="ts">8:07</span>）。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>glob</th><th>匹配</th><th>讲义例子 → 展开结果</th></tr>
+<tr><td><code>*</code></td><td>零个或多个任意字符</td><td><code>rm *.py</code> → <code>rm main.py utils.py</code></td></tr>
+<tr><td><code>?</code></td><td>恰好一个任意字符</td><td>见第 1 讲练习 3</td></tr>
+<tr><td><code>{a,b}</code></td><td>把逗号隔开的几项，展开成多个参数</td><td><code>touch folder/{a,b,c}.py</code> → <code>touch folder/a.py folder/b.py folder/c.py</code><br><code>convert image.{png,jpg}</code> → <code>convert image.png image.jpg</code></td></tr>
+<tr><td>组合</td><td>先展开花括号，再匹配通配符</td><td><code>mv *{.py,.sh} folder</code>：移动所有 .py 和 .sh</td></tr>
+</table></div>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">echo folder/{a,b,c}.py</span>            <span class="cm"># 花括号不看磁盘，直接生成 3 个词</span>
+<span class="o">folder/a.py folder/b.py folder/c.py</span>
+<span class="p">$ </span><span class="cmd">echo *{.py,.sh}</span>                   <span class="cm"># 先变成 *.py *.sh，再各自去匹配</span>
+<span class="o">args.py main.py utils.py run.sh</span>
+<span class="p">$ </span><span class="cmd">shopt -s globstar; echo **/*.py</span>   <span class="cm"># ** 能跨任意层子目录</span>
+<span class="o">args.py main.py sub/deep/y.py sub/x.py utils.py</span></pre></div>
+<div class="callout tip"><div class="ct">递归通配 **</div><p>讲师用的 zsh 默认支持 <code>**</code>。它匹配任意层子目录（<span class="ts">9:50</span>）。所以 <code>rm **/*.py</code> 会递归删除。bash 也支持，但要先 <code>shopt -s globstar</code>。这一句是补充，非视频内容，上面已实测。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>文件名以 <code>-</code> 开头时，glob 会展开出一个“选项”。下面的目录里有个文件就叫 <code>-l</code>。<code>ls *</code> 展开成了 <code>ls -l a.txt</code>，输出成了长格式。换成 <code>rm *</code>，碰上叫 <code>-rf</code> 的文件就危险了。写成 <code>ls -- *</code> 或 <code>rm ./*</code> 才稳。练习 1 有完整实测。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">touch -- -l a.txt</span>   <span class="cm"># -- 之后不当选项，才建得出叫 -l 的文件</span>
+<span class="p">$ </span><span class="cmd">echo *</span>              <span class="cm"># 先看 glob 展开成了什么</span>
+<span class="o">-l a.txt</span>
+<span class="p">$ </span><span class="cmd">ls *</span>                <span class="cm"># 等于 ls -l a.txt</span>
+<span class="o">-rw-r--r-- 1 lrhto 197610 0 Nov 11 01:00 a.txt</span>
+<span class="p">$ </span><span class="cmd">ls -- *</span>             <span class="cm"># -- 之后全当文件名</span>
+<span class="o">-l
+a.txt</span></pre></div></div>
+<p>下面的演示画了 glob 展开、花括号展开和 <code>--</code> 的作用。argv 都是本机真跑打印的。</p>
+<div data-vz="ch02-glob"></div>
+
+<!-- ============================================================ -->
+<h2 id="s4" data-nav="三条流与管道" data-t="10:26">管道上的程序是同时启动的 <span class="ts">10:26</span></h2>
+<p class="lead">shell 不会等 cat 跑完再启动 grep。管道上的程序一起启动。上游一产生数据，下游马上接着处理。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">yes | head -3</span>   <span class="cm"># yes 会无限输出 y。要是得等它跑完，这行永远不会结束</span>
+<span class="o">y
+y
+y</span></pre></div>
+<p class="like"><b>打个比方</b>管道像流水线上的传送带。上一个工位做好一件就放上去，下一个工位马上接手。没人等上游把一整天的活干完。</p>
+<p>执行 <code>cat myfile | grep -P '\d+' | uniq -c</code> 时，<strong>三个程序是同时运行的</strong>。shell 把它们一起启动。cat 的输出接到 grep 的输入。grep 的输出再接到 uniq 的输入（<span class="ts">11:06</span>）。讲师写了个慢慢吐数字的 Python 脚本。接上 grep 一跑，两边并行干活。</p>
+<p>讲义用 sleep 证明，所有进程立刻就启动了。注意 Git Bash 的 ps 只显示可执行文件的路径：</p>
+<div class="code term"><div class="cap">bash · 本机实测（numbers.txt 每行一个：1 12 3 3 x 7）</div><pre><span class="p">$ </span><span class="cmd">(sleep 2 &amp;&amp; cat numbers.txt) | grep -P '^\d$' | sort | uniq &amp;</span>
+<span class="p">$ </span><span class="cmd">sleep 0.5; ps | grep -E '(sleep|cat|grep|sort|uniq)' | grep -v -- '-E'</span>   <span class="cm"># 0.5 秒后看看谁在跑</span>
+<span class="o">     5508    5503    5503      29360  ?         197610 16:28:43 /usr/bin/sort
+     5506    5503    5503      40816  ?         197610 16:28:43 /usr/bin/grep
+     5509    5503    5503      37052  ?         197610 16:28:43 /usr/bin/uniq
+     5481    3788    3788      30080  ?         197610 16:28:38 /usr/bin/sleep
+     5507    5505    5503      22728  ?         197610 16:28:43 /usr/bin/sleep</span>
+<span class="p">$ </span><span class="cmd">jobs -l</span>
+<span class="o">[1]+  5505 Running                    ( sleep 2 &amp;&amp; cat numbers.txt )
+      5506                          | grep -P '^\d$'
+      5508                          | sort
+      5509                          | uniq &amp;</span>
+<span class="p">$ </span><span class="cmd">wait</span>   <span class="cm"># 2 秒后 cat 才启动，数据流过整条管道</span>
+<span class="o">1
+3
+7</span></pre></div>
+<p>第 4 行 PID 5481 的 sleep 和我们无关。它属于本机另一个进程组，PGID 是 3788。它的启动时间也早了 5 秒。我们的 4 个进程，PGID 都是 5503。</p>
+<p>sleep、grep、sort、uniq 都在，<strong>唯独没有 cat</strong>。它要等 sleep 成功结束才启动，这是 <code>&amp;&amp;</code> 的规矩。学生问，能不能让 cat 先跑？讲师答，拿掉 sleep 就会立刻执行。管道 <code>|</code> 只规定数据往哪流（<span class="ts">13:28</span>）。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>流</th><th>编号</th><th>约定</th></tr>
+<tr><td>stdin</td><td>0</td><td>大多数程序从这里读输入，用管道时自动接好。很多程序把文件名 <code>-</code> 当成读 stdin。<code>echo "hello" | grep "hello" -</code> 和不写 <code>-</code> 等价。这里的 <code>-</code> 不是 flag</td></tr>
+<tr><td>stdout</td><td>1</td><td>正常输出。<strong>管道传的就是它</strong></td></tr>
+<tr><td>stderr</td><td>2</td><td>警告和错误。下一个程序不会把它当数据</td></tr>
+</table></div>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">ls /nonexistent | grep "pattern"</span>   <span class="cm"># 报错照样打在终端上</span>
+<span class="e">ls: cannot access '/nonexistent': No such file or directory</span>
+<span class="p">$ </span><span class="cmd">ls /nonexistent 2&gt;/dev/null</span>     <span class="cm"># 没有任何输出：stderr 被扔进 /dev/null</span></pre></div>
+<p>第一条的报错照样出现在终端上，因为 stderr 根本没进管道。<code>/dev/null</code> 是个特殊文件，写进去的东西直接消失（<span class="ts">16:05</span>）。重定向的写法速查如下：</p>
+<div class="code"><div class="cap">讲义例子（注释是笔记加的）</div><pre>echo "hello" &gt; output.txt        <span class="cm"># stdout 覆盖写入文件</span>
+echo "world" &gt;&gt; output.txt       <span class="cm"># stdout 追加</span>
+ls foobar 2&gt; errors.txt          <span class="cm"># stderr 写入文件</span>
+ls foobar &amp;&gt; all_output.txt      <span class="cm"># stdout 和 stderr 都写入同一个文件</span>
+grep "pattern" &lt; input.txt       <span class="cm"># stdin 从文件读</span>
+cmd &gt; /dev/null 2&gt;&amp;1             <span class="cm"># 丢弃全部输出</span></pre></div>
+<div class="callout tool"><div class="ct">讲义推荐 · fzf</div><p><a href="https://github.com/junegunn/fzf" target="_blank" rel="noopener">fzf</a> 是个模糊查找器，很能体现 Unix 哲学。它从 stdin 读进很多行，给你一个交互界面来筛选，比如 <code>ls | fzf</code>。后面“定制 shell”一节，会看到它接管 <kbd>Ctrl</kbd>+<kbd>R</kbd>。本机没装，未实测。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>想在报错里 grep 关键词，结果一行也搜不到。因为报错走 stderr，管道只接 stdout。先用 <code>2&gt;&amp;1</code> 把 stderr 并进 stdout，再进管道：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">ls /nonexistent | grep -c "No such"</span>        <span class="cm"># 报错没进管道，grep 数到 0</span>
+<span class="e">ls: cannot access '/nonexistent': No such file or directory</span>
+<span class="o">0</span>
+<span class="p">$ </span><span class="cmd">ls /nonexistent 2&gt;&amp;1 | grep -c "No such"</span>   <span class="cm"># 并进 stdout 之后，数到 1</span>
+<span class="o">1</span></pre></div></div>
+<p>下面的演示画出三件事。进程同时启动，cat 迟到，stderr 绕过管道。</p>
+<div data-vz="ch02-pipe"></div>
+
+<!-- ============================================================ -->
+<h2 id="s5" data-nav="变量与环境变量" data-t="16:19">等号两边不能有空格，变量全是字符串 <span class="ts">16:19</span></h2>
+<p class="lead"><code>foo=bar</code> 是赋值。<code>foo = bar</code> 却是运行一个叫 foo 的程序。shell 见空格就切参数，赋值也不例外。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">bash -c 'foo = bar'</span>           <span class="cm"># 切成 3 个词，foo 被当成程序名</span>
+<span class="e">bash: line 1: foo: command not found</span>
+<span class="p">$ </span><span class="cmd">foo=bar; echo "$foo" '$foo'</span>   <span class="cm"># 双引号展开变量，单引号原样输出</span>
+<span class="o">bar $foo</span></pre></div>
+<p class="like"><b>打个比方</b>shell 读命令像念电报，见空格就断句。<code>foo = bar</code> 在它眼里是三个词，和 <code>ls -l x</code> 没区别。第一个词当然就是程序名。</p>
+<ul class="keys">
+<li>shell 变量<strong>没有类型，全是字符串</strong>。</li>
+<li>单双引号不能互换。<code>'…'</code> 是字面量。它不展开变量，不做命令替换，也不处理转义。<code>"…"</code> 这些都会做。</li>
+<li><strong>命令替换</strong>：<code>files=$(ls)</code> 把 ls 的 stdout 存进变量，换行也一起存。所以 <code>echo "$files" | grep README</code> 照样逐行工作。</li>
+<li><strong>进程替换</strong>（讲义）：<code>&lt;( CMD )</code> 先运行 CMD。它把输出放进一个临时文件。再把 <code>&lt;( )</code> 换成这个文件名。它适合只收文件参数、不读 stdin 的命令，比如 <code>diff &lt;(ls src) &lt;(ls docs)</code>。</li>
+</ul>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">files=$(ls); echo "$files" | grep ".py"</span>   <span class="cm"># 加了引号，换行还在，grep 能逐行挑</span>
+<span class="o">a.py
+b.py</span>
+<span class="p">$ </span><span class="cmd">echo $files</span>          <span class="cm"># 不加引号：换行被当作分隔符，压成一行</span>
+<span class="o">README.md a.py b.py numbers.txt</span>
+<span class="p">$ </span><span class="cmd">diff &lt;(ls src) &lt;(ls docs)</span>   <span class="cm"># 两个 &lt;( ) 各变成一个文件名，交给 diff</span>
+<span class="o">2c2
+&lt; b
+---
+&gt; c</span></pre></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>变量不加引号，是最常见的坑。上面 <code>echo $files</code> 就把多行压成了一行。文件名里有空格时，还会被拆成好几个参数。所以变量一律写成 <code>"$var"</code>。</p></div>
+<p>命令替换变成字符串，进程替换变成文件名。两者的区别看下面的演示：</p>
+<div data-vz="ch02-subst"></div>
+
+<h3 id="s5b">只有 export 过的变量，才会传给子进程</h3>
+<p class="lead">shell 启动一个程序时，会把一组变量拷贝给它。这组变量就是<strong>环境变量</strong>。没 export 的变量只留在当前 shell，子进程看不到。</p>
+<p class="like"><b>打个比方</b>export 像在便条上盖个“随入职包发放”的章。以后每来一个新员工，都复印一份当时的便条给他。没盖章的便条只贴在你自己桌上。</p>
+<p><code>printenv</code> 可以列出当前环境。讲师用 <code>DEBUG</code> 演示了三种情况（<span class="ts">17:57</span>、<span class="ts">20:09</span>）：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">DEBUG=1</span>   <span class="cm"># 只是本地 shell 变量</span>
+<span class="p">$ </span><span class="cmd">bash -c 'echo "child sees DEBUG=[$DEBUG]"'</span>   <span class="cm"># 子进程看不到</span>
+<span class="o">child sees DEBUG=[]</span>
+<span class="p">$ </span><span class="cmd">DEBUG=2 bash -c 'echo "prefix: child sees DEBUG=[$DEBUG]"'</span>   <span class="cm"># 写在命令前，只给这一条命令</span>
+<span class="o">prefix: child sees DEBUG=[2]</span>
+<span class="p">$ </span><span class="cmd">echo "parent DEBUG=[$DEBUG]"</span>   <span class="cm"># 父 shell 里还是 1</span>
+<span class="o">parent DEBUG=[1]</span>
+<span class="p">$ </span><span class="cmd">export DEBUG; bash -c 'echo "after export: child sees DEBUG=[$DEBUG]"'</span>
+<span class="o">after export: child sees DEBUG=[1]</span>
+<span class="p">$ </span><span class="cmd">DEBUG=3; bash -c 'echo "modified after export: child sees DEBUG=[$DEBUG]"'</span>   <span class="cm"># export 过再改值，新子进程看到新值</span>
+<span class="o">modified after export: child sees DEBUG=[3]</span>
+<span class="p">$ </span><span class="cmd">unset DEBUG; bash -c 'echo "after unset: child sees DEBUG=[$DEBUG]"'</span>
+<span class="o">after unset: child sees DEBUG=[]</span></pre></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>写法</th><th>当前 shell</th><th>子进程</th></tr>
+<tr><td><code>DEBUG=1</code></td><td>有</td><td><strong>没有</strong>。它只是本地 shell 变量</td></tr>
+<tr><td><code>DEBUG=2 cmd</code></td><td>不变</td><td>只有这一次的 cmd 看到 2</td></tr>
+<tr><td><code>export DEBUG=1</code></td><td>有</td><td>之后启动的子进程都有。之后再改值，子进程也看到新值。学生提问见 <span class="ts">23:25</span>，本机实测见上</td></tr>
+<tr><td><code>unset DEBUG</code></td><td>删除</td><td>删除</td></tr>
+</table></div>
+<p><code>bash -c '…'</code> 是什么？它启动一个子 bash，执行右边这段字符串。这是创建子 shell 的一种办法（<span class="ts">20:44</span>）。环境变量按惯例全大写，比如 <code>HOME</code>、<code>PATH</code>、<code>DEBUG</code>。这样好和小写的本地变量区分，但这只是约定。</p>
+<div class="grid2">
+  <div class="mini"><h4>为什么要有环境变量</h4><p>它让很多程序悄悄改变行为。系统给每个用户设好 <code>$HOME</code>。程序想存配置，直接读它就行。不用每次都写 <code>--home /home/alice</code>。</p></div>
+  <div class="mini"><h4>TZ 时区</h4><p><code>TZ=Asia/Tokyo date</code> 打印东京时间。之后 <code>echo $TZ</code> 是空的，因为 TZ 只给了那一条命令。很多程序都要知道时区，用环境变量最省事。</p></div>
+</div>
+<div class="callout warn"><div class="ct">本机实测差异：Git Bash 没有时区数据库</div>
+<div class="code term"><div class="cap">bash · 本机实测（本机时区为 UTC）</div><pre><span class="p">$ </span><span class="cmd">TZ=Asia/Tokyo date +'%H:%M %Z'</span>   <span class="cm"># 查不到时区，悄悄退回 UTC</span>
+<span class="o">16:29 GMT</span>
+<span class="p">$ </span><span class="cmd">TZ=JST-9 date +'%H:%M %Z'</span>        <span class="cm"># POSIX 写法，不依赖时区数据库</span>
+<span class="o">01:29 JST</span></pre></div>
+<p>Git Bash 没有 <code>/usr/share/zoneinfo</code>，查不到 <code>Asia/Tokyo</code>。于是 <code>date</code> <strong>悄悄退回 UTC</strong>，还不报错。改用 POSIX 写法 <code>JST-9</code>，就不依赖时区数据库。它是名字加上与 UTC 的偏移，东区写负号。在 Linux 和 macOS 上，讲义的写法正常工作。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>在终端里写了 <code>DEBUG=1</code>，脚本里却读不到。因为脚本跑在子进程里，没 export 的变量不会拷过去。反过来也一样。脚本里 export 的变量，脚本一结束就没了，改不了你的终端。想改当前 shell，要用 <code>source</code>。</p></div>
+<p>下面的演示把父子进程的变量表画成两张卡片。看 export 前后，哪些会被拷贝过去：</p>
+<div data-vz="ch02-env"></div>
+
+<!-- ============================================================ -->
+<h2 id="s6" data-nav="返回码与 &amp;&amp; ||" data-t="21:08">成功是 0，&amp;&amp; 和 || 只看返回码 <span class="ts">21:08</span></h2>
+<p class="lead">程序结束时会交回一个数，叫返回码。0 表示一切正常，非 0 表示出了问题。<code>&amp;&amp;</code>、<code>||</code>、if、while 都只看它。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">ls &gt; /dev/null; echo $?</span>                <span class="cm"># 成功，返回 0</span>
+<span class="o">0</span>
+<span class="p">$ </span><span class="cmd">ls /nonexistent 2&gt;/dev/null; echo $?</span>   <span class="cm"># 失败，ls 返回 2</span>
+<span class="o">2</span>
+<span class="p">$ </span><span class="cmd">grep -q "pattern" file.txt &amp;&amp; echo "Pattern found"</span>   <span class="cm"># -q 不输出，只用返回码说话</span>
+<span class="o">Pattern found</span>
+<span class="p">$ </span><span class="cmd">grep -q "nope" file.txt || echo "Pattern not found"</span>   <span class="cm"># 没找到返回 1，|| 右边才跑</span>
+<span class="o">Pattern not found</span>
+<span class="p">$ </span><span class="cmd">false || echo "This will always print"</span>
+<span class="o">This will always print</span></pre></div>
+<p class="like"><b>打个比方</b>返回码像快递单上的签收栏。0 是“已签收”，别的数字是各种失败原因。后面的人只看签收栏，不拆包裹。</p>
+<p>输入有参数、stdin 和环境变量。输出除了 stdout 和 stderr，还有这个<strong>返回码</strong>（return code 或 exit code）。脚本默认返回 0。想返回非 0，用内建命令 <code>exit NUM</code>。读上一条命令的返回码，用 <code>$?</code>。</p>
+<ul class="keys">
+<li><code>&amp;&amp;</code> 和 <code>||</code> 是<strong>短路</strong>运算符，看的是返回码。<code>a &amp;&amp; b</code> 只在 a 成功时运行 b。<code>a || b</code> 只在 a 失败时运行 b。</li>
+<li><code>grep -q</code> 是 quiet，只匹配不输出。你只关心找没找到时，就用它（<span class="ts">25:40</span>）。</li>
+<li><code>true</code> 总是成功，<code>false</code> 总是失败。它们都是程序。</li>
+<li>if 和 while 也只看返回码。<code>while read line; do echo "$line"; done &lt; file.txt</code> 里，read 读到文件末尾时返回非 0，循环就结束了。</li>
+</ul>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p><code>$?</code> 只记上一条命令的返回码。中间随手插一句 echo，它就被冲掉了。要么紧跟着读，要么先存进变量：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">false; echo hi; echo $?</span>       <span class="cm"># 读到的是 echo hi 的返回码</span>
+<span class="o">hi
+0</span>
+<span class="p">$ </span><span class="cmd">false; rc=$?; echo "rc=$rc"</span>   <span class="cm"># 先存起来，再慢慢用</span>
+<span class="o">rc=1</span></pre></div></div>
+<p>下面演示的最后 3 步，预告了下一节。进程被信号杀死时，返回码是 <strong>128 加信号编号</strong>。本机实测是 130、137、143。右侧“手推过程”会逐行推导。</p>
+<div data-vz="ch02-rc"></div>
+
+<!-- ============================================================ -->
+<h2 id="s7" data-nav="信号" data-t="26:04">Ctrl-C 不是直接杀进程，而是发一个信号 <span class="ts">26:04</span></h2>
+<p class="lead">按下 <kbd>Ctrl</kbd>+<kbd>C</kbd>，前台进程会收到 SIGINT 信号。程序没处理它，就按默认动作退出。程序处理了它，就可以不退。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">bash -c 'trap "echo got INT, not stopping" INT; kill -INT $$; echo still alive'</span>   <span class="cm"># 给自己发 SIGINT，trap 接住后接着跑</span>
+<span class="o">got INT, not stopping
+still alive</span></pre></div>
+<p class="like"><b>打个比方</b>信号像有人拍你肩膀。你可以停下手里的活应付一下，再接着干。SIGKILL 不是拍肩膀，是直接把你拖走。</p>
+<p>信号（signal）是一种特殊的进程间通信，也叫<strong>软件中断</strong>。进程收到信号，先暂停手头的事去处理它。处理完，执行路线可能就变了。</p>
+<figure class="fig"><script>
+DG('seq', { actors: [ { l: '你', tone: 'neutral' }, { l: '终端 + shell', tone: 'info' }, { l: 'sleep 100', s: '前台进程', tone: 'data' } ], msgs: [
+  { f: 0, t: 1, l: '按下 Ctrl-C（显示为 ^C）', mono: false },
+  { note: '识别出这个特殊组合键', at: 1, tone: 'warn' },
+  { f: 1, t: 2, l: '发送 SIGINT', tone: 'warn' },
+  { note: '没有处理器 → 默认动作：终止', at: 2, tone: 'bad' },
+  { f: 2, t: 1, l: '进程结束，提示符回来', tone: 'ok' }
+] });
+</script><figcaption>讲义列出的这 4 步。严格说，把 Ctrl-C 变成 SIGINT 的是终端驱动 tty。讲义简化成了“shell 发送”（补充）</figcaption></figure>
+<p>程序可以<strong>自己处理</strong>信号。讲义的 Python 程序捕获 SIGINT 后，只打印一句话，并不退出。想停它，得用更凶的 SIGQUIT，按键是 <kbd>Ctrl</kbd>+<kbd>\</kbd>（<span class="ts">27:21</span>）：</p>
+<div class="code"><div class="cap">sigint.py（讲义原文）</div><pre>#!/usr/bin/env python
+import signal, time
+
+def handler(signum, time):
+    print("\nI got a SIGINT, but I am not stopping")
+
+signal.signal(signal.SIGINT, handler)
+i = 0
+while True:
+    time.sleep(.1)
+    print("\r{}".format(i), end="")
+    i += 1</pre></div>
+<div class="code term"><div class="cap">讲义原文（两次 Ctrl-C，然后 Ctrl-\）</div><pre><span class="p">$ </span><span class="cmd">python sigint.py</span>
+<span class="o">24^C
+I got a SIGINT, but I am not stopping
+26^C
+I got a SIGINT, but I am not stopping
+30^\[1]    39913 quit       python sigint.py</span></pre></div>
+<div class="callout warn"><div class="ct">本机实测差异：Windows 原生 Python 收不到 Git Bash 的 kill -INT</div>
+<p>在 Git Bash 里，对后台的 <code>python sigint.py</code> 执行 <code>kill -INT</code>。处理器<strong>没有被调用</strong>，<code>kill -QUIT</code> 也杀不掉它。原因是 Git Bash 的信号由 MSYS 运行时模拟，只对 MSYS 程序有效。Windows 原生的 python.exe 收不到。于是笔记用 bash 的 <code>trap</code> 把同样的逻辑重写成 sigint.sh，在本机真跑：</p>
+<div class="code"><div class="cap">sigint.sh（本笔记改写的 bash 版）</div><pre>#!/usr/bin/env bash
+trap 'echo; echo "I got a SIGINT, but I am not stopping"' INT
+i=0
+while true; do
+    sleep 0.1
+    printf '\r%d' "$i"
+    i=$((i + 1))
+done</pre></div>
+<p>先用 <code>set -m</code> 打开作业控制，让脚本在后台跑。两次 <code>kill -INT</code> 之后，再发 <code>kill -TERM</code>：</p>
+<div class="code term"><div class="cap">bash · 本机实测（set -m 开作业控制）</div><pre><span class="p">$ </span><span class="cmd">set -m; bash sigint.sh &gt; sig.out 2&gt;&amp;1 &amp; p=$!</span>
+<span class="p">$ </span><span class="cmd">sleep 1.2; kill -INT $p; sleep 0.6; kill -INT $p; sleep 0.6; kill -TERM $p; wait $p; echo "exit=$?"</span>
+<span class="o">exit=143</span>
+<span class="p">$ </span><span class="cmd">tr '\r' '\n' &lt; sig.out | grep -c 'not stopping'</span>   <span class="cm"># 两次 SIGINT 都被接住了</span>
+<span class="o">2</span></pre></div>
+<p>注意最后用的是 SIGTERM，不是 SIGQUIT。bash 手册写明，它在任何情况下都忽略 SIGQUIT。这条是补充，非视频内容。退出码 143 等于 128 加 15，15 是 SIGTERM 的编号。手推过程见<a href="#s6">第 6 节</a>的演示。</p></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>信号</th><th>怎么发</th><th>含义（讲义）</th></tr>
+<tr><td>SIGINT (2)</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>中断，可以被捕获</td></tr>
+<tr><td>SIGQUIT (3)</td><td><kbd>Ctrl</kbd>+<kbd>\</kbd></td><td>更强硬：“你真该退出了”</td></tr>
+<tr><td>SIGTERM (15)</td><td><code>kill -TERM &lt;PID&gt;</code>，kill 默认发它</td><td>通用的“请体面地退出”</td></tr>
+<tr><td>SIGKILL (9)</td><td><code>kill -KILL &lt;PID&gt;</code></td><td><strong>不能被捕获</strong>，立即终止。可能留下孤儿子进程</td></tr>
+<tr><td>SIGTSTP / SIGSTOP</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <code>kill -STOP</code></td><td>暂停。TSTP 是终端版的 STOP</td></tr>
+<tr><td>SIGCONT</td><td><code>fg</code> / <code>bg</code> / <code>kill -CONT</code></td><td>继续运行</td></tr>
+<tr><td>SIGHUP (1)</td><td>关闭终端、断开 SSH</td><td>“挂断”，默认终止进程</td></tr>
+</table></div>
+<p>完整列表看 <code>kill -l</code> 或 <a href="https://www.man7.org/linux/man-pages/man7/signal.7.html" target="_blank" rel="noopener">man signal</a>。讲师说，实际只会用到其中几个（<span class="ts">27:59</span>）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>以为 Ctrl+C 一定能停下程序。程序可以捕获 SIGINT 不退出，上面的 sigint.py 就是。这时试试 Ctrl+\ 发 SIGQUIT，或者另开终端用 kill。<code>kill -9</code> 是最后手段，它不给程序任何清理的机会。</p></div>
+<div data-vz="ch02-sigint"></div>
+
+<h3 id="s7b">trap 兜得住 TERM，兜不住 KILL <span class="ts">27:59</span></h3>
+<p class="lead">内建命令 <code>trap</code> 给信号挂一个处理函数。脚本被 Ctrl+C 或 kill 打断时，也能先把临时文件删掉。但 SIGKILL 谁也接不住。</p>
+<div class="code"><div class="cap">讲义脚本（注释译成中文）</div><pre>#!/usr/bin/env bash
+cleanup() {
+    echo "Cleaning up temporary files..."
+    rm -f /tmp/mytemp.*
+}
+trap cleanup EXIT  <span class="cm"># 脚本退出时运行 cleanup</span>
+trap cleanup SIGINT SIGTERM  <span class="cm"># 按 Ctrl-C 或被 kill 时也运行</span></pre></div>
+<p class="like"><b>打个比方</b>trap 像在门口贴一张“离开前关灯”。正常下班、被人叫走，都会看到它。SIGKILL 是直接断电，提示贴了也没人看。</p>
+<p>本机按同样结构写了 trapdemo.sh。临时文件放在当前目录，方便观察。然后分别用 TERM 和 KILL 打断它：</p>
+<div class="code"><div class="cap">trapdemo.sh（本笔记示例）</div><pre>#!/usr/bin/env bash
+cleanup() {
+    echo "Cleaning up temporary files..."
+    rm -f mytemp.*
+}
+trap cleanup EXIT
+trap 'echo "got SIGTERM"; exit 143' TERM
+touch mytemp.1 mytemp.2
+echo "created: $(echo mytemp.*)"
+sleep 30 &amp;
+wait $!</pre></div>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">bash trapdemo.sh &amp; P=$!; sleep 1; kill -TERM $P; wait $P; echo "exit=$? left: $(ls mytemp.* 2&gt;&amp;1)"</span>   <span class="cm"># TERM：接住了，清理跑了</span>
+<span class="o">created: mytemp.1 mytemp.2
+got SIGTERM
+Cleaning up temporary files...
+exit=143 left: ls: cannot access 'mytemp.*': No such file or directory</span>
+<span class="p">$ </span><span class="cmd">bash trapdemo.sh &amp; P=$!; sleep 1; kill -KILL $P; wait $P; echo "exit=$? left: $(echo mytemp.*)"</span>   <span class="cm"># KILL：清理没跑，文件留下</span>
+<span class="o">created: mytemp.1 mytemp.2
+bash: line 1:  9782 Killed                     bash trapdemo.sh
+exit=137 left: mytemp.1 mytemp.2</span></pre></div>
+<p>SIGKILL 无法被捕获。清理没跑，临时文件留下了。脚本里的 <code>sleep 30</code> 子进程成了孤儿。本机 <code>/proc/PID/ppid</code> 显示，它的父进程变成了 1，事后手动清掉了。这正是讲义说的“坏副作用”。</p>
+<p>细看还会发现一件事。TERM 那次虽然删了文件，<code>sleep 30</code> 也成了孤儿。因为 cleanup 只删文件，没管子进程。更完整的写法，是在 cleanup 里加一句 <code>kill $(jobs -p) 2&gt;/dev/null</code>（补充）。</p>
+<p>学生问，被打断时程序会不会清理缓存？讲师答，取决于程序有没有处理信号。不处理的话，可能留下写了一半的文件（<span class="ts">31:36</span>）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑：后台任务收不到 SIGINT（补充）</div>
+<p>本机第一次实验，用 <code>kill -INT</code> 去打断 <code>bash trapdemo.sh &amp;</code>。结果 trap 根本没触发，脚本照睡 30 秒，退出码是 0。原因是没开作业控制时，bash 让<strong>异步命令忽略 SIGINT 和 SIGQUIT</strong>。而进入 shell 时就被忽略的信号，没法再 trap。交互式终端里按 Ctrl+C 不受影响。在脚本里测试，就加 <code>set -m</code>。上面的 sigint.sh 就是这么做的。</p></div>
+<div data-vz="ch02-trap"></div>
+
+<!-- ============================================================ -->
+<h2 id="s8" data-nav="作业控制" data-t="28:42">Ctrl-Z 是暂停，不是退出 <span class="ts">28:42</span></h2>
+<p class="lead">按 <kbd>Ctrl</kbd>+<kbd>Z</kbd>，进程收到 SIGTSTP 被挂起，但还活着。之后用 <code>fg</code> 放回前台，或用 <code>bg</code> 放到后台接着跑。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>sleep 1000    <span class="cm"># 前台跑着，终端被占住</span>
+^Z            <span class="cm"># 按 Ctrl+Z：进程挂起，不是结束</span>
+bg            <span class="cm"># 让它在后台接着跑，提示符回来了</span>
+jobs          <span class="cm"># 能看到它还在 Running</span>
+kill %1       <span class="cm"># 不想要了，按作业号结束它</span></pre></div>
+<p class="like"><b>打个比方</b>Ctrl+Z 像视频的暂停键，不是关掉播放器。fg 是回到大屏接着放。bg 是缩成小窗，在角落里接着放。</p>
+<p>信号不只能杀进程。SIGTSTP 的意思是 Terminal Stop。讲师现场还用 <code>kill</code> 给挂起的进程发 SIGCONT。进程就恢复运行了（<span class="ts">29:49</span>）。可见 <code>kill</code> 不只会“杀”，它能发任何信号。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>工具</th><th>作用</th></tr>
+<tr><td><code>cmd &amp;</code></td><td>后台运行，立刻拿回提示符。但它照样往终端打字，嫌吵就重定向</td></tr>
+<tr><td><code>jobs</code></td><td>列出当前终端会话里没结束的作业</td></tr>
+<tr><td><code>%1</code>、<code>$!</code></td><td><code>%1</code> 指作业 1，<code>$!</code> 是最近一个后台作业的 PID。也可以直接用 PID，用 <a href="https://www.man7.org/linux/man-pages/man1/pgrep.1.html" target="_blank" rel="noopener">pgrep</a> 查</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> 然后 <code>bg</code></td><td>把正在前台跑的程序转到后台</td></tr>
+<tr><td><code>nohup cmd &amp;</code> / <code>disown</code></td><td>后台进程仍是终端的子进程。关终端时，它会收到 <strong>SIGHUP</strong> 而死。nohup 让命令忽略 SIGHUP。disown 用于已经启动的进程</td></tr>
+</table></div>
+<p>本机在 bash -c 脚本里复现了讲义的示例会话。先用 set -m 打开作业控制。Ctrl+Z 用 <code>kill -TSTP %1</code> 代替。每步之间 sleep 0.5 等状态更新，下面省略了。</p>
+<div class="code term"><div class="cap">bash · 本机实测：复现讲义的示例会话</div><pre><span class="p">$ </span><span class="cmd">set -m; sleep 1000 &amp;</span>
+<span class="p">$ </span><span class="cmd">kill -TSTP %1; jobs -l</span>   <span class="cm"># 代替 Ctrl+Z</span>
+<span class="o">[1]+  9670 Stopped                    sleep 1000</span>
+<span class="p">$ </span><span class="cmd">bg %1; jobs -l</span>           <span class="cm"># 发 SIGCONT，在后台接着跑</span>
+<span class="o">[1]+ sleep 1000 &amp;
+[1]+  9670 Running                    sleep 1000 &amp;</span>
+<span class="p">$ </span><span class="cmd">nohup sleep 2000 &gt; /dev/null 2&gt;&amp;1 &amp;</span>
+<span class="p">$ </span><span class="cmd">jobs</span>
+<span class="o">[1]-  Running                    sleep 1000 &amp;
+[2]+  Running                    nohup sleep 2000 &gt; /dev/null 2&gt;&amp;1 &amp;</span>
+<span class="p">$ </span><span class="cmd">kill -HUP %1</span>             <span class="cm"># 模拟关终端，sleep 1000 被挂断</span>
+<span class="p">$ </span><span class="cmd">kill -HUP %2; jobs</span>     <span class="cm"># nohup 挡住了 SIGHUP</span>
+<span class="o">/usr/bin/bash: line 7:  9670 Hangup                     sleep 1000
+[2]+  Running                    nohup sleep 2000 &gt; /dev/null 2&gt;&amp;1 &amp;</span>
+<span class="p">$ </span><span class="cmd">kill %2; jobs</span>            <span class="cm"># kill 默认发 SIGTERM，nohup 挡不住它</span>
+<span class="o">[2]+  Terminated                 nohup sleep 2000 &gt; /dev/null 2&gt;&amp;1</span></pre></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）：Git Bash 里 jobs 的状态有时“过时”</div>
+<p>本机实测，<code>kill -CONT</code> 之后进程恢复运行。<code>ps</code> 第一列的 S 标记也消失了。可 <code>jobs</code> 仍显示 Stopped。bash 在这里收不到“已继续”的通知。用 <code>bg</code> 或 <code>fg</code> 恢复，状态就是对的。练习 6 是 Ctrl+Z 加 bg 加 pkill，实测见练习页。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>在终端或 SSH 里敲 <code>long_job &amp;</code>，以为放到后台就安全了。其实后台进程还是终端的子进程。终端一关，它收到 SIGHUP，跟着一起死。要么 <code>nohup long_job &amp;</code>，要么对已经启动的用 <code>disown</code>。最省心的是放进 tmux 里跑。</p></div>
+<p>下面的演示把讲义的会话画成一张状态机。作业在 4 种状态之间移动，每一步都是一个信号推着走。</p>
+<div data-vz="ch02-jobs"></div>
+
+<!-- ============================================================ -->
+<h2 id="s9" data-nav="SSH 与密钥" data-t="31:59">私钥等于密码，只有公钥能给别人 <span class="ts">31:59</span></h2>
+<p class="lead">SSH 用一对密钥证明你是你。私钥留在自己电脑上，公钥放进服务器的 <code>~/.ssh/authorized_keys</code>。登录时只证明你有私钥，私钥本身不出门。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>ssh-keygen -a 100 -t ed25519 -f ~/.ssh/id_ed25519   <span class="cm"># 生成一对钥匙，记得设口令</span>
+ssh-copy-id -i .ssh/id_ed25519 alice@remote          <span class="cm"># 只是把公钥追加进对方的 authorized_keys</span>
+ssh alice@remote                                     <span class="cm"># 之后改用密钥登录，不用再输服务器密码</span></pre></div>
+<p class="like"><b>打个比方</b>公钥像锁芯，可以随便装到别人家的门上。私钥是唯一那把钥匙，丢了谁都能开门。口令是给钥匙再套一个密码盒。</p>
+<p>程序员越来越多地在远程服务器上干活。最常用的工具是 <strong>SSH</strong>，全称 Secure Shell。它在远端给你一个熟悉的 shell：</p>
+<div class="code term"><div class="cap">讲义原文</div><pre><span class="p">$ </span><span class="cmd">ssh alice@server.mit.edu</span></pre></div>
+<p>这条命令以用户 alice 登录 server.mit.edu。讲师演示时写的是 IP 地址。<code>server.mit.edu</code> 这种名字，最后也会被 DNS 翻译成一个 IP（<span class="ts">32:09</span>）。默认每次都要输密码，很烦。所以要用 <strong>SSH 密钥</strong>。</p>
+<ul class="keys">
+<li><strong>公钥密码学</strong>：一对私钥加公钥。客户端能向服务器证明“我有私钥”，却<strong>不泄露私钥</strong>。密钥认证更方便，也更安全，应该优先用。</li>
+<li>私钥常见的是 <code>~/.ssh/id_rsa</code>，较新的是 <code>~/.ssh/id_ed25519</code>。它<strong>等同于你的密码</strong>。永远不要分享，也别复制粘贴到任何地方。讲师现场展示，是因为那是临时密钥。公钥是 <code>.pub</code> 文件，可以给别人。GitHub 就用它来验证你。</li>
+<li>生成用 <code>ssh-keygen -a 100 -t ed25519 -f ~/.ssh/id_ed25519</code>。想检查有没有口令、顺便验证私钥，用 <code>ssh-keygen -y -f /path/to/key</code>。</li>
+<li>服务器查 <code>~/.ssh/authorized_keys</code>，决定放谁进来。把公钥拷过去，用 <code>ssh-copy-id -i .ssh/id_ed25519 alice@remote</code>。也可以手动写 <code>cat .ssh/id_ed25519.pub | ssh alice@remote 'cat &gt;&gt; ~/.ssh/authorized_keys'</code>。讲师强调，ssh-copy-id 这个“魔法命令”<strong>只做一件事</strong>。它把一行字符串追加到 authorized_keys 里（<span class="ts">34:43</span>）。</li>
+</ul>
+<div class="code term"><div class="cap">bash · 本机实测（在沙箱 HOME 里生成，指纹每次不同）</div><pre><span class="p">$ </span><span class="cmd">ssh-keygen -a 100 -t ed25519 -f ~/.ssh/id_ed25519 -N 'correct horse battery' -C 'student@laptop'</span>   <span class="cm"># -N 设口令，-C 写注释</span>
+<span class="o">Generating public/private ed25519 key pair.
+…
+The key fingerprint is:
+SHA256:knqwBVI1jDcw1+17wKXaciXSyfEU5Dr4egdpIGJHg54 student@laptop</span>
+<span class="p">$ </span><span class="cmd">ssh-keygen -y -f ~/.ssh/id_ed25519 -P 'wrong pass'</span>   <span class="cm"># 口令不对，连本机都解不开私钥</span>
+<span class="e">Load key "…/.ssh/id_ed25519": incorrect passphrase supplied to decrypt private key</span></pre></div>
+<div class="callout tip"><div class="ct">学生提问：密钥要不要加口令？（视频 40:29）</div>
+<p>讲师答：“一定要加。”不加口令，就等于把服务器密码明文放在文件系统里。任何能读你文件的程序都能拿走它。加了口令，私钥就被口令加密，每次用都要先解密。讲义推荐配合 <a href="https://www.ssh.com/ssh/agent" target="_blank" rel="noopener">ssh-agent</a>，免得反复输口令。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>最要命的是把私钥当公钥发出去。要给别人、要贴到 GitHub 的，永远是带 <code>.pub</code> 的那个文件。另一个坑是私钥不加口令。笔记本一丢，所有服务器的门就都开了。</p></div>
+<div data-vz="ch02-keys"></div>
+
+<!-- ============================================================ -->
+<h2 id="s10" data-nav="远程执行与传文件" data-t="35:19">引号决定管道在哪台机器上跑 <span class="ts">35:19</span></h2>
+<p class="lead">ssh 后面跟命令，就在远端执行，再把输出传回本地。没加引号时，<code>|</code> 由本地 shell 切开。加了引号，整串交给远端的 shell 去解析。</p>
+<div class="code"><div class="cap">讲义原文（注释译成中文）</div><pre><span class="cm"># 这里 ls 在远端跑，wc 在本地跑</span>
+ssh alice@server ls | wc -l
+
+<span class="cm"># 这里 ls 和 wc 都在服务器上跑</span>
+ssh alice@server 'ls | wc -l'</pre></div>
+<p class="like"><b>打个比方</b>不加引号，像打电话让同事把文件名一个个念给你。你自己在这边数。加了引号，像让同事数完，只报一个数字给你。</p>
+<p>ssh 有个常被忽略的功能。它能<strong>非交互地</strong>执行命令，还能正确处理 stdin 和 stdout。所以它能和别的命令组合。讲师说，SSH 不是魔法命令。它和几乎所有命令一样，接收输入，产生输出。</p>
+<p>区别全在<strong>引号</strong>。没引号时，本地 shell 先把整行按 <code>|</code> 切开，<code>wc -l</code> 归本地。加了引号，<code>'ls | wc -l'</code> 整体成为一个参数交给 ssh。到了远端，再由远端的 shell 去解析。本节末尾的演示画了这两条数据路径。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>传文件工具</th><th>说明</th></tr>
+<tr><td><a href="https://www.man7.org/linux/man-pages/man1/scp.1.html" target="_blank" rel="noopener">scp</a></td><td>最传统：<code>scp path/to/local_file remote_host:path/to/remote_file</code>。讲师演示了把 ignore.py 拷到服务器（<span class="ts">36:34</span>）</td></tr>
+<tr><td><a href="https://www.man7.org/linux/man-pages/man1/rsync.1.html" target="_blank" rel="noopener">rsync</a></td><td>语法和 scp 类似。它会跳过两边相同的文件。对符号链接和权限控制得更细，<code>--partial</code> 可以续传</td></tr>
+</table></div>
+<p>这些工具底层都走 SSH，所以配好的密钥直接能用。客户端配置文件 <code>~/.ssh/config</code> 用来声明主机和默认设置。scp、rsync、mosh 也都会读它：</p>
+<div class="code"><div class="cap">~/.ssh/config（讲义原文，注释译成中文）</div><pre>Host vm
+    User alice
+    HostName 172.16.174.141
+    Port 2222
+    IdentityFile ~/.ssh/id_ed25519
+
+<span class="cm"># 配置里也能用通配符</span>
+Host *.mit.edu
+    User alice</pre></div>
+<p>之后 <code>ssh vm</code> 就等于 <code>ssh -p 2222 -i ~/.ssh/id_ed25519 alice@172.16.174.141</code>。不连服务器，也能检查配置有没有生效。<code>ssh -G vm</code> 会打印解析后的最终设置，练习 19 实测过。</p>
+<div class="callout tool"><div class="ct">讲义推荐 · Mosh</div><p><a href="https://mosh.org/" target="_blank" rel="noopener">Mosh</a> 可以替代 SSH。它扛得住断线、睡眠唤醒、切换网络和高延迟链路。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p><code>ssh host ls *.txt</code> 里的 glob，会先在本地展开。本地正好有 txt 文件时，发到远端的就成了本地的文件名。下面用 echo 代替 ssh，看它会收到什么参数：</p>
+<div class="code term"><div class="cap">bash · 本机实测（当前目录有 a.txt 和 b.txt）</div><pre><span class="p">$ </span><span class="cmd">echo ssh host ls *.txt</span>       <span class="cm"># 本地的 a.txt b.txt 被塞了进去</span>
+<span class="o">ssh host ls a.txt b.txt</span>
+<span class="p">$ </span><span class="cmd">echo ssh host 'ls *.txt'</span>     <span class="cm"># 加了引号，*.txt 原样送到远端再展开</span>
+<span class="o">ssh host ls *.txt</span></pre></div></div>
+<p>下面的演示有两幕。第一幕看引号怎么决定管道在哪台机器上跑。第二幕是练习里会配的端口转发 <code>LocalForward 9999 localhost:8888</code>。看数据怎么穿过 SSH 连接。</p>
+<div data-vz="ch02-ssh"></div>
+
+<!-- ============================================================ -->
+<h2 id="s11" data-nav="tmux" data-t="37:30">tmux 让会话不再跟着网络连接一起死 <span class="ts">37:30</span></h2>
+<p class="lead">tmux 在服务器上开一个常驻的会话。SSH 断了，会话照样在跑。重新连上，<code>tmux attach</code> 就能原样接回。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意，本机没有 tmux）</div><pre>tmux new -s work    <span class="cm"># 开一个叫 work 的会话</span>
+python train.py     <span class="cm"># 在里面跑个长任务</span>
+                    <span class="cm"># 先按 Ctrl+b，松开，再按 d：分离会话，任务接着跑</span>
+tmux a -t work      <span class="cm"># 下次 SSH 上来，接回 work</span></pre></div>
+<p class="like"><b>打个比方</b>tmux 像在服务器上租了个带锁的房间。你断线离开，房间里的程序照常干活。回来开门，一切原样。</p>
+<p>讲师在服务器上跑起一个程序。这时终端被占住，别的什么都干不了。开个新终端窗口能解决，但<strong>终端复用器</strong>更灵活。它在同一个终端里开多个 shell 会话。还能把当前会话<strong>分离</strong>（detach），以后再<strong>接回</strong>（attach）。最流行的是 <a href="https://www.man7.org/linux/man-pages/man1/tmux.1.html" target="_blank" rel="noopener">tmux</a>。</p>
+<figure class="fig"><script>
+DG('tree', { noteX: 330, root: { l: 'tmux 服务器', s: '断开 SSH 也不退出', tone: 'info', c: [
+  { l: '会话 session "work"', s: 'tmux new -s work，独立的工作区', tone: 'data', c: [
+    { l: '窗口 0', s: '像浏览器标签页', tone: 'teal', c: [ { l: '窗格 0：编辑器', s: 'C-b " 上下分 / C-b % 左右分' }, { l: '窗格 1：跑程序', s: 'C-b 方向键 切换窗格' } ] },
+    { l: '窗口 1', s: 'C-b c 新建，C-b 1 切到它', tone: 'teal' } ] },
+  { l: '会话 session "1"', s: '直接 tmux 新开的会话', tone: 'data' }
+] } });
+</script><figcaption>tmux 的三层：会话 ⊃ 窗口 ⊃ 窗格（讲义）</figcaption></figure>
+<p>tmux 的快捷键是<strong>前缀式</strong>的。<code>&lt;C-b&gt; x</code> 的意思是：先按 <kbd>Ctrl</kbd>+<kbd>b</kbd>，松开，再按 x。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>层级</th><th>命令或按键（讲义）</th></tr>
+<tr><td>会话</td><td><code>tmux</code> 开新会话，<code>tmux new -s NAME</code> 带名字。<code>tmux ls</code> 列出全部。<code>&lt;C-b&gt; d</code> 分离。<code>tmux a</code> 接回最近的会话，加 <code>-t</code> 指定哪个</td></tr>
+<tr><td>窗口</td><td><code>&lt;C-b&gt; c</code> 新建，在 shell 里按 <code>&lt;C-d&gt;</code> 关闭。<code>&lt;C-b&gt; N</code> 去第 N 个。<code>&lt;C-b&gt; p</code> 和 <code>n</code> 是上一个和下一个。<code>&lt;C-b&gt; ,</code> 改名，<code>&lt;C-b&gt; w</code> 看列表</td></tr>
+<tr><td>窗格</td><td><code>&lt;C-b&gt; "</code> 水平分割，<code>&lt;C-b&gt; %</code> 垂直分割。<code>&lt;C-b&gt; 方向键</code> 移动。<code>&lt;C-b&gt; z</code> 放大或还原。<code>&lt;C-b&gt; [</code> 进入回滚，空格开始选，回车复制。<code>&lt;C-b&gt; 空格</code> 切换布局</td></tr>
+</table></div>
+<div class="callout key"><div class="ct">tmux 为什么能“断线不死”（视频 39:06）</div>
+<p>断开远程连接时，shell 察觉后会发出<strong>挂断信号 SIGHUP</strong>。还在跑的进程会被全部杀掉。tmux 拦下了这个信号，不往下传。所以重新 SSH 上去，<code>tmux attach</code>，一切都还在跑。远程会话从此不和网络连接绑在一起。也就用不着 nohup 这类技巧了。</p></div>
+<div class="callout warn"><div class="ct">本机未实测</div><p>Git Bash 没有 tmux，<code>command -v tmux</code> 没有输出。要在 Linux、macOS 或 WSL 上练。练习 9 给出了配置文件和检验标准。本节末尾的演示画了三层结构和分离、接回。还画了它和 SIGHUP 的关系。</p></div>
+<p>讲义推荐的教程：<a href="https://www.hamvocke.com/blog/a-quick-and-easy-guide-to-tmux/" target="_blank" rel="noopener">快速入门</a>、<a href="https://linuxcommand.org/lc3_adv_termmux.php" target="_blank" rel="noopener">更详细的讲解</a>。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>在 SSH 里直接跑长任务，然后合上笔记本。连接一断，任务就跟着没了。长任务一律先开 tmux 再跑。另一个坑在按键上。按完 Ctrl+b 要先松开，再按下一个键。</p></div>
+<div data-vz="ch02-tmux"></div>
+
+<!-- ============================================================ -->
+<h2 id="s12" data-nav="包管理器" data-t="41:24">缺工具先找包管理器，别急着 curl | bash <span class="ts">41:24</span></h2>
+<p class="lead">命令找不到，多半是没装。各系统都有包管理器，一条命令就能装好。</p>
+<div class="code"><div class="cap">讲义原文（注释译成中文）</div><pre><span class="cm"># ripgrep：更快的 grep，默认设置也更好用</span>
+brew install ripgrep
+<span class="cm"># fd：更快、更友好的 find</span>
+brew install fd</pre></div>
+<p class="like"><b>打个比方</b>包管理器像手机的应用商店，装、更新、卸载都有人管。<code>curl | bash</code> 像从陌生网站下个安装包，看都不看就双击。</p>
+<p>照着讲师的步骤敲 <code>tmux</code>，可能会提示找不到。有些发行版没预装它。各系统装法不同。macOS 用 <a href="https://brew.sh/" target="_blank" rel="noopener">Homebrew</a>，Ubuntu 和 Debian 用 <code>apt</code>，Fedora 用 <code>dnf</code>，Arch 用 <code>pacman</code>。第 6 讲细讲包管理。</p>
+<ul>
+<li>装完用 <code>rg</code> 代替 grep，用 <code>fd</code> 代替 find。讲师吐槽，包叫 ripgrep，命令却叫 rg。这种不一致有时很烦（<span class="ts">42:49</span>）。</li>
+<li>命令找不到时，去查 <a href="https://command-not-found.com" target="_blank" rel="noopener">command-not-found.com</a>。输入命令名，它告诉你各系统怎么装。第一反应永远是先找包管理器。</li>
+<li><a href="https://tldr.sh/" target="_blank" rel="noopener">tldr</a> 是以例子为主的简版 man，比如 <code>tldr fd</code>。</li>
+</ul>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑：curl | bash（讲义警告）</div>
+<p><code>curl -fsSL https://example.com/install.sh | bash</code> 下载完脚本就<strong>立刻执行</strong>。你跑的是一段没看过的代码。更安全的做法是先下载，读一遍，再执行：</p>
+<div class="code"><div class="cap">讲义原文（注释译成中文）</div><pre>curl -fsSL https://example.com/install.sh -o install.sh
+less install.sh  <span class="cm"># 先读一遍脚本</span>
+bash install.sh</pre></div>
+<p>有的安装器用 <code>/bin/bash -c "$(curl -fsSL https://url)"</code>，稍微安全一点。它至少保证由 bash 来解释，而不是你当前的 shell。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s13" data-nav="PATH 与配置文件" data-t="43:28">export 只管这次会话，长期生效要写进 .bashrc <span class="ts">43:28</span></h2>
+<p class="lead"><code>export PATH=…</code> 只对当前会话和它的子进程有效，关掉终端就没了。写进 <code>~/.bashrc</code>，每个新开的交互式 bash 都会重新执行一遍。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>export PATH="$PATH:path/to/append"                  <span class="cm"># 讲义原文：在末尾追加一个目录</span>
+echo 'export PATH="$PATH:$HOME/bin"' &gt;&gt; ~/.bashrc   <span class="cm"># 写进配置，以后每个新终端都生效</span>
+source ~/.bashrc                                    <span class="cm"># 不想重开终端，就在当前 shell 里执行一遍</span></pre></div>
+<p class="like"><b>打个比方</b>export 像在白板上写字，散会就擦了。写进 .bashrc，像写进每次开会必念的开场白。</p>
+<p>上一讲讲过，<code>PATH</code> 是一串放程序的目录。想加一个目录，就是普通的变量赋值。而且要 <code>export</code>，不然子进程看不到。</p>
+<p>学生问，当前所在的目录会被加进去吗？讲师答，不会。<code>cd</code> 到哪里，PATH 都不变。shell 默认不在当前目录找程序。所以运行当前目录的脚本，要写 <code>./</code>（<span class="ts">44:36</span>）。</p>
+<p>问题是，export 只对这个会话和它的子进程有效。断开重连就没了（<span class="ts">45:45</span>）。要长期生效，就写进 shell 的配置文件。下面在干净环境里实测：</p>
+<div class="code term"><div class="cap">bash · 本机实测（~/bin/myscript.sh 只打印一行）</div><pre><span class="p">$ </span><span class="cmd">myscript.sh</span>
+<span class="e">bash: line 2: myscript.sh: command not found</span>
+<span class="p">$ </span><span class="cmd">export PATH="$PATH:$HOME/bin"; myscript.sh; bash -c "myscript.sh"</span>   <span class="cm"># 子进程也找得到，因为 PATH 已 export</span>
+<span class="o">hi from myscript
+hi from myscript</span>
+<span class="cm"># 另开一个全新的会话</span>
+<span class="p">$ </span><span class="cmd">myscript.sh</span>
+<span class="e">bash: line 1: myscript.sh: command not found</span>
+<span class="cm"># 把 export 那一行写进 ~/.bashrc，再开新的交互式会话</span>
+<span class="p">$ </span><span class="cmd">myscript.sh</span>
+<span class="o">hi from myscript</span></pre></div>
+<figure class="fig"><script>
+DG('flow', { nodeH: 48, cols: [
+  [ { id: 'start', l: '启动 bash', tone: 'info' } ],
+  [ { id: 'q', l: '交互式？', shape: 'diamond', tone: 'warn', w: 130 } ],
+  [ { id: 'rc', l: '读 ~/.bashrc', s: '你打开的每个终端', tone: 'ok' }, { id: 'none', l: '不读交互配置', s: 'bash script.sh、bash -c', tone: 'neutral' } ],
+  [ { id: 'eval', l: '逐行执行', s: 'export PATH=… 生效', tone: 'data' } ]
+], edges: [ ['start', 'q'], ['q', 'rc', '是', 'ok'], ['q', 'none', '否'], ['rc', 'eval'] ] });
+</script><figcaption>视频 52:40 的说法是：交互式会话读 bashrc，非交互式不读。登录 shell 还会读 ~/.bash_profile 等文件。规则相当复杂，讲义推荐看这篇<a href="https://web.archive.org/web/20260329133158/https://blog.flowblok.id.au/2013-02/shell-startup-scripts.html" target="_blank" rel="noopener">启动脚本详解</a></figcaption></figure>
+<p>还有些变量会改 shell 的行为。比如 <strong><code>PS1</code></strong>，它决定左边的提示符长什么样（<span class="ts">47:25</span>）。讲师把它设成一个单独的符号。新开的 shell，提示符就只剩那个符号。想要好看的提示符，得用 shell 认识的转义：</p>
+<div class="code term"><div class="cap">bash · 本机实测（${PS1@P} 按提示符规则展开）</div><pre><span class="p">$ </span><span class="cmd">PS1='\w \$ '; echo "[${PS1@P}]"</span>   <span class="cm"># \w 是当前目录，\$ 是 $ 或 #</span>
+<span class="o">[~/proj $ ]</span>
+<span class="p">$ </span><span class="cmd">PS1='$ '; echo "[${PS1@P}]"</span>
+<span class="o">[$ ]</span></pre></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）</div><p><code>\w</code> 是当前目录，家目录显示成 <code>~</code>。<code>\W</code> 只显示最后一级。<code>\$</code> 对普通用户显示 $，对 root 显示 #。<code>\A</code> 是 24 小时制的时间。详见 <code>man bash</code> 的 PROMPTING 一节。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>改完 .bashrc，当前终端没反应。它只在新开交互式 bash 时才读。要么开个新终端，要么 <code>source ~/.bashrc</code>。另一个坑：<code>bash script.sh</code> 是非交互式的，根本不读 .bashrc。脚本能用 ~/bin 里的程序，是因为继承了父进程的 PATH。</p></div>
+
+<h3 id="s13b">Ctrl+R 在历史里搜，fzf 让它变成模糊搜索 <span class="ts">47:59</span></h3>
+<p class="lead">大多数 shell 支持 <kbd>Ctrl</kbd>+<kbd>R</kbd> 反向搜索历史。按下之后，边打字边匹配以前的命令。</p>
+<p>讲师加载了 fzf 的 shell 集成。之后 Ctrl+R 就成了交互式的模糊搜索，范围是全部历史。不想退出重开，就用 <code>source 文件</code>。意思是在当前 shell 里，把这个文件逐行执行一遍。</p>
+
+<h3 id="s13c">别名只是文字替换，脚本里默认不展开</h3>
+<p class="lead"><code>alias</code> 是 shell 内建命令。它在命令求值之前，把短名字换成你写好的长命令。</p>
+<div class="code"><div class="cap">讲义例子（节选，注释是笔记加的）</div><pre>alias ll="ls -lh"          <span class="cm"># 常用 flag 的简写</span>
+alias gs="git status"      <span class="cm"># 省打字</span>
+alias sl=ls                <span class="cm"># 防手误</span>
+alias mv="mv -i"           <span class="cm"># 覆盖前先问</span>
+alias la="ls -A"
+alias lla="la -l"          <span class="cm"># 别名可以组合</span>
+\ls                        <span class="cm"># 前面加 \ 绕过别名</span>
+unalias la                 <span class="cm"># 删除别名</span>
+alias ll                   <span class="cm"># 打印定义：ll='ls -lh'</span></pre></div>
+<p class="like"><b>打个比方</b>alias 像输入法里的自定义短语。打 gs，自动换成 git status。但这个替换只在你手敲的时候才发生。</p>
+<ul>
+<li><code>=</code> 两边没有空格。因为 alias 是只收<strong>一个参数</strong>的命令。</li>
+<li>别名不能在命令中间接收参数。更复杂的就写 shell 函数。</li>
+</ul>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>脚本里的别名默认<strong>不展开</strong>，因为非交互式 shell 关掉了 <code>expand_aliases</code>。下面同样两行，放进脚本就报 command not found。打开这个选项才行。练习 10 有更多实测：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">cat al.sh</span>
+<span class="o">alias dc=cd
+dc / &amp;&amp; pwd</span>
+<span class="p">$ </span><span class="cmd">bash al.sh; echo "exit=$?"</span>    <span class="cm"># 别名没展开，dc 被当成程序去找</span>
+<span class="e">al.sh: line 2: dc: command not found</span>
+<span class="o">exit=127</span>
+<span class="p">$ </span><span class="cmd">bash al2.sh; echo "exit=$?"</span>   <span class="cm"># al2.sh 第一行多了 shopt -s expand_aliases</span>
+<span class="o">/
+exit=0</span></pre></div></div>
+
+<!-- ============================================================ -->
+<h2 id="s14" data-nav="dotfiles" data-t="49:11">配置放进 git 仓库，家目录只留软链接 <span class="ts">49:11</span></h2>
+<p class="lead"><code>~/.bashrc</code> 这类配置文件叫 dotfiles。把它们集中放进一个 git 仓库。家目录里只留指向仓库的符号链接。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>mkdir ~/.dotfiles &amp;&amp; cd ~/.dotfiles &amp;&amp; git init   <span class="cm"># 建一个专门放配置的仓库</span>
+mv ~/.bashrc ~/.dotfiles/bashrc                   <span class="cm"># 真文件搬进仓库</span>
+ln -s ~/.dotfiles/bashrc ~/.bashrc                <span class="cm"># 老位置换成一个指过去的链接</span>
+ls -l ~/.bashrc                                   <span class="cm"># 开头是 l，箭头指向仓库里的文件</span></pre></div>
+<p class="like"><b>打个比方</b>符号链接像桌面上的快捷方式。程序照常去老地方找 .bashrc。快捷方式把它领到了仓库里那份。</p>
+<p>很多命令行程序用纯文本配置文件。文件名以 <code>.</code> 开头，<code>ls</code> 默认不显示，所以叫 <strong>dotfiles</strong>。讲师说，这又是一个约定。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>工具</th><th>配置文件（讲义）</th></tr>
+<tr><td>bash</td><td><code>~/.bashrc</code>、<code>~/.bash_profile</code></td></tr>
+<tr><td>git</td><td><code>~/.gitconfig</code></td></tr>
+<tr><td>vim</td><td><code>~/.vimrc</code> 和 <code>~/.vim</code> 目录</td></tr>
+<tr><td>ssh</td><td><code>~/.ssh/config</code></td></tr>
+<tr><td>tmux</td><td><code>~/.tmux.conf</code></td></tr>
+</table></div>
+<p>讲师用 <code>ls -la</code> 一看，他的 <code>.bashrc</code> 其实<strong>不是文件</strong>。它是一个<strong>符号链接</strong>（symlink）。意思是，谁要读 .bashrc，就去读 <code>.dotfiles/bash/bashrc</code>（<span class="ts">50:24</span>）。这样所有配置都集中在一个目录里。放进 Git，推到 GitHub。换新电脑时，一个脚本建好所有链接就行。</p>
+<figure class="fig"><script>
+DG('tree', { noteX: 360, root: { l: '~（家目录）', tone: 'neutral', c: [
+  { l: '.bashrc  →  .dotfiles/bash/bashrc', s: '符号链接：程序照常读 ~/.bashrc', tone: 'teal' },
+  { l: '.gitconfig  →  .dotfiles/git/gitconfig', s: '符号链接', tone: 'teal' },
+  { l: '.dotfiles/', s: 'git 仓库，推到 GitHub', tone: 'ok', hl: true, c: [
+    { l: 'bash/bashrc', s: '真正的内容在这里' }, { l: 'git/gitconfig' }, { l: 'install.sh', s: '为每个文件 ln -s', tone: 'info' } ] }
+] } });
+</script><figcaption>讲义推荐的组织方式。独立目录，加版本控制，再用脚本建软链接</figcaption></figure>
+<ul class="keys">
+<li><strong>好处</strong>：新机器一分钟装好。各处行为一致，改动随处同步。还能追踪历史。你可能会维护 dotfiles 一整个职业生涯。</li>
+<li><strong>学什么配置</strong>：读工具文档和 man，搜别人的博客。看 GitHub 上的 <a href="https://github.com/search?o=desc&amp;q=dotfiles&amp;s=stars&amp;type=Repositories" target="_blank" rel="noopener">dotfiles 仓库</a>，最受欢迎的是 <a href="https://github.com/mathiasbynens/dotfiles" target="_blank" rel="noopener">mathiasbynens/dotfiles</a>。还有 <a href="https://dotfiles.github.io/" target="_blank" rel="noopener">dotfiles.github.io</a>。三位讲师的也都公开：<a href="https://github.com/anishathalye/dotfiles" target="_blank" rel="noopener">Anish</a>、<a href="https://github.com/jonhoo/configs" target="_blank" rel="noopener">Jon</a>、<a href="https://github.com/jjgo/dotfiles" target="_blank" rel="noopener">Jose</a>。</li>
+<li><strong>别盲目复制</strong>：讲师建议逐行理解。别整份拷贝别人的 bashrc（<span class="ts">52:07</span>）。他举的例子是，有人在配置里让 glob 忽略大小写。</li>
+</ul>
+<div class="callout warn"><div class="ct">本机实测差异：Git Bash 的 ln -s 默认是复制</div>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">ln -s "$PWD/dotfiles/bashrc" ~/.bashrc; [ -L ~/.bashrc ] &amp;&amp; echo "is symlink" || echo "NOT a symlink (copied)"</span>
+<span class="o">NOT a symlink (copied)</span>
+<span class="p">$ </span><span class="cmd">rm ~/.bashrc; MSYS=winsymlinks:nativestrict ln -s "$PWD/dotfiles/bashrc" ~/.bashrc; ls -l ~/.bashrc</span>   <span class="cm"># 设了 MSYS 才是真链接</span>
+<span class="o">lrwxrwxrwx 1 lrhto 197610 124 Oct 29 16:42 …/.bashrc -&gt; …/dotfiles/bashrc</span></pre></div>
+<p>Git Bash 默认把 <code>ln -s</code> 实现成<strong>复制</strong>。改了仓库里的文件，家目录那份不会跟着变。dotfiles 方案就失效了。设置 <code>MSYS=winsymlinks:nativestrict</code>，才会创建真正的 Windows 符号链接。这需要开发者模式或管理员权限。练习 14 的安装脚本对此做了检测。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>图省事，直接把配置文件 cp 到家目录，而不是建链接。以后改了仓库，家目录那份不跟着变。Git Bash 的 <code>ln -s</code> 默认就是复制，正好踩中这个坑。检查办法很简单，<code>[ -L ~/.bashrc ]</code> 为真才是链接。</p></div>
+<p>下面的演示画了两件事。一是读 ~/.bashrc 时，怎么被链接引到仓库里的文件。二是新机器上怎么一键安装。输出来自本机实测的练习 14 和 15。</p>
+<div data-vz="ch02-dotfiles"></div>
+
+<!-- ============================================================ -->
+<h2 id="s15" data-nav="插件与框架" data-t="53:14">插件一次只装一个，用不上就删 <span class="ts">53:14</span></h2>
+<p class="lead">shell 没有的方便功能，有人做成了插件。装插件通常就两步：<code>git clone</code> 下来，再往配置文件里加一行 <code>source</code>。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions   <span class="cm"># 插件就是一个仓库</span>
+echo 'source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh' &gt;&gt; ~/.zshrc          <span class="cm"># 往配置里追加一行</span>
+[[ ! -f ~/.zshrc.local ]] || source ~/.zshrc.local                                    <span class="cm"># 讲师式写法：文件在才加载</span></pre></div>
+<p class="like"><b>打个比方</b>插件像手机 App，一次装一个，觉得没用就删。大框架像预装了几十个 App 的整机，开机自然就慢。</p>
+<p>讲师的 zsh 会根据历史命令<strong>自动建议补全</strong>。命令存在时显示绿色，不存在时显示红色。不用运行就知道会失败。提示符里还显示当前 git 分支和未提交的改动数。上一条命令返回码非 0 时，光标会变红（<span class="ts">55:07</span>）。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>插件（讲义）</th><th>作用</th></tr>
+<tr><td><a href="https://github.com/zsh-users/zsh-syntax-highlighting" target="_blank" rel="noopener">zsh-syntax-highlighting</a></td><td>边打边给命令上色，合法和非法颜色不同</td></tr>
+<tr><td><a href="https://github.com/zsh-users/zsh-autosuggestions" target="_blank" rel="noopener">zsh-autosuggestions</a></td><td>根据历史，边打边给建议</td></tr>
+<tr><td><a href="https://github.com/zsh-users/zsh-completions" target="_blank" rel="noopener">zsh-completions</a></td><td>更多补全定义</td></tr>
+<tr><td><a href="https://github.com/zsh-users/zsh-history-substring-search" target="_blank" rel="noopener">zsh-history-substring-search</a></td><td>fish 风格的历史搜索</td></tr>
+<tr><td><a href="https://github.com/romkatv/powerlevel10k" target="_blank" rel="noopener">powerlevel10k</a></td><td>又快又能定制的提示符主题</td></tr>
+</table></div>
+<ul>
+<li>学生问，这些会影响所有 shell 吗？讲师现场敲了 <code>bash</code>，提示符立刻变了样。zsh 和 bash 读的是<strong>完全不同的配置文件</strong>。一个是 <code>.zshrc</code>，一个是 <code>.bashrc</code>。所以可以分别配置。讲师故意不改 bash，留着出问题时当后备（<span class="ts">56:29</span>）。在 WSL 里也一样。</li>
+<li>插件怎么装？多数在 GitHub 上有安装说明。最简单的是 <code>git clone</code> 到某个路径，再往 <code>.zshrc</code> 追加一行 <code>source …</code>。安装说明常给一条 <code>echo '…' &gt;&gt; ~/.zshrc</code>，连编辑器都不用开（<span class="ts">58:41</span>）。</li>
+<li>讲师读了自己 .zshrc 里的一行：<code>[[ ! -f 文件 ]] || source 文件</code>。文件不存在时，<code>[[ ]]</code> 成功，后面就短路了。文件存在时，才去 source。讲师说用 <code>||</code> 不用 <code>&amp;&amp;</code>，写法有点怪。但这正是返回码短路的用法。</li>
+</ul>
+<div class="callout tip"><div class="ct">讲师建议（视频 1:00:03）</div><p><a href="https://ohmyz.sh/" target="_blank" rel="noopener">oh-my-zsh</a>、<a href="https://github.com/sorin-ionescu/prezto" target="_blank" rel="noopener">prezto</a> 这类大框架，会明显拖慢 shell 启动。更推荐一次只装一个插件，看自己是不是真在用。不用就删。细粒度地控制，能防止 shell 变臃肿。<a href="https://fishshell.com/" target="_blank" rel="noopener">fish</a> 默认就带了很多这类功能。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>整份照搬 oh-my-zsh 或别人的配置，shell 启动变慢。出了问题，也不知道是哪一行干的。另一个坑：在 zsh 里配好的别名，敲 bash 进去就没了。因为两者读的是不同的配置文件。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s16" data-nav="shell 里的 AI" data-t="1:00:28">LLM 也是 CLI：指令走参数，数据走 stdin <span class="ts">1:00:28</span></h2>
+<p class="lead">命令行里的 AI 工具，和别的程序守同一套约定。指令从参数进，数据从 stdin 进，结果从 stdout 出。所以它也能接进管道。</p>
+<div class="code"><div class="cap">bash · 写法示意（命令出自讲义，本机没装 llm）</div><pre>llm cmd "find all python files modified in the last week"   <span class="cm"># 让模型生成命令，先给你看，再问要不要跑</span>
+INSTRUCTIONS="Extract just the username from each line, one per line, nothing else"
+llm "$INSTRUCTIONS" &lt; users.txt | sort   <span class="cm"># 指令加引号当一个参数，数据走 stdin，结果还能接 sort</span></pre></div>
+<p class="like"><b>打个比方</b>llm 像一个能读懂英文说明的 sed。说明书从参数递进去，要加工的料从 stdin 倒进去。</p>
+<p>想问 AI，当然可以去网页上问 ChatGPT。但用命令行工具和模型打交道，往往更方便。讲义给了三个集成层次：</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>层次</th><th>例子（讲义原文）</th></tr>
+<tr><td><strong>生成命令</strong></td><td><a href="https://github.com/simonw/llm" target="_blank" rel="noopener">simonw/llm</a>：<code>llm cmd "find all python files modified in the last week"</code> 生成 <code>find . -name "*.py" -mtime -7</code>。讲师演示时，它会先问你要不要运行。你快速检查，觉得大致合理再执行</td></tr>
+<tr><td><strong>接进管道</strong></td><td>从格式五花八门的行里抽用户名，用正则会很痛苦。可以先写 <code>INSTRUCTIONS="Extract just the username from each line, one per line, nothing else"</code>，再跑 <code>llm "$INSTRUCTIONS" &lt; users.txt</code></td></tr>
+<tr><td><strong>AI shell</strong></td><td><a href="https://docs.anthropic.com/en/docs/claude-code" target="_blank" rel="noopener">Claude Code</a> 这类“元 shell”。它接收英文指令，翻译成 shell 操作、文件编辑和多步任务。讲义说它是“编程语言是英语的 shell”</td></tr>
+</table></div>
+<div class="code term"><div class="cap">讲义原文</div><pre><span class="p">$ </span><span class="cmd">cat users.txt</span>
+<span class="o">Contact: john.doe@example.com
+User 'alice_smith' logged in at 3pm
+Posted by: @bob_jones on Twitter
+Author: Jane Doe (jdoe)
+Message from mike_wilson yesterday
+Submitted by user: sarah.connor</span>
+<span class="p">$ </span><span class="cmd">INSTRUCTIONS="Extract just the username from each line, one per line, nothing else"</span>
+<span class="p">$ </span><span class="cmd">llm "$INSTRUCTIONS" &lt; users.txt</span>
+<span class="o">john.doe
+alice_smith
+bob_jones
+jdoe
+mike_wilson
+sarah.connor</span></pre></div>
+<div class="callout ai"><div class="ct">本讲概念在 AI 工具里的体现</div>
+<p>讲师特意指出，<strong>指令通过参数</strong>传进 llm。<code>"$INSTRUCTIONS"</code> 必须加引号，因为里面有空格。<strong>数据通过 stdin</strong> 进来，也就是 <code>&lt; users.txt</code>。这和任何 CLI 程序完全一样，所以后面还能接 <code>| sort</code>。</p>
+<p>讲师还用 Claude Code 演示了一个任务。任务是找出最近修改的 shell 脚本，把 shebang 改成 csh。它生成了一条看着很“外星”的 find 命令。拆开看，其实很合理。它自己把上一步的输出喂给下一步。最后提出修改 cleanup.sh 的 shebang，人确认后才执行（<span class="ts">1:03:19</span>）。本机没装 llm，以上都没有实测。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>AI 生成的命令别闭眼回车。讲师的做法是先看一眼，确认大致合理再跑。另一个坑是指令忘了加引号。指令里有空格，不加引号就会被切成好几个参数。llm 收到的就不是一句完整的话了。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s17" data-nav="终端模拟器" data-t="1:04:56">终端要待成百上千小时，值得调顺手 <span class="ts">1:04:56</span></h2>
+<p class="lead">shell 跑在<strong>终端模拟器</strong>里，它是提供文本界面的图形程序。字体、配色、快捷键都值得花时间调一调。</p>
+<div class="code"><div class="cap">toml · 写法示意（配置文件路径是补充，非视频内容）</div><pre><span class="cm"># ~/.config/alacritty/alacritty.toml</span>
+[font]
+size = 32   <span class="cm"># 讲师上课把字号从 16 调到 32，改完立刻生效</span></pre></div>
+<p class="like"><b>打个比方</b>终端像你的工位。椅子和显示器调舒服了，一天坐八小时才不累。</p>
+<p>值得调的有字体、配色和快捷键。还有标签页、窗格、回滚缓冲和性能。<a href="https://github.com/alacritty/alacritty" target="_blank" rel="noopener">Alacritty</a>、<a href="https://ghostty.org/" target="_blank" rel="noopener">Ghostty</a> 这类较新的终端有 GPU 加速。讲师用的就是 Alacritty。为了上课，他把字号从 16 改成 32。改完配置文件，立刻生效。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>终端和 shell 不是一回事。换了 Ghostty 或 Alacritty，里面跑的还是原来那个 bash 或 zsh。配置也分两处。字体和配色归终端管，提示符和别名归 shell 管。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s18" data-nav="一页带走" data-t="1:05:45">一页带走：本讲的考点都在这几行里 <span class="ts">1:05:45</span></h2>
+<p class="lead">把本讲浓缩成几行命令。每行的注释就是结论和考点。</p>
+<div class="code"><div class="cap">bash · 本讲速查（注释即考点）</div><pre>python args.py *.py              <span class="cm"># 收到的是展开后的文件名，不是 *.py</span>
+ls -- *                          <span class="cm"># -- 之后都当文件名，叫 -l 的文件不会变成选项</span>
+cmd 2&gt;&amp;1 | grep error            <span class="cm"># 报错走 stderr，不并进来，管道就看不到</span>
+(sleep 2 &amp;&amp; cat f) | grep x &amp;    <span class="cm"># 0.5 秒后 ps：sleep 和 grep 都在，cat 还没启动</span>
+DEBUG=1; bash -c 'echo $DEBUG'   <span class="cm"># 打印空行：没 export，子进程看不到</span>
+DEBUG=1 bash -c 'echo $DEBUG'    <span class="cm"># 打印 1：只给这一条命令</span>
+false; echo hi; echo $?          <span class="cm"># 打印 0：$? 只记上一条命令</span>
+kill -TERM $pid                  <span class="cm"># 能被 trap 接住，清理会跑，返回 143</span>
+kill -KILL $pid                  <span class="cm"># 接不住，临时文件留下，返回 137</span>
+ssh host ls | wc -l              <span class="cm"># wc 在本地跑，数的是传回来的行</span>
+ssh host 'ls | wc -l'            <span class="cm"># 整串交给远端，ls 和 wc 都在服务器上</span>
+tmux attach                      <span class="cm"># 断线时 tmux 挡住了 SIGHUP，会话还在</span>
+bash script.sh                   <span class="cm"># 不读 .bashrc，PATH 是从父进程继承来的</span>
+ln -s ~/.dotfiles/bashrc ~/.bashrc   <span class="cm"># 配置放仓库，家目录只放链接</span></pre></div>
+<ul class="keys">
+<li>参数是一串字符串。<code>-a</code> 和 <code>--all</code> 是程序自己解析的约定。<code>--</code> 表示后面不再有 flag。</li>
+<li>glob 由 shell 在运行程序<strong>之前</strong>展开。加了引号就不展开。</li>
+<li>管道里的程序同时运行。管道只传 stdout，stderr 默认直接打到终端。</li>
+<li>变量没有类型。<code>VAR=x cmd</code> 只给一条命令，<code>export</code> 给之后所有子进程。子进程改不了父进程。</li>
+<li>返回码 0 是成功。<code>&amp;&amp;</code>、<code>||</code>、if、while 都看它。被信号杀死时，返回码是 128 加信号编号。</li>
+<li>信号是软件中断。INT、QUIT、TERM 能被 <code>trap</code> 捕获，KILL 不行。</li>
+<li>Ctrl+Z 发 TSTP，<code>bg</code> 和 <code>fg</code> 让它继续。断线发 HUP，nohup 和 tmux 能挡住。</li>
+<li>SSH 用密钥加口令登录。<code>ssh host 'cmd'</code> 在远端执行，<code>~/.ssh/config</code> 存主机设置，scp 和 rsync 传文件。</li>
+<li>配置写进 dotfiles，放进 git，用 <code>ln -s</code> 装到家目录。</li>
+</ul>
+<div class="callout key"><div class="ct">下一步</div>
+<p>第 1 讲教你写命令。这一讲教你看懂命令运行的环境。比如程序之间靠什么约定通信，怎么控制它们。还有怎么在远程机器上干活，怎么把环境调成自己的。下一讲是“开发环境与工具”。它讲编辑器 Vim、语言服务器和 AI 编程工具。现在先去做<a href="labs/lab02.html">本讲练习的可视化笔记</a>。一共 24 道题，dotfiles 和 SSH 两组最实用。</p></div>
+
+</article></main>
+<script src="assets/vz.js"></script>
+<script src="assets/viz/ch02-cli.js"></script>
+<script src="assets/viz/ch02-signals.js"></script>
+<script src="assets/viz/ch02-remote.js"></script>
+</body>
+</html>

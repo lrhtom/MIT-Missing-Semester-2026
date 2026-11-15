@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06 · 打包与交付代码 · Missing Semester 2026 中文笔记</title>
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/vz.css">
+<script>window.PAGE = { key: 'ch06', type: 'ch', vzCount: 11 };</script>
+<script src="assets/course.js"></script>
+<script src="assets/dg.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<div class="callout key"><div class="ct">本讲结论</div>
+<p>代码要在<strong>别人的机器</strong>上跑起来，得说清两件事。一是交出去的东西是什么，叫<strong>构件</strong>（artifact）。二是它对周围环境做了哪些假设。依赖、环境、版本和锁文件，都在回答这两个问题。容器、配置、编排和发布也一样。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s1" data-nav="交付为什么难" data-t="0:01">在我电脑上能跑，不等于在你电脑上能跑 <span class="ts">0:01</span></h2>
+<p class="lead">代码悄悄依赖着一整套环境。换一台机器，少一样就跑不起来。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre><span class="cm"># 你的电脑：半年前全局装过 requests，早忘了</span>
+python fetch.py   <span class="cm"># 正常，打印 200</span>
+<span class="cm"># 同学的电脑：只拿到了 fetch.py 这一个文件</span>
+python fetch.py   <span class="cm"># ModuleNotFoundError: No module named 'requests'</span></pre></div>
+<p class="like"><b>打个比方</b>交付代码像把菜谱寄给朋友。你家灶台、调料、锅都齐。朋友家缺一样，菜就做不出来。所以菜谱上得写清要哪些东西。</p>
+<p>你的代码隐含地依赖着一整套东西。有语言运行时、第三方库和操作系统的特性。甚至还有硬件。做 Python 库、命令行工具或 Web 服务，依赖各不相同。部署步骤也不一样。</p>
+<p>但它们有一个共同模式（<span class="ts">1:25</span>）。最后都要产出一个别人能下载的对象，叫<strong>构件</strong>（artifact）。拿到构件，再满足它对环境的假设。这样就该跑出同样的结果。</p>
+<figure class="fig"><script>
+DG('flow', { nodeH: 52, cols: [
+  [ { id: 'src', l: '源代码', s: '你写的 .py 文件', tone: 'teal' } ],
+  [ { id: 'dep', l: '依赖与环境', s: '第 2 到 5 节', tone: 'data' }, { id: 'ver', l: '版本与锁定', s: '第 8 到 10 节', tone: 'warn' } ],
+  [ { id: 'art', l: '构件 artifact', s: 'wheel / 二进制 / 镜像', tone: 'ok' } ],
+  [ { id: 'run', l: '运行与编排', s: '容器、配置、systemd，第 12 到 18 节', tone: 'info' }, { id: 'pub', l: '发布', s: 'PyPI、镜像仓库，第 19、20 节', tone: 'info' } ]
+], edges: [ ['src', 'dep'], ['src', 'ver'], ['dep', 'art'], ['ver', 'art'], ['art', 'run'], ['art', 'pub'] ] });
+</script><figcaption>本讲的脉络。讲义用 Python 生态举例，换成别的语言，概念大体相同</figcaption></figure>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>自己电脑上装过的东西，你早就忘了。代码一直能跑，你就以为它没有依赖。直到换了新电脑，或者交给同学，才发现缺这缺那。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s2" data-nav="pip install 做了什么" data-t="2:06">pip install 会顺藤摸瓜，把依赖的依赖都装上 <span class="ts">2:06</span></h2>
+<p class="lead"><code>pip install requests</code> 不只装 requests。它会查出 requests 依赖的包，连同依赖的依赖，一起装好。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意，完整输出见下面的讲义原文）</div><pre>pip install requests   <span class="cm"># 你只点名了一个包</span>
+<span class="cm"># Collecting charset-normalizer、idna、urllib3、certifi……</span>
+<span class="cm"># 实际装了 5 个，另外 4 个是 requests 自己要的</span>
+python -c 'import requests; print(requests.__path__)'   <span class="cm"># 看看装到哪去了</span></pre></div>
+<p class="like"><b>打个比方</b>pip 像去超市买火锅底料。你只拿了一包底料，收银员说还得配蘸料。蘸料又要配香油。它把这一串都装进你的袋子。</p>
+<p>讲师的例子是一个三行的 Python 程序。它用 <code>requests</code> 库下载课程网站。直接运行就报错。因为 <code>requests</code> 不是 Python 自带的，是别人写的。你的程序和它之间，于是有了<strong>依赖</strong>（dependency）关系。</p>
+<div class="code term"><div class="cap">讲义原文</div><pre><span class="p">$ </span><span class="cmd">python fetch.py</span>
+<span class="e">Traceback (most recent call last):
+  File "fetch.py", line 1, in &lt;module&gt;
+    import requests
+ModuleNotFoundError: No module named 'requests'</span></pre></div>
+<p><code>pip</code> 是随 Python 运行时一起提供的安装工具。<code>pip install requests</code> 依次做了四件事：</p>
+<ul class="keys">
+<li>到 <a href="https://pypi.org/" target="_blank" rel="noopener">Python 包索引 PyPI</a> 查找 requests。</li>
+<li>找出适合当前平台的构件。</li>
+<li><strong>解析依赖</strong>。requests 自己也依赖别的包。安装器要给所有<strong>传递依赖</strong>挑出兼容版本。传递依赖就是依赖的依赖，它们要先装好。</li>
+<li>下载构件并解包，把文件复制到该放的位置。</li>
+</ul>
+<div class="code term"><div class="cap">讲义原文</div><pre><span class="p">$ </span><span class="cmd">pip install requests</span>
+<span class="o">Collecting requests
+  Downloading requests-2.32.3-py3-none-any.whl (64 kB)
+Collecting charset-normalizer&lt;4,&gt;=2
+  Downloading charset_normalizer-3.4.0-cp311-cp311-manylinux_x86_64.whl (142 kB)
+Collecting idna&lt;4,&gt;=2.5
+  Downloading idna-3.10-py3-none-any.whl (70 kB)
+Collecting urllib3&lt;3,&gt;=1.21.1
+  Downloading urllib3-2.2.3-py3-none-any.whl (126 kB)
+Collecting certifi&gt;=2017.4.17
+  Downloading certifi-2024.8.30-py3-none-any.whl (167 kB)
+Installing collected packages: urllib3, idna, charset-normalizer, certifi, requests
+Successfully installed certifi-2024.8.30 charset-normalizer-3.4.0 idna-3.10 requests-2.32.3 urllib3-2.2.3</span>
+<span class="p">$ </span><span class="cmd">python -c 'import requests; print(requests.__path__)'</span>
+<span class="o">['/usr/local/lib/python3.11/dist-packages/requests']</span></pre></div>
+<p>视频里讲师装完再运行，拿到 HTTP 状态码 200。意思是一切正常。再查安装位置，发现装进了<strong>全局默认的 Python</strong>（<span class="ts">4:29</span>）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>装完能跑，你就不会去看它装到了哪。讲师这次就装进了全局 Python。以后另一个项目要别的版本，两边就会打架。这就是第 4 节依赖冲突的来源。</p></div>
+<p>下面的演示把这四步拆开。依赖从 requests 节点分裂出来，逐个选版本。最后按依赖顺序装进 site-packages。</p>
+<div data-vz="ch06-install"></div>
+
+<!-- ============================================================ -->
+<h2 id="s3" data-nav="包管理哲学" data-t="5:05">Python 只定规范，工具让大家来竞争 <span class="ts">5:05</span></h2>
+<p class="lead">各语言管包的思路不同。Rust 用一个 cargo 全包。Python 只定规范，谁都能写遵守规范的工具。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>cargo build &amp;&amp; cargo test &amp;&amp; cargo publish   <span class="cm"># Rust：一个工具从头管到尾</span>
+pip install requests                          <span class="cm"># Python：老牌安装器</span>
+uv pip install requests                       <span class="cm"># 同一套规范，uv 实现得更快</span></pre></div>
+<p class="like"><b>打个比方</b>Python 像只规定插座标准的国家。插座形状统一了，哪家厂都能造插头。cargo 像一家包办到底的厂商，从手机到充电器全是自己做。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>做法</th><th>例子</th><th>特点</th></tr>
+<tr><td>统一工具链</td><td>Rust 的 <code>cargo</code></td><td>编译、测试、依赖管理、发布，一个工具全包</td></tr>
+<tr><td>统一在<strong>规范</strong>层面</td><td>Python：pip 和 <a href="https://docs.astral.sh/uv/" target="_blank" rel="noopener">uv</a>，setuptools、<a href="https://hatch.pypa.io/" target="_blank" rel="noopener">hatch</a> 和 <a href="https://python-poetry.org/" target="_blank" rel="noopener">poetry</a></td><td>语言只定规则，也就是 PEP。谁都能写守规则的工具，彼此竞争</td></tr>
+<tr><td>大而全的发行版</td><td>LaTeX 的 TeX Live、MacTeX</td><td>预装成千上万个包，很少需要自己装</td></tr>
+</table></div>
+<p>Python 的规则来自两份规范。<a href="https://peps.python.org/pep-0517/" target="_blank" rel="noopener">PEP 517</a> 定义构建系统的接口。<a href="https://peps.python.org/pep-0621/" target="_blank" rel="noopener">PEP 621</a> 规定项目元数据写在 <code>pyproject.toml</code> 里。接口是标准化的，所以才有人写出比 pip 快得多的 uv。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>网上教程有的用 pip，有的用 poetry，有的用 uv。命令混着抄，包很容易装进不同的环境。先认准一个工具，再照着它的文档走。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s4" data-nav="依赖冲突与 venv" data-t="6:18">两个包要的版本没有交集，就是依赖地狱 <span class="ts">6:18</span></h2>
+<p class="lead">安装器要在所有约束的交集里挑版本。交集为空就无解。解法是给每个项目一个独立的环境。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意，Linux 路径）</div><pre>python -m venv venv        <span class="cm"># 建环境：其实就是建一个目录</span>
+source venv/bin/activate   <span class="cm"># 激活：把 venv/bin 插到 PATH 最前面</span>
+which python               <span class="cm"># 现在找到的是 venv/bin/python</span>
+deactivate                 <span class="cm"># 撤销：PATH 换回原样</span></pre></div>
+<p class="like"><b>打个比方</b>依赖冲突像两个室友抢一台空调。一个要 20 度，一个要 28 度，怎么调都不行。虚拟环境就是给两人各分一间房，各开各的空调。</p>
+<p>依赖一多就会<strong>冲突</strong>。两个程序要同一个依赖，版本范围却不兼容。讲义的例子是这样的：</p>
+<ul>
+<li><code>tensorflow==2.3.0</code> 要 <code>numpy&gt;=1.16.0,&lt;1.19.0</code>。<code>pandas==1.2.0</code> 要 <code>numpy&gt;=1.16.5</code>。取交集，<code>numpy&gt;=1.16.5,&lt;1.19.0</code> 里任何版本都行。</li>
+<li>项目里再来一个包要 <code>numpy&gt;=1.19</code>，就<strong>没有任何版本</strong>能同时满足。这种局面叫<strong>依赖地狱</strong>（dependency hell）。</li>
+</ul>
+<p>视频里讲师故意造了冲突（<span class="ts">6:18</span>）。一个包要 numpy &gt; 2.0，另一个要 numpy &lt; 2.0。安装器打了一大段信息，结论就是无解。笔记在本机用 4 个手工 wheel 复现了这个情形。见练习 1 的 ex01-e：</p>
+<div class="code term"><div class="cap">bash · 本机实测（uv 0.11.26，两个包对 shared 的要求相反）</div><pre><span class="p">$ </span><span class="cmd">uv pip install --no-index --find-links wheels liba libb</span>
+<span class="e">  × No solution found when resolving dependencies:
+  ╰─▶ Because only liba==1.0.0 is available and liba==1.0.0 depends on
+      shared&gt;=1.0,&lt;2.0, we can conclude that all versions of liba depend on
+      shared&gt;=1.0,&lt;2.0.
+      And because libb==1.0.0 depends on shared&gt;=2.0 and only libb==1.0.0 is
+      available, we can conclude that all versions of liba and all versions of
+      libb are incompatible.
+      And because you require liba and libb, we can conclude that your
+      requirements are unsatisfiable.</span></pre></div>
+<p>上面 liba 要 <code>shared&lt;2.0</code>，libb 要 <code>shared&gt;=2.0</code>。交集为空，解析器直接认输。</p>
+<div class="callout bad"><div class="ct">本机实测：分两次装，冲突悄悄发生</div>
+<p>先装 liba，拿到 shared 1.5.0。再装 libb，安装器为了满足它，把 shared 换成了 2.1.0。liba 的要求就这样被破坏了。只有 <code>uv pip check</code> 才查得出来：</p>
+<div class="code term"><div class="cap">bash · 本机实测（ex01-e 节选）</div><pre><span class="p">$ </span><span class="cmd">uv pip install --no-index --find-links wheels libb</span>
+<span class="o"> + libb==1.0.0
+ - shared==1.5.0
+ + shared==2.1.0</span>
+<span class="p">$ </span><span class="cmd">uv pip check</span>
+<span class="e">Found 1 incompatibility
+The package `liba` requires `shared&gt;=1.0,&lt;2.0`, but `2.1.0` is installed</span></pre></div></div>
+<p>解决办法是隔离。每个程序的依赖，放进各自的<strong>环境</strong>（environment）。Python 里就是建一个虚拟环境（virtual environment，venv）：</p>
+<div class="code term"><div class="cap">讲义原文（Linux）</div><pre><span class="p">$ </span><span class="cmd">which python</span>
+<span class="o">/usr/bin/python</span>
+<span class="p">$ </span><span class="cmd">python -m venv venv</span>
+<span class="p">$ </span><span class="cmd">source venv/bin/activate</span>
+<span class="p">$ </span><span class="cmd">which python</span>
+<span class="o">/home/missingsemester/venv/bin/python</span>
+<span class="p">$ </span><span class="cmd">which pip</span>
+<span class="o">/home/missingsemester/venv/bin/pip</span>
+<span class="p">$ </span><span class="cmd">pip list</span>
+<span class="o">Package Version
+------- -------
+pip     24.0</span></pre></div>
+<p>环境就是一份独立的语言运行时。它带着自己那套已安装的包。讲师强调，venv <strong>没什么神秘的</strong>，就是一个目录。<code>source</code> 激活时，只改了 shell 的 <code>PATH</code> 等环境变量。于是敲 <code>python</code>，找到的是这个目录里的那个（<span class="ts">10:19</span>）。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Windows 的脚本目录叫 Scripts，路径用了占位符）</div><pre><span class="p">$ </span><span class="cmd">python -m venv venv; ls venv</span>
+<span class="o">Include  Lib  Scripts  pyvenv.cfg</span>
+<span class="p">$ </span><span class="cmd">cat venv/pyvenv.cfg</span>
+<span class="o">home = &lt;Python&gt;
+include-system-site-packages = false
+version = 3.13.5
+executable = &lt;Python&gt;\python.exe
+command = &lt;Python&gt;\python.exe -m venv &lt;沙箱&gt;\venv</span>
+<span class="p">$ </span><span class="cmd">bash envdiff.sh        </span><span class="cm"># 练习 1：激活前后 printenv 的差别</span>
+<span class="o">5c5
+&lt; PATH=&lt;Python&gt;:/usr/bin:/bin
+---
+&gt; PATH=&lt;沙箱&gt;/ex01/venv/Scripts:&lt;Python&gt;:/usr/bin:/bin
+6a7
+&gt; PS1=(venv)
+12a14,15
+&gt; VIRTUAL_ENV=&lt;沙箱&gt;/ex01/venv
+&gt; VIRTUAL_ENV_PROMPT=venv</span></pre></div>
+<ul class="keys">
+<li><strong>为什么 shell 会用 venv 里的 python</strong>：激活脚本把 <code>venv/bin</code> 插到 <code>PATH</code> 最前面。Windows 上是 <code>venv/Scripts</code>。按第 1 讲的规则，shell 只用第一个命中的。</li>
+<li><strong>import 为什么找 venv 里的包</strong>：venv 的 python 一跑，<code>sys.prefix</code> 就指向 venv。<code>sys.path</code> 里的 site-packages 也换成了 venv 自己的。练习 1 的 ex01-d 实测过这一点。讲师在新 venv 里查 requests，结果不在这里。因为之前装在了全局（<span class="ts">8:27</span>）。</li>
+<li><strong>每个项目一个环境</strong>是好习惯。依赖清清楚楚，也不会陷进依赖地狱。</li>
+</ul>
+<div class="callout warn"><div class="ct">讲义提醒：别动系统自带的 Python</div><p>很多操作系统自带 Python 这类运行时。系统自己的功能可能就依赖它们。别往里面装包，也别升级它。请用独立的环境。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>装了包却 import 不到，十有八九是环境不对。可能装进了全局，跑的却是 venv 里的 python。也可能反过来。先敲 <code>which python</code> 和 <code>which pip</code>，看两者是不是同一个环境。</p></div>
+<p>下面的演示分两幕。第 1 幕手推约束取交集，看交集怎么变空。再看本机解析器的真实报错，和两个环境的解法。第 2 幕看虚拟环境怎样通过 PATH 生效。</p>
+<div data-vz="ch06-venv"></div>
+
+<!-- ============================================================ -->
+<h2 id="s5" data-nav="uv 与多版本" data-t="9:46">uv 是更快的 pip，还能按项目切 Python 版本 <span class="ts">9:46</span></h2>
+<p class="lead">uv 能顶替 pip 等一串工具，最大的好处是快。它还能给每个环境指定不同的 Python 版本。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>uv pip install requests          <span class="cm"># 用法和 pip 一样，只是快得多</span>
+uv venv --python 3.12 venv312    <span class="cm"># 这个环境用 3.12，系统默认版本不受影响</span>
+venv312/bin/python --version     <span class="cm"># 不激活也行：写全路径，就用这个解释器</span></pre></div>
+<p class="like"><b>打个比方</b>uv 像带了一串钥匙的管家。项目 A 要 3.11 的门，项目 B 要 3.12 的门，它都开得了。不用你把整栋楼的锁都换掉。</p>
+<p>Python 的打包工具多年来几经演变。讲师认为现在最好用的是 <strong>uv</strong>。它能整体替代 pip 和另外几个工具。最受称道的是<strong>快</strong>。大项目上，解析和安装能从几分钟缩到几秒（<span class="ts">11:15</span>）。讲义说装 uv 只要 <code>pip install uv</code>。还强烈建议，能用 <code>uv pip</code> 的地方就别用 <code>pip</code>。</p>
+<div class="code term"><div class="cap">讲义原文</div><pre><span class="p">$ </span><span class="cmd">uv pip install requests</span>
+<span class="o">Resolved 5 packages in 12ms
+Prepared 5 packages in 0.45ms
+Installed 5 packages in 8ms
+ + certifi==2024.8.30
+ + charset-normalizer==3.4.0
+ + idna==3.10
+ + requests==2.32.3
+ + urllib3==2.2.3</span></pre></div>
+<p>环境不只隔离依赖（<span class="ts">11:49</span>）。它还能隔离<strong>语言运行时的版本</strong>。讲师的机器默认是 3.11。项目需要 3.12 时，这样做：</p>
+<div class="code term"><div class="cap">讲义原文</div><pre><span class="p">$ </span><span class="cmd">uv venv --python 3.12 venv312</span>
+<span class="o">Using CPython 3.12.7
+Creating virtual environment at: venv312</span>
+<span class="p">$ </span><span class="cmd">source venv312/bin/activate &amp;&amp; python --version</span>
+<span class="o">Python 3.12.7</span></pre></div>
+<p>要在多个 Python 版本上测试时，这招很有用。有的语言会自动给每个项目建依赖环境。大多数语言也支持一台机器装多个版本。再按项目指定用哪个，原理相同（讲义）。</p>
+<div class="callout tool"><div class="ct">讲义推荐 · uv</div><p><a href="https://docs.astral.sh/uv/" target="_blank" rel="noopener">uv</a> 一个工具管很多事。建虚拟环境用 <code>uv venv</code>，装包用 <code>uv pip</code>。构建用 <code>uv build</code>，锁定用 <code>uv lock</code>。看依赖树用 <code>uv tree</code>，发布用 <code>uv publish</code>。本页所有 uv 输出，都来自本机的 uv 0.11.26。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p><code>uv venv</code> 只建环境，不会替你激活。本机实测，它最后一行只是提示 <code>Activate with: .venv\Scripts\activate</code>。不 source 一下，敲 python 用的还是全局那个。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s6" data-nav="构件与 pyproject" data-t="13:00">打包就是把代码装进 Python 认得的位置 <span class="ts">13:00</span></h2>
+<p class="lead">Python 只在几个固定位置找模块。打包就是写好 <code>pyproject.toml</code>，让安装器把代码放进环境的 site-packages。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>python -c "import greet"                   <span class="cm"># 在 greet.py 旁边：成功，当前目录在 sys.path 里</span>
+cd elsewhere &amp;&amp; python -c "import greet"   <span class="cm"># 换个目录：ModuleNotFoundError</span>
+uv pip install .                           <span class="cm"># 按 pyproject.toml 装进环境的 site-packages</span>
+python -c "import greeting"                <span class="cm"># 装好以后，哪个目录都能 import</span></pre></div>
+<p class="like"><b>打个比方</b>没打包的代码像摊在书桌上的笔记，离开书桌就找不到。打包像把它交给图书馆编目上架。谁来借，按书名就能找到。</p>
+<p>开发者读写的是<strong>源代码</strong>。<strong>构件</strong>是从源码产出的分发物，可以直接安装或部署。小到一个能运行的代码文件，大到一整台虚拟机。先看最朴素的情况：</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习 2 · ex02-a，greet.py 是讲义原文）</div><pre><span class="p">$ </span><span class="cmd">python -c "from greet import greet; greet('World')"</span>
+<span class="o">Hello, World!</span>
+<span class="p">$ </span><span class="cmd">mkdir elsewhere &amp;&amp; cd elsewhere</span>
+<span class="p">$ </span><span class="cmd">python -c "from greet import greet; greet('World')"</span>
+<span class="e">Traceback (most recent call last):
+  File "&lt;string&gt;", line 1, in &lt;module&gt;
+    from greet import greet; greet('World')
+    ^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'greet'</span></pre></div>
+<p>换了目录就找不到。Python 只在几个地方找模块。一是当前目录，二是已安装的包，三是 <code>PYTHONPATH</code> 里的路径。<strong>打包</strong>解决的正是这个问题，把代码装到一个已知的位置。做法要按 Python 的规则来（<span class="ts">13:58</span>）。先写一个项目文件，也叫 manifest。在 Python 里就是 <code>pyproject.toml</code>：</p>
+<div class="grid2">
+<div class="code"><div class="cap">pyproject.toml（讲义原文）</div><pre>[project]
+name = "greeting"
+version = "0.1.0"
+description = "A simple greeting library"
+dependencies = ["typer&gt;=0.9"]
+
+[project.scripts]
+greet = "greeting:cli"
+
+[build-system]
+requires = ["setuptools&gt;=61.0"]
+build-backend = "setuptools.build_meta"</pre></div>
+<div class="code"><div class="cap">greeting.py（讲义原文）</div><pre>import typer
+
+
+def greet(name: str) -&gt; None:
+    print(f"Hello, {name}!")
+
+
+def cli() -&gt; None:
+    typer.run(greet)
+
+
+if __name__ == "__main__":
+    cli()</pre></div>
+</div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>段落</th><th>作用（据视频 15:15 讲解）</th></tr>
+<tr><td><code>name</code> / <code>version</code> / <code>description</code></td><td>包名、版本和描述。安装后 Python 靠包名找到你</td></tr>
+<tr><td><code>dependencies</code></td><td>声明依赖。没装好 typer ≥ 0.9，就装不了这个库。typer 是流行的命令行库，类似标准库的 argparse。这里主要用它引出依赖</td></tr>
+<tr><td><code>[project.scripts]</code></td><td>安装时额外生成一个 <code>greet</code> 命令。它调用 greeting 模块里的 <code>cli</code> 函数</td></tr>
+<tr><td><code>[build-system]</code></td><td>用什么构建系统产出构件</td></tr>
+</table></div>
+<p>讲义说，<code>requirements.txt</code> 和 <code>setup.py</code> 这些老办法还能用。但应尽量用 <code>pyproject.toml</code>。装好以后，在任何目录都能 import，还多了一个 <code>greet</code> 命令：</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习 2 · ex02-b，依赖从 PyPI 下载）</div><pre><span class="p">$ </span><span class="cmd">uv venv</span>
+<span class="o">Using CPython 3.13.5
+Creating virtual environment at: .venv</span>
+<span class="p">$ </span><span class="cmd">uv pip install .</span>
+<span class="o">Resolved 9 packages in 769ms
+   Building greeting @ file:///&lt;沙箱&gt;/ex02/greeting
+Downloading pygments (1.2MiB)
+ Downloaded pygments
+      Built greeting @ file:///&lt;沙箱&gt;/ex02/greeting
+Prepared 9 packages in 27.84s
+Installed 9 packages in 3.06s
+ + annotated-doc==0.0.5
+ + colorama==0.4.6
+ + greeting==0.1.0 (from file:///&lt;沙箱&gt;/ex02/greeting)
+ + markdown-it-py==4.2.0
+ + mdurl==0.1.2
+ + pygments==2.21.0
+ + rich==15.0.0
+ + shellingham==1.5.4
+ + typer==0.27.3</span>
+<span class="p">$ </span><span class="cmd">source .venv/Scripts/activate; greet Alice</span>
+<span class="o">Hello, Alice!</span></pre></div>
+<div class="callout tip"><div class="ct">讲师现场踩的坑：忘了激活</div><p>装完去别的目录 import，还是失败（<span class="ts">16:48</span>）。因为忘了激活环境。包装进了 venv，shell 里的 python 却还是全局那个。遇到明明装了却找不到，先敲 <code>which python</code>。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>在源码目录里测 import，永远会成功。因为 <code>python -c</code> 会把当前目录放在 sys.path 的第一位。这不说明包装好了，上面 ex02-a 就是例子。要换一个目录再试，才算数。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s7" data-nav="源码 vs 二进制、wheel" data-t="17:45">wheel 就是一个带元数据的 zip 包 <span class="ts">17:45</span></h2>
+<p class="lead">构件分两种。源码要在本机编译，预编译的二进制下载就能用。Python 的构件叫 wheel，本质就是一个 zip。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>uv build                                           <span class="cm"># 一次产出 sdist 和 wheel 两个文件</span>
+unzip -l dist/greeting-0.1.0-py3-none-any.whl      <span class="cm"># wheel 能直接用 unzip 打开</span>
+uv pip install ./greeting-0.1.0-py3-none-any.whl   <span class="cm"># 把这一个文件交给别人就能装</span></pre></div>
+<p class="like"><b>打个比方</b>源码包像宜家的散件，回家得自己拧螺丝，还得有工具。预编译的包像组装好的成品家具。但成品有尺寸，你家门框得对得上。也就是系统和 CPU 要匹配。</p>
+<p>上面那样从源码装，别人得拿到你的全部文件。往往还要一整套编译工具链。实际分发软件时，分成两种：</p>
+<div class="grid2">
+<div class="mini"><h4>从源码安装</h4><p>下载原始代码，在本机编译。需要编译器和构建工具，大项目要编很久。</p></div>
+<div class="mini"><h4>安装预编译二进制</h4><p>下载别人编好的构件。又快又简单，但必须匹配你的<strong>操作系统</strong>和 <strong>CPU 架构</strong>。比如 <a href="https://github.com/BurntSushi/ripgrep/releases" target="_blank" rel="noopener">ripgrep 的 Releases 页</a>，给每种平台各放一个文件（<span class="ts">18:40</span>）。Linux 分 x86_64 和 ARM，macOS 分 Intel 和 Apple Silicon，还有 Windows。</p></div>
+</div>
+<p>Python 的构件叫 <strong>wheel</strong>。里面有代码文件和元数据。元数据包括名字、版本和依赖。它还记着每个文件该放到环境里的哪个位置。<code>uv build</code> 会产出两个文件：</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习 2 · ex02-d，用 grep 滤掉了冗长日志）</div><pre><span class="p">$ </span><span class="cmd">uv build 2&gt;&amp;1 | grep -E '^(Building|Successfully)'</span>
+<span class="o">Building source distribution...
+Building wheel from source distribution...
+Successfully built dist\greeting-0.1.0.tar.gz
+Successfully built dist\greeting-0.1.0-py3-none-any.whl</span>
+<span class="p">$ </span><span class="cmd">unzip -l dist/greeting-0.1.0-py3-none-any.whl</span>
+<span class="o">Archive:  dist/greeting-0.1.0-py3-none-any.whl
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+      155  2026-10-29 17:25   greeting.py
+      118  2026-10-29 17:26   greeting-0.1.0.dist-info/METADATA
+       91  2026-10-29 17:26   greeting-0.1.0.dist-info/WHEEL
+       39  2026-10-29 17:26   greeting-0.1.0.dist-info/entry_points.txt
+        9  2026-10-29 17:26   greeting-0.1.0.dist-info/top_level.txt
+      463  2026-10-29 17:26   greeting-0.1.0.dist-info/RECORD
+---------                     -------
+      875                     6 files</span></pre></div>
+<ul>
+<li><code>.whl</code> 就是 wheel。讲师说它不神奇，就是一个 zip（<span class="ts">20:35</span>）。<code>.tar.gz</code> 是<strong>源码分发包</strong>（sdist），留给需要从源码构建的系统。</li>
+<li>讲义里 <code>unzip -l</code> 列出 5 个文件。本机的 setuptools 多生成了一个 <code>entry_points.txt</code>。它来自 <code>[project.scripts]</code> 那一段。</li>
+<li>把这一个 wheel 文件交给别人，<code>uv pip install ./greeting-0.1.0-py3-none-any.whl</code> 就能装好。<code>greet</code> 命令也一起装上。</li>
+</ul>
+<div class="callout warn"><div class="ct">讲义：这种做法的局限</div><p>有的库依赖平台相关的东西，比如做 GPU 加速的 CUDA。它的构件只能在装了 CUDA 的系统上用。还可能要为每种平台和架构分别构建 wheel。平台指 Linux、macOS、Windows，架构指 x86 和 ARM。wheel 文件名里的标签就是干这个的，见下面演示的后半段。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>pip install 有时会突然开始编译，还报一堆编译器错误。多半是没找到匹配你平台的 wheel。pip 只好下载 sdist，在本机从源码构建。本机缺编译器，就会报错。</p></div>
+<div data-vz="ch06-wheel"></div>
+
+<!-- ============================================================ -->
+<h2 id="s8" data-nav="语义化版本" data-t="21:29">版本号要按整数逐段比，不能当字符串比 <span class="ts">21:29</span></h2>
+<p class="lead">SemVer 的版本号是 MAJOR.MINOR.PATCH 三段整数。改哪一段，就承诺了多大程度的兼容。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Python 3.13.5）</div><pre><span class="p">$ </span><span class="cmd">python -c 'print("1.10.0" &gt; "1.9.0")'</span>         <span class="cm"># 当字符串比：逐个字符，'1' 小于 '9'</span>
+<span class="o">False</span>
+<span class="p">$ </span><span class="cmd">python -c 'print((1, 10, 0) &gt; (1, 9, 0))'</span>   <span class="cm"># 拆成整数再逐段比，10 大于 9</span>
+<span class="o">True</span></pre></div>
+<p class="like"><b>打个比方</b>版本号像门牌“3 栋 10 号”和“3 栋 9 号”。按数字比，10 号在后面。当字符串比，“1”比“9”小。于是 10 号排到了 9 号前面。</p>
+<p>代码是连续开发的，发布却是<strong>离散的</strong>。先在开发环境（dev）里证明能用。再交付（ship）到生产环境（prod）。库一直在变。版本号标记的是它在某一刻的状态。每个版本改了什么，写在<strong>变更日志</strong>（changelog）里（<span class="ts">22:40</span>）。</p>
+<p>可是每个依赖都在变，依赖的依赖也在变。全都追踪一遍，根本不现实。<code>uv tree</code> 能看到整棵依赖树。光是一个 typer，就牵出 7 个包：</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习 2 · ex02-c）</div><pre><span class="p">$ </span><span class="cmd">uv tree</span>
+<span class="o">greeting v0.1.0
+└── typer v0.27.3
+    ├── annotated-doc v0.0.5
+    ├── colorama v0.4.6
+    ├── rich v15.0.0
+    │   ├── markdown-it-py v4.2.0
+    │   │   └── mdurl v0.1.2
+    │   └── pygments v2.21.0
+    └── shellingham v1.5.4</span></pre></div>
+<p>于是有了版本号约定。最常见的是<strong>语义化版本</strong>（<a href="https://semver.org/" target="_blank" rel="noopener">Semantic Versioning</a>，SemVer）。版本号形如 <code>MAJOR.MINOR.PATCH</code>，三段都是整数。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>升级哪一段</th><th>例子</th><th>承诺</th></tr>
+<tr><td>PATCH</td><td>1.2.3 → 1.2.4</td><td>只修 bug 或文档，完全向后兼容</td></tr>
+<tr><td>MINOR</td><td>1.2.3 → 1.3.0</td><td>新增功能，向后兼容。新功能只在新版本里有</td></tr>
+<tr><td>MAJOR</td><td>1.2.3 → 2.0.0</td><td>破坏性变更，几乎不做任何保证。可能要改代码</td></tr>
+</table></div>
+<p>ripgrep 从 15.0.0 升到 15.1.0，正是因为加了新功能（<span class="ts">24:36</span>）。讲义提醒，这只是简化版。完整规范还解释了两件事。一是 0.1.3 升到 0.2.0 为什么可能有破坏性变更。二是 <code>1.0.0-rc.1</code> 是什么意思。</p>
+<p>在 <code>pyproject.toml</code> 里，依赖可以按 <a href="https://peps.python.org/pep-0440/" target="_blank" rel="noopener">PEP 440</a> 写出不同的约束：</p>
+<div class="code"><div class="cap">pyproject.toml（讲义原文，注释译成中文）</div><pre>[project]
+dependencies = [
+    "requests==2.32.3",  <span class="cm"># 精确版本：只能是这一个</span>
+    "click&gt;=8.0",        <span class="cm"># 最低版本：8.0 或更新</span>
+    "numpy&gt;=1.24,&lt;2.0",  <span class="cm"># 区间：至少 1.24，但小于 2.0</span>
+    "pandas~=2.1.0",     <span class="cm"># 兼容发布：&gt;=2.1.0 且 &lt;2.2.0</span>
+]</pre></div>
+<p><code>~=</code> 是 Python 的兼容发布运算符。它大致相当于 npm 和 cargo 里的 <code>^</code>，都按 SemVer 的兼容性划范围。笔记用手写代码和 packaging 库各算了一遍，结果一致：</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习 2 · ex02-g）</div><pre><span class="p">$ </span><span class="cmd">python semver_check.py</span>
+<span class="o">字符串比较 "1.10.0" &gt; "1.9.0" ? False
+元组比较   (1, 10, 0) &gt; (1, 9, 0) ? True
+^1.2.3  =&gt;  &gt;=1.2.3, &lt;2.0.0
+^0.2.3  =&gt;  &gt;=0.2.3, &lt;0.3.0
+^1.2.3  手写: ['1.2.4', '1.9.0']  packaging: ['1.2.4', '1.9.0']  一致: True
+^0.2.3  手写: ['0.2.9']  packaging: ['0.2.9']  一致: True
+~=2.1.0 接受: ['2.1.0', '2.1.7']
+tensorflow ∩ pandas: &lt;1.19.0,&gt;=1.16.0,&gt;=1.16.5 -&gt; ['1.16.5', '1.18.5']
+再加 numpy&gt;=1.19: 无解（依赖地狱）</span></pre></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）：版本号要逐段按整数比</div><p>第一行就是常见 bug。把版本号当字符串比，先比 <code>'1'</code> 和 <code>'9'</code>。于是 1.10.0 就“小于” 1.9.0 了。下面的演示用手推面板，一步步比给你看。</p></div>
+<p>不是所有软件都用 SemVer。<strong>日历版本</strong>（CalVer）按发布日期编号。比如 Ubuntu 的 <code>24.04</code> 是 2024 年 4 月发布的，还有 <code>24.10</code>。一眼就看出新旧，但不表达兼容性。SemVer 也不是绝对可靠。维护者偶尔会失手，在 minor 或 patch 里引入破坏性变更。这是讲义的提醒。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>自己写脚本比版本时，最容易直接比字符串。上面实测，<code>"1.10.0" &gt; "1.9.0"</code> 的结果是 False。比版本请用 packaging 库的 <code>Version</code>，别自己拼。</p></div>
+<div data-vz="ch06-semver"></div>
+
+<!-- ============================================================ -->
+<h2 id="s9" data-nav="库 vs 应用" data-t="25:21">库写宽范围，应用把版本全钉死 <span class="ts">25:21</span></h2>
+<p class="lead">库要和用户的其他依赖装在一起，约束越宽越好装。应用是最终产品，钉死版本才能人人一样。</p>
+<div class="code"><div class="cap">toml · 写法示意</div><pre><span class="cm"># 库的 pyproject.toml：给用户留余地</span>
+dependencies = ["requests&gt;=2.0,&lt;3"]   <span class="cm"># 只卡主版本</span>
+<span class="cm"># 应用的依赖：全部钉死</span>
+dependencies = ["requests==2.32.3"]    <span class="cm"># 只能是这一个，测过的就是它</span></pre></div>
+<p class="like"><b>打个比方</b>库像通用插头，要尽量适配各种插座。应用像定制家具，尺寸按你家量好，一厘米都不改。</p>
+<p>版本写死，大家装到的都一样，不会出问题。只写范围，就是希望它和这些版本都兼容。怎么选，要看你在做什么：</p>
+<div class="grid2">
+<div class="mini"><h4>库（library）写宽范围</h4><p>库会被别的代码导入，和用户的其他依赖装在一起。约束写得太死，用户就容易冲突，装不上。视频里看了 requests 的依赖（<span class="ts">25:54</span>）。3 个都是宽范围，基本只卡主版本。</p></div>
+<div class="mini"><h4>应用和服务（application）全部钉死</h4><p>应用是最终消费者。它通过界面或 API 提供功能，不被别人 import。钉死精确版本，才能保证每个用户的体验可复现。ripgrep 的依赖没有一个范围（<span class="ts">26:36</span>）。全是测过的确切版本。</p></div>
+</div>
+<p><strong>钉住</strong>（pinning）一个库，就是写确切版本，不写范围。比如写 <code>requests==2.32.3</code>，不写 <code>requests&gt;=2.0</code>。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>把应用的习惯带到库里，最容易出事。假设你的库钉死了 numpy 1.x 的某个版本。用户项目里，别的包却要 numpy 2。两个约束没有交集，用户就装不上你的库。这就是第 4 节的依赖地狱。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s10" data-nav="锁文件与可复现" data-t="27:24">锁文件把整棵依赖树的版本和哈希都记下来 <span class="ts">27:24</span></h2>
+<p class="lead">包管理器算出一组满足全部约束的确切版本。它把结果存进锁文件。别人照着装，拿到的就和你一样。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>uv lock            <span class="cm"># 按 pyproject.toml 解析，写出 uv.lock</span>
+uv sync            <span class="cm"># 照着 uv.lock 装，版本和哈希都对得上</span>
+uv sync --locked   <span class="cm"># 锁文件过期就直接报错，CI 和部署用它</span></pre></div>
+<p class="like"><b>打个比方</b>pyproject.toml 像购物清单，写着“鸡蛋一盒”。锁文件像购物小票，写着哪个牌子、哪一批、条码多少。照着小票买，每次都一模一样。</p>
+<p>代码坐在层层抽象之上。下面有运行时、第三方库和操作系统，甚至硬件。任何一层不同，都可能改变行为。包管理器要考虑所有约束，传递依赖的也算。它算出一组满足全部约束的版本，存进<strong>锁文件</strong>（lock file）。视频里先看了 Cargo 生成的锁文件。每个包都有确切版本和<strong>校验和</strong>（checksum），依赖的依赖也有。校验和的意思是，下载时这个文件就该是这个哈希。</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习 2 · ex02-c，长 URL 截到 120 列）</div><pre><span class="p">$ </span><span class="cmd">uv lock</span>
+<span class="o">warning: No `requires-python` value found in the workspace. Defaulting to `&gt;=3.13`.
+Resolved 9 packages in 426ms</span>
+<span class="p">$ </span><span class="cmd">sed -n '/^name = "typer"/,/^$/p' uv.lock | cut -c1-120</span>
+<span class="o">name = "typer"
+version = "0.27.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "annotated-doc" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "rich" },
+    { name = "shellingham" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/03/51/d33db42cc72ffd8c30777547b42d01f0cbf9d95a770457698d0174b3e
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/
+]</span></pre></div>
+<ul class="keys">
+<li><code>typer&gt;=0.9</code> 被锁成了解析当天的最新版。视频里锁到的是 <strong>0.21.1</strong>（<span class="ts">28:46</span>），本机今天锁到的是 <strong>0.27.3</strong>。这说明不锁定的话，不同时间装会得到不同结果。</li>
+<li>锁文件同时记着 sdist 和 wheel 的下载地址和哈希。它是写给机器看的，不是给人读的。</li>
+<li>别人用 <code>uv sync</code> 按锁文件安装，保证拿到你测试时的那些版本。只看 <code>pyproject.toml</code> 的人，可能装到更新的版本（<span class="ts">29:20</span>）。</li>
+</ul>
+<div class="callout bad"><div class="ct">本机实测：锁文件过期会被拒绝</div>
+<div class="code term"><div class="cap">bash · 本机实测（练习 2 · ex02-f：改了约束但没重新 lock）</div><pre><span class="p">$ </span><span class="cmd">uv sync --locked; echo "退出码：$?"</span>
+<span class="e">The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.</span>
+<span class="o">退出码：1</span></pre></div></div>
+<div class="callout extra"><div class="ct">补充实验（非视频内容）：构件本身能逐字节复现吗</div>
+<p>讲义提到了 <a href="https://nixos.org/" target="_blank" rel="noopener">Nix</a> 和 <a href="https://bazel.build/" target="_blank" rel="noopener">Bazel</a> 这类工具。它们追求无论何时何地，都构建出逐位相同的结果。笔记在本机做了个最小实验，见练习 2 的 ex02-e。同一份源码，只改文件的修改时间。构建两次 wheel，sha256 完全不同。因为 zip 里记着文件时间。用 <a href="https://reproducible-builds.org/docs/source-date-epoch/" target="_blank" rel="noopener">SOURCE_DATE_EPOCH</a> 把时间固定以后，情况就变了。修改时间不同、输出目录不同，两次结果也一模一样：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="o">2ace89ce6f47ce642f1a278b274d36f6b0de10b10993b063d6d32d67824ead58 *../w1/greeting-0.1.0-py3-none-any.whl
+4866bd92707c7ac63ce8bb84a560291052c92201543594ea6dceb7ff9031868c *../w2/greeting-0.1.0-py3-none-any.whl</span>
+<span class="p">$ </span><span class="cmd">export SOURCE_DATE_EPOCH=1767225600</span>
+<span class="o">f247708af96321949617d438b3ee206042234c3c42e1da614e8b32e66250da85 *../w3/greeting-0.1.0-py3-none-any.whl
+f247708af96321949617d438b3ee206042234c3c42e1da614e8b32e66250da85 *../w4/greeting-0.1.0-py3-none-any.whl</span></pre></div></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>最常见的坑是只提交 pyproject.toml，不提交 uv.lock。同事和 CI 各自重新解析，装到的版本就不一样。另一个坑是改了依赖，忘了 <code>uv lock</code>。<code>uv sync --locked</code> 会直接拒绝，上面实测退出码是 1。</p></div>
+<p>下面的演示串起三件事：范围、锁定、校验哈希。最后再放一遍上面的可复现构建实验。</p>
+<div data-vz="ch06-lock"></div>
+
+<!-- ============================================================ -->
+<h2 id="s11" data-nav="Nix 与系统依赖" data-t="29:58">语言包管理器管不到的，交给 Nix 这类工具 <span class="ts">29:58</span></h2>
+<p class="lead">pip 只管 Python 包。编译器、CUDA、OpenSSL 这类系统级依赖，得用管得更广的工具。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>pip install cupy-cuda12x      <span class="cm"># pip 只管 Python 这一层</span>
+nvcc --version                <span class="cm"># CUDA 工具包得先在系统里装好，pip 管不着</span>
+nix-shell -p python312 gcc    <span class="cm"># Nix：连编译器和系统库一起钉死</span></pre></div>
+<p class="like"><b>打个比方</b>pip 像小区物业，只管楼里的事，水厂和电网它管不了。Nix 像连水电一起承包的开发商。从地基到灯泡，全记在账上。</p>
+<p>只要离开编程语言自己的环境，就得用管得更广的工具。讲师举了个例子。你以为 Python 3.12 就是 3.12。可构建 Python 要用 C 编译器，编译器的版本也会不同。<strong>Nix</strong> 这类包管理器能管操作系统里的所有包。它用可复现的方式，管住每一处可变的地方。甚至有个操作系统 NixOS 就基于这个理念。它用版本控制的配置文件，管理整台电脑（讲义）。代价是拿灵活性换来了复杂度。</p>
+<div class="callout tool"><div class="ct">讲义推荐 · Nix / Bazel</div><p><a href="https://nixos.org/" target="_blank" rel="noopener">Nix</a> 和 <a href="https://bazel.build/" target="_blank" rel="noopener">Bazel</a> 提供<strong>密闭</strong>（hermetic）构建。编译器、系统库，连构建环境本身都钉死。而且按内容寻址。这样无论何时何地构建，结果都逐位相同。越来越多项目还用 <a href="https://serokell.io/blog/practical-nix-flakes" target="_blank" rel="noopener">nix flakes</a>，按项目管理系统级的库和程序。</p></div>
+<h3 id="s11b">CuPy 离不开 CUDA，这种依赖写不进 pip <span class="ts">30:40</span></h3>
+<p>CuPy 是调用 NVIDIA CUDA 指令的 Python 包装层。它的安装说明不是一句 pip install。而是先装好兼容的 CUDA 工具包。这种依赖根本写不进 Python 的打包信息。看它发布的 wheel，不光分操作系统和 CPU 架构。还要按 <strong>CUDA 运行时版本</strong>和 <strong>Python 版本</strong>分别编译。你得自己挑对文件（<span class="ts">31:54</span>）。还有 GPU 驱动、特定版本的编译器、OpenSSL 这类共享库。它们至今常常要在系统层面安装。</p>
+<h3 id="s11c">升级有风险，不升级也有风险（讲义）</h3>
+<p>新版本会有意无意地带来破坏。旧版本又会随时间暴露安全漏洞。这对矛盾永远存在。讲义的建议有两条。一是用持续集成（第 9 讲）拿新版本依赖跑测试。二是用 <a href="https://github.com/dependabot" target="_blank" rel="noopener">Dependabot</a> 这类自动化工具发现依赖的新版本。即便这样，开发和生产环境的差异，仍会让升级出问题。所以要有<strong>回滚</strong>（rollback）预案。撤销升级，重新部署已知良好的版本。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>pip 装 CuPy 显示成功，一跑起来却报 CUDA 相关的错。pip 的成功只说明 Python 这一层装好了。系统层的 CUDA 和驱动，它根本不检查。遇到这类报错，先查系统依赖，别反复重装 Python 包。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s12" data-nav="虚拟机与容器" data-t="33:02">容器共享宿主内核，所以比虚拟机轻 <span class="ts">33:02</span></h2>
+<p class="lead">虚拟机连操作系统一起交付，开销大。容器复用宿主的内核，只隔离应用这一层，轻得多。</p>
+<div class="code"><div class="cap">bash · 写法示意（Linux 宿主，本机没有 Docker）</div><pre>uname -r                                 <span class="cm"># 宿主的内核版本</span>
+docker run --rm python:3.12 uname -r     <span class="cm"># 容器里看到的是同一个内核：内核是共享的</span></pre></div>
+<p class="like"><b>打个比方</b>虚拟机像在你家院子里再盖一栋小房子，水电全套自带。容器像在你家隔出一个房间。墙是自己的，水电总闸还是你家那个。</p>
+<p>CUDA 这类依赖，最好别让用户自己凑。那就把用户需要的一切都随构件交付。这几乎就是交付整台电脑。</p>
+<div class="grid2">
+<div class="mini"><h4>虚拟机（VM）</h4><p>电脑里运行电脑。它模拟整台计算机，自带一套独立的操作系统。隔离得很彻底。Windows 里能跑 Linux，反过来也行。给别人一个虚拟机镜像，所有依赖都在里面。缺点是<strong>开销大</strong>。跑一个应用，得带一整套操作系统（<span class="ts">33:39</span>）。</p></div>
+<div class="mini"><h4>容器（container）</h4><p>应用大多只关心用户态的依赖，不需要改操作系统本身。所以容器复用宿主操作系统的核心，也就是<strong>共享内核</strong>。它只隔离应用这一层。应用连同依赖、库和文件系统，打成一个包。比 VM 轻，启动更快，运行也更高效（<span class="ts">34:24</span>）。</p></div>
+</div>
+<p>只有部分操作系统原生支持容器，比如 Linux 和 BSD。在 Windows 或 Mac 上跑容器，其实是先跑一个 Linux 虚拟机。容器跑在这台虚拟机里面。好在生产环境部署的应用基本都是 Linux，问题不大。</p>
+<div class="callout warn"><div class="ct">本笔记的实测环境：没有可用的 Docker</div>
+<p>本机是 Windows 11。Docker Desktop 的后端一启动就崩，WSL 里也没有可用的 Linux 发行版。所以本讲的 <code>docker</code> 命令都<strong>未实测</strong>。输出取自讲义原文或视频描述。练习里的 Dockerfile 和 compose 文件照样写出来了，也加了注释。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>以为容器是轻量版虚拟机，什么系统都能装。其实它和宿主共用一个内核。Linux 容器里跑不了 Windows 程序。在 Mac 和 Windows 上，Docker 还得先起一个 Linux 虚拟机，有额外开销。</p></div>
+<div data-vz="ch06-container"></div>
+
+<!-- ============================================================ -->
+<h2 id="s13" data-nav="docker run" data-t="35:36">docker run 一条命令，就得到一台隔离的机器 <span class="ts">35:36</span></h2>
+<p class="lead"><code>docker run 镜像 命令</code> 用镜像起一个容器，在里面跑命令。看着像在用本机程序。其实文件系统和进程都是隔离的。</p>
+<div class="code"><div class="cap">bash · 写法示意（本机没有 Docker）</div><pre>docker run -it python:3.12 python   <span class="cm"># -it：交互式，并分配一个终端</span>
+docker run -it python:3.12 bash     <span class="cm"># 进去看看：文件系统是容器自己的</span>
+ps aux                              <span class="cm"># 在容器里敲：几乎没有进程，只有你启动的那个</span>
+cat /etc/os-release                 <span class="cm"># 官方 python 镜像底下是 Debian</span></pre></div>
+<p class="like"><b>打个比方</b>镜像像一份冷冻的预制菜，Python 和系统都封在里面。docker run 就是加热上桌。吃完收走，下次再热一份，味道一样。</p>
+<p>目前最流行的是 <a href="https://www.docker.com/" target="_blank" rel="noopener">Docker</a>。它把构建、分发、运行容器的方式标准化了。底层的容器运行时 <strong>containerd</strong> 是行业标准，Kubernetes 等工具也在用。所以镜像可以复用。Kubernetes 还额外提供容错等功能。</p>
+<div class="code term"><div class="cap">讲义原文（-it：交互式，并分配终端）</div><pre><span class="p">$ </span><span class="cmd">docker run -it python:3.12 python</span>
+<span class="o">Python 3.12.7 (main, Nov  5 2024, 02:53:25) [GCC 12.2.0] on linux
+&gt;&gt;&gt; print("Hello from inside a container!")
+Hello from inside a container!</span></pre></div>
+<ul>
+<li>看起来像在用本机 Python，其实跑在一个隔离的容器里。讲师的原话是，这不只是一个环境（<span class="ts">36:17</span>）。它是一整台被隔离的机器。退出 Python，容器也跟着停止。</li>
+<li>把 <code>python</code> 换成 <code>bash</code> 进去看看（<span class="ts">36:59</span>）。文件系统是容器自己的。<code>ps aux</code> 几乎看不到进程。容器不做操作系统的簿记工作。里面只有你启动的那些进程。</li>
+<li><code>python:3.14</code> 这样的镜像，是 Docker Hub 上的官方镜像（<span class="ts">37:33</span>）。它就是某个 Linux 装好了 Python。查 <code>/etc/os-release</code>，底下是 Debian。需要 Node 就拉 Node 的镜像。</li>
+</ul>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑（补充，非视频内容）</div>
+<p><code>docker run</code> 每次都用镜像起一个新容器。上一个容器里装的包、改的文件，新容器里都没有。想留下改动，就写进 Dockerfile 重新构建，或者挂载卷。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s14" data-nav="Dockerfile 与分层" data-t="38:15">Dockerfile 每条指令是一层，改哪层就从哪层重建 <span class="ts">38:15</span></h2>
+<p class="lead">镜像是把整个文件系统当构件交付。Dockerfile 一条指令生成一层，Docker 会缓存每一层。</p>
+<div class="code"><div class="cap">Dockerfile · 最小例子（示意）</div><pre>FROM python:3.12        <span class="cm"># 第 1 层：基础镜像</span>
+RUN pip install numpy   <span class="cm"># 第 2 层：装依赖</span>
+COPY . /app             <span class="cm"># 第 3 层：拷源码。改了源码，只从这层往后重建</span></pre></div>
+<p class="like"><b>打个比方</b>镜像分层像叠千层蛋糕，每条指令抹一层。改了第 3 层的奶油，下面两层蛋糕坯不用重烤。直接拿来用。</p>
+<p>实际的程序往往依赖整个文件系统。那就干脆把<strong>整个文件系统</strong>当构件交付，这就是容器镜像。镜像用 Dockerfile 以编程方式构建。依赖、系统库和配置都写得清清楚楚。Dockerfile 看着像 bash（<span class="ts">38:49</span>）。其实它是专门描述镜像的另一种语言：</p>
+<div class="code"><div class="cap">Dockerfile（讲义原文 · 第一版）</div><pre>FROM python:3.12
+RUN apt-get update
+RUN apt-get install -y gcc
+RUN apt-get install -y libpq-dev
+RUN pip install numpy
+RUN pip install pandas
+COPY . /app
+WORKDIR /app
+RUN pip install .</pre></div>
+<ul class="keys">
+<li><strong>镜像和容器</strong>：镜像（image）是打包好的构件，像模板。容器是镜像的运行实例。同一个镜像可以跑多个容器。</li>
+<li><strong>分层</strong>：FROM、RUN、COPY 这些指令，每条产生一层。构建时能看到一串编号，每层都被 Docker 记下来（<span class="ts">39:38</span>）。不同镜像有相同的层时，可以去重。</li>
+<li><strong>缓存</strong>：改了 Dockerfile 的某一行，只重建这一层和它之后的层。</li>
+<li><strong>标签</strong>：<code>docker build -t greet .</code> 给镜像起名。没给标签，就默认用 <code>latest</code>（<span class="ts">40:30</span>）。</li>
+</ul>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>把拷源码的 COPY 写在装依赖前面，是最常见的坑。源码一改，COPY 这层就变了。它后面的装依赖层全部重建，每次都要重新下载。下一节的改进版调整了顺序。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s15" data-nav="写好 Dockerfile" data-t="41:25">好的 Dockerfile：镜像小、层少、版本锁死 <span class="ts">41:25</span></h2>
+<p class="lead">改进版换了 slim 基础镜像，还合并了 RUN。它清掉了包管理器缓存，先装锁定的依赖再拷源码。</p>
+<div class="code"><div class="cap">Dockerfile · 最小例子（示意）</div><pre>FROM python:3.12-slim                  <span class="cm"># slim 版，不带一堆用不上的东西</span>
+RUN apt-get update &amp;&amp; apt-get install -y gcc &amp;&amp; \
+    rm -rf /var/lib/apt/lists/*        <span class="cm"># 一条 RUN 一层：装完马上清缓存</span>
+COPY pyproject.toml uv.lock ./         <span class="cm"># 先只拷依赖清单</span>
+RUN uv sync --locked                   <span class="cm"># 清单不变，这层就命中缓存</span></pre></div>
+<p class="like"><b>打个比方</b>搬家装车，大件先上，零碎最后放。依赖清单很少变，是大件。源码天天改，是零碎。顺序对了，每次只用重装最后那几箱。</p>
+<p>讲义指出了第一版的问题。它用了完整版的 Python 镜像，没用 slim 版。多条分开的 RUN 产生了多余的层。没锁版本。也没清理包管理器缓存，把没用的文件也打了进去。常见的错误还有两个。一是用 root 身份运行容器。二是不小心把<strong>密钥</strong>打进镜像层。改进版是这样的：</p>
+<div class="code"><div class="cap">Dockerfile（讲义原文 · 改进版）</div><pre>FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN apt-get update &amp;&amp; \
+    apt-get install -y --no-install-recommends gcc libpq-dev &amp;&amp; \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+ENV PATH="/app/.venv/bin:$PATH"
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
+COPY . .
+RUN uv sync --locked --no-dev</pre></div>
+<ul>
+<li><strong>builder 模式</strong>：uv 不从源码编译。而是从 <code>ghcr.io/astral-sh/uv</code> 镜像里，只拷出 uv 这一个二进制。这样就不必把编译用的全套工具带进最终镜像。</li>
+<li>合并 RUN，加 <code>--no-install-recommends</code>，再删掉 apt 的列表缓存。讲师说，最终产品不会再装别的东西（<span class="ts">42:00</span>）。</li>
+<li>视频里比了两版镜像的体积。第一版接近 <strong>2 GB</strong>，优化版大约<strong>半个 GB</strong>（<span class="ts">42:43</span>）。</li>
+</ul>
+<div class="callout extra"><div class="ct">补充（非视频内容）：为什么先单独拷依赖清单</div><p>依赖清单很少变，源码经常变。所以先只拷 pyproject.toml 和 uv.lock，把依赖装好，再拷源码。改源码时，装依赖那层的输入没变，直接命中缓存。练习 3 里，课程网站自己的 Dockerfile 也是这样。它先拷 Gemfile 和 Gemfile.lock。</p></div>
+<div class="callout warn"><div class="ct">讲义：Docker 的三个局限</div>
+<ul>
+<li>镜像通常和平台绑定。<code>linux/amd64</code> 的镜像放到 <code>linux/arm64</code> 上，比如 Apple Silicon，只能慢速模拟运行。</li>
+<li>容器需要 Linux 内核。macOS 和 Windows 上的 Docker 其实跑着一个 Linux 虚拟机，有额外开销。</li>
+<li>容器共享宿主内核，隔离比虚拟机弱。在多租户环境里，这是安全隐患。</li>
+</ul></div>
+<h3 id="s15b">问答：Dockerfile 基本都是手写的 <span class="ts">43:33</span></h3>
+<p>Dockerfile 不是自动生成的，绝大多数是手写。过程就是弄清你的程序运行需要什么。讲师说，那个例子其实用不着 C 编译器。加上 gcc，只是为了演示安装和清理的惯例。但如果包里有要编译的 C 扩展，就确实需要 gcc。讲师说，一用起来你就会发现问题。缺了这个那个，应用就跑不了。CuPy 需要 CUDA，那就两条路。要么选一个自带 CUDA 的基础镜像，要么在 Dockerfile 里装上它。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑（补充，非视频内容）</div>
+<p>密钥最容易在这里泄露。<code>COPY . .</code> 会把整个目录拷进去，<code>.env</code> 里的密钥也在内。后面再 <code>RUN rm .env</code> 也没用，它还留在前一层里。要用 <code>.dockerignore</code> 把它排除在外。</p></div>
+<p>下面的演示把两版 Dockerfile 一层层叠起来。看改一行源码时，哪些层命中缓存，哪些要重建。再看优化版为什么小：</p>
+<div data-vz="ch06-layers"></div>
+
+<!-- ============================================================ -->
+<h2 id="s16" data-nav="Docker Compose" data-t="45:29">每个服务一个容器，Compose 一次全拉起来 <span class="ts">45:29</span></h2>
+<p class="lead">数据库、缓存这类服务各放一个容器，通过网络通信。Compose 用一个 YAML 文件声明它们，一条命令一起启动。</p>
+<div class="code"><div class="cap">bash · 写法示意（本机没有 Docker）</div><pre>docker compose up -d   <span class="cm"># 读 docker-compose.yml，按依赖顺序起所有服务</span>
+docker compose ps      <span class="cm"># 看 web 和 cache 是不是都在跑</span>
+docker compose down    <span class="cm"># 一起停掉，删掉容器</span></pre></div>
+<p class="like"><b>打个比方</b>Compose 像餐厅的排班表。厨师、服务员、收银各管一摊，表上写清谁先到岗。店长照表一喊，所有人一起开工。</p>
+<p>再往上一层，你开始依赖<strong>整个服务</strong>。比如数据库、缓存和消息队列。一种做法是把 Postgres 装进你的 Dockerfile。然后祈祷它的依赖和你的不冲突。另一种是把它们放进不同的容器，让它们互相通信。依赖地狱真实存在，所以后一种常见得多（<span class="ts">46:17</span>）。讲义的例子是缓存。别自己写，用久经考验的 <a href="https://redis.io/" target="_blank" rel="noopener">Redis</a> 或 <a href="https://memcached.org/" target="_blank" rel="noopener">Memcached</a>。它们各自部署在自己的容器里。每个组件都是独立的服务，通过网络通信，通常走 HTTP API。这叫<strong>微服务架构</strong>。</p>
+<p>视频的例子是一个访问计数网页（<span class="ts">46:57</span>）。每次访问，Web 应用发 HTTP 请求，从数据库 etcd 读出计数。加一，再写回去。两个容器都要部署，还要互相连通。可以手敲一串 <code>docker run</code>，再去学 Docker 网络。但实践中会用一门专门描述服务部署的配置语言：</p>
+<div class="code"><div class="cap">docker-compose.yml（讲义原文）</div><pre>services:
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis://cache:6379
+    depends_on:
+      - cache
+
+  cache:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:</pre></div>
+<ul>
+<li><a href="https://docs.docker.com/compose/" target="_blank" rel="noopener">Docker Compose</a> 读这个文件，翻译成一串 docker 命令。<code>docker compose up</code> 让两个服务一起启动。它们之间的网络和共享卷，也由它处理。</li>
+<li>web 用主机名 <code>cache</code> 就能连到 Redis。Docker 内部的 DNS 会自动解析服务名。</li>
+<li><code>depends_on</code> 是<strong>声明式</strong>的依赖。数据库没跑起来，就别启动 Web 服务。手动做这件事很麻烦（<span class="ts">49:25</span>）。</li>
+<li>视频里 <code>docker compose up</code> 之后，日志里能看到 etcd 和 web 两个容器。每访问一次，计数加一（<span class="ts">51:07</span>）。</li>
+</ul>
+<p>本机没有 Docker。练习 4 用一个 30 行的 Redis 替身，代替 redis 镜像。还故意先启动 web，看看会怎样：</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习 4 · ex04-b，Redis 用替身）</div><pre><span class="p">$ </span><span class="cmd">PORT=28080 REDIS_URL=redis://127.0.0.1:26379 python app.py &amp; WEB=$!</span>
+<span class="o">web: listening on 127.0.0.1:28080, cache = redis://127.0.0.1:26379</span>
+<span class="p">$ </span><span class="cmd">curl -s -w 'HTTP %{http_code}\n' 127.0.0.1:28080</span>
+<span class="e">cache unavailable: TimeoutError
+HTTP 503</span>
+<span class="p">$ </span><span class="cmd">PORT=26379 python fake_redis.py &amp; CACHE=$!</span>
+<span class="o">cache: fake redis on 127.0.0.1:26379</span>
+<span class="p">$ </span><span class="cmd">for i in 1 2 3; do curl -s 127.0.0.1:28080; done</span>
+<span class="o">This page has been visited 1 times.
+This page has been visited 2 times.
+This page has been visited 3 times.</span></pre></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）：depends_on 只管先后，不管就绪</div><p>默认情况下，<code>depends_on</code> 只保证 cache 容器先启动。它不保证 Redis 已经能接受连接。要等就绪，得配合 healthcheck。所以服务本身也要能容忍依赖暂时不可用。上面的 app.py 连不上缓存时返回 503，不会直接崩溃。</p></div>
+<p>部署要求还会更复杂。比如跨多台机器扩展，服务崩溃时容错，还要高可用。这时就轮到 Kubernetes（k8s）这样的编排平台。它能管理集群上成千上万个容器。但它学习曲线陡，运维开销大。小项目往往用不着（讲义）。</p>
+<h3 id="s16b">服务之间靠 HTTP API 通信（讲义）</h3>
+<p>多容器之所以可行，部分是因为服务都用标准 API 互调。最常见的是 HTTP REST API。比如程序调用 OpenAI 或 Anthropic 这类 LLM 服务。底层就是给它们的服务器发一个 HTTP 请求，再解析响应：</p>
+<div class="code term"><div class="cap">讲义原文（需要 API 密钥，本页未执行）</div><pre><span class="p">$ </span><span class="cmd">curl https://api.anthropic.com/v1/messages \
+    -H "x-api-key: $ANTHROPIC_API_KEY" \
+    -H "content-type: application/json" \
+    -H "anthropic-version: 2023-06-01" \
+    -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 256,
+         "messages": [{"role": "user", "content": "Explain containers vs VMs in one sentence."}]}'</span></pre></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>在 compose 里把地址写成 <code>localhost</code>，最容易踩坑。在 web 容器里，localhost 是 web 自己，Redis 在另一个容器。要写服务名，比如 <code>redis://cache:6379</code>。练习 4 的踩坑部分专门讲了这件事。</p></div>
+<p>下面的演示用练习 4 的本机实测输出，演三件事。先看没有编排时的 503。再看缓存就绪后的计数。最后看 Compose 的声明式依赖：</p>
+<div data-vz="ch06-compose"></div>
+
+<!-- ============================================================ -->
+<h2 id="s17" data-nav="配置" data-t="50:00">只改配置不改代码，就能换一台机器部署 <span class="ts">50:00</span></h2>
+<p class="lead">同一份代码，靠配置区分开发、预发布和生产。配置从命令行参数、环境变量、配置文件读进来。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>PORT=9100 python app.py        <span class="cm"># 环境变量覆盖默认端口</span>
+python app.py --port 9200      <span class="cm"># 命令行参数优先级更高</span>
+export API_KEY=…               <span class="cm"># 密钥放环境变量，别写进代码，更别提交</span></pre></div>
+<p class="like"><b>打个比方</b>配置像空调遥控器。同一台空调，夏天调 26 度，冬天调 20 度。你不会为了换个温度，去拆开空调改电路板。</p>
+<p>代码打包好了，还要考虑别人怎么运行它。还有怎么改变它的行为。讲师给了一个心智模型（<span class="ts">50:32</span>）。<strong>同一个应用，只改配置，不改源码。</strong>这样就该能部署到两台不同的机器上。比如只是换个监听端口，就不该去改源码。讲义也这么说。同一份代码库只靠换配置，就能部署到不同环境。比如开发、预发布（staging）和生产。</p>
+<p>配置的方式在第 2 讲见过。有命令行参数、环境变量和配置文件（dotfiles）。视频里，Web 程序从环境变量 <code>ETCD_URL</code> 读数据库地址。etcd 更适合用命令行参数配置。讲义给了两个例子：</p>
+<div class="grid2">
+<div class="code"><div class="cap">用环境变量配置（讲义原文，注释译成中文）</div><pre>import os
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///local.db")
+DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
+API_KEY = os.environ["API_KEY"]  <span class="cm"># 必填：没设置会抛异常</span></pre></div>
+<div class="code"><div class="cap">config.yaml（讲义原文，程序用 yaml.load 读取）</div><pre>database:
+  url: "postgresql://localhost/myapp"
+  pool_size: 5
+server:
+  host: "0.0.0.0"
+  port: 8080
+  debug: false</pre></div>
+</div>
+<p>练习 4 的 app.py 同时支持这几种来源，逐层覆盖。顺序是默认值、配置文件、环境变量、命令行参数。越往后越优先。这个优先级是常见惯例，属于补充：</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习 4 · ex04-a）</div><pre><span class="p">$ </span><span class="cmd">python app.py --print-config</span>                                 <span class="cm"># 只有默认值：8080</span>
+<span class="o">{"host": "127.0.0.1", "port": 8080, "redis_url": "redis://localhost:6379"}</span>
+<span class="p">$ </span><span class="cmd">echo '{"port": 9000}' &gt; app.json &amp;&amp; python app.py --print-config</span>   <span class="cm"># 配置文件盖过默认值</span>
+<span class="o">{"host": "127.0.0.1", "port": 9000, "redis_url": "redis://localhost:6379"}</span>
+<span class="p">$ </span><span class="cmd">PORT=9100 python app.py --print-config</span>                       <span class="cm"># 环境变量再盖过配置文件</span>
+<span class="o">{"host": "127.0.0.1", "port": 9100, "redis_url": "redis://localhost:6379"}</span>
+<span class="p">$ </span><span class="cmd">PORT=9100 python app.py --port 9200 --print-config</span>           <span class="cm"># 命令行参数最后说了算</span>
+<span class="o">{"host": "127.0.0.1", "port": 9200, "redis_url": "redis://localhost:6379"}</span></pre></div>
+<div class="callout warn"><div class="ct">讲义：密钥要格外小心</div><p>配置里常有 API 密钥这类敏感数据。它们要小心处理，免得意外泄露。<strong>绝不能提交进版本控制</strong>。也别打进镜像层，见第 15 节。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>图省事，把端口和数据库地址直接写在代码里。换台机器部署，就得改源码、重新打包。密钥写在代码里更糟，一 push 就跟着公开了。从第一天起，就从环境变量读。</p></div>
+<div data-vz="ch06-config"></div>
+
+<!-- ============================================================ -->
+<h2 id="s18" data-nav="systemd" data-t="52:14">systemd 让服务开机自己启动，不用人守着 <span class="ts">52:14</span></h2>
+<p class="lead">在 <code>/etc/systemd/system</code> 下写一个单元文件，就注册了一个服务。之后由操作系统负责启动和停止它。</p>
+<div class="code"><div class="cap">bash · 写法示意（本机是 Windows，没有 systemd）</div><pre>sudo systemctl start myapp    <span class="cm"># 现在就启动，执行 ExecStart 那一行</span>
+systemctl status myapp        <span class="cm"># 看它跑没跑起来</span>
+sudo systemctl enable myapp   <span class="cm"># 补充：WantedBy 要 enable 之后才生效</span></pre></div>
+<p class="like"><b>打个比方</b>systemd 像大楼的物业值班表。表上写着“每天早上开灯”，到点自然有人去开。你不用每天亲自跑一趟。</p>
+<p>多服务应用的部署解决了。还剩一个问题：谁来启动它们？总不能指望机器每次重启后，有人 SSH 上去敲 <code>docker compose up</code>。生产环境希望服务开机自启，失败时重启。Linux 上最流行的是 systemd。在 <code>/etc/systemd/system</code> 下写一个声明式的单元文件，就能注册新服务。</p>
+<div class="code"><div class="cap">/etc/systemd/system/myapp.service（讲义原文）</div><pre>[Unit]
+Description=My Application
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/myapp
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+
+[Install]
+WantedBy=multi-user.target</pre></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>行</th><th>含义（据视频 52:51 的 TL;DR）</th></tr>
+<tr><td><code>Requires</code> / <code>After=docker.service</code></td><td>依赖 Docker。必须等 Docker 服务起来后再启动</td></tr>
+<tr><td><code>WorkingDirectory</code></td><td>进入这个目录执行命令</td></tr>
+<tr><td><code>ExecStart=… up -d</code></td><td>启动。<code>-d</code>（detach）让它在后台运行，不卡住命令行</td></tr>
+<tr><td><code>ExecStop=… down</code></td><td>有人要停止服务时执行</td></tr>
+<tr><td><code>WantedBy=multi-user.target</code></td><td>开机进入多用户模式时启动。讲义说，这保证系统启动时就运行</td></tr>
+</table></div>
+<p>之后就用 <code>systemctl start myapp</code>、<code>systemctl status myapp</code> 和 <code>systemctl stop myapp</code> 管理。视频里 start 之后，看似什么都没发生。status 显示 compose up 已经执行了。现在这组服务归操作系统管，机器重启后会自动启动。再访问网页，显示已访问 4 次（<span class="ts">53:44</span>）。</p>
+<div class="callout ai"><div class="ct">讲师建议：用 LLM 学专用语法</div><p>systemd 有自己的一套语法。讲师说，这正是 LLM 特别有用的地方（<span class="ts">52:51</span>）。直接问它有哪些选项，它会把这门专用语法教给你。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑（补充，非视频内容）</div>
+<p>写好单元文件只 <code>start</code>，没有 <code>enable</code>。当下服务能跑，重启机器后却没起来。<code>WantedBy</code> 要 <code>systemctl enable</code> 之后才生效。改了单元文件，还要先跑 <code>systemctl daemon-reload</code>。</p></div>
+<div data-vz="ch06-systemd"></div>
+
+<!-- ============================================================ -->
+<h2 id="s19" data-nav="发布渠道" data-t="54:30">发布就是把构件放到别人找得到的地方 <span class="ts">54:30</span></h2>
+<p class="lead">构件可以直接放成文件，也可以挂在 GitHub Releases 上。还可以推到 PyPI 这样的中央索引。安装器按文件名里的平台标签挑 wheel。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>pip install requests                                  <span class="cm"># 从中央索引 PyPI 取</span>
+pip install git+https://github.com/psf/requests.git   <span class="cm"># 从 GitHub 克隆，再从源码构建</span>
+go get github.com/gorilla/mux                         <span class="cm"># Go 没有中央索引，路径就是地址</span></pre></div>
+<p class="like"><b>打个比方</b>发布像开店。可以自己摆地摊，也就是直接放文件。也可以进商场，也就是 PyPI、npm 这类中央索引。顾客按招牌找上门。</p>
+<p>构件做好了，放在哪？分发的形式和语言、环境密切相关：</p>
+<ul class="keys">
+<li><strong>直接放文件</strong>：上传构件供人下载。<a href="http://archive.ubuntu.com/ubuntu/pool/main/" target="_blank" rel="noopener">Ubuntu 的软件包仓库</a>就是这样（<span class="ts">55:08</span>）。它本质上是一个 .deb 文件的 HTTP 目录列表。</li>
+<li><strong>GitHub</strong>：已成为发布源码和构件的事实标准。GitHub Releases 能给打了标签的版本附上预编译的二进制。</li>
+<li><strong>从 GitHub 直接安装</strong>：包管理器能直接从仓库装（<span class="ts">55:49</span>）。可以从源码装，克隆后构建 wheel 再安装。也可以装某个 Release 里的 wheel。</li>
+<li><strong>去中心化</strong>：Go 没有中央仓库。模块路径 <code>github.com/gorilla/mux</code> 写明了代码在哪。<code>go get</code> 直接去那里取（讲义）。pip、cargo、brew 等则有中央索引。</li>
+</ul>
+<div class="code term"><div class="cap">讲义原文（注释译成中文）</div><pre><span class="cm"># 从源码安装（会克隆并构建）</span>
+<span class="p">$ </span><span class="cmd">pip install git+https://github.com/psf/requests.git</span>
+<span class="cm"># 安装某个标签/分支</span>
+<span class="p">$ </span><span class="cmd">pip install git+https://github.com/psf/requests.git@v2.32.3</span>
+<span class="cm"># 直接安装 GitHub Release 里的 wheel</span>
+<span class="p">$ </span><span class="cmd">pip install https://github.com/user/repo/releases/download/v1.0/package-1.0-py3-none-any.whl</span></pre></div>
+<p>那 pip 平时从哪下载？加上 <code>--verbose</code>，再过滤出 .whl 就看得到。视频里要先卸载再装（<span class="ts">56:57</span>）：</p>
+<div class="code term"><div class="cap">讲义原文（长 URL 中间的哈希目录用 … 省略）</div><pre><span class="p">$ </span><span class="cmd">uv pip install requests --verbose --no-cache 2&gt;&amp;1 | grep -F '.whl'</span>
+<span class="o">DEBUG Selecting: requests==2.32.5 [compatible] (requests-2.32.5-py3-none-any.whl)
+DEBUG No cache entry for: https://files.pythonhosted.org/packages/1e/db/…/requests-2.32.5-py3-none-any.whl.metadata
+DEBUG No cache entry for: https://files.pythonhosted.org/packages/1e/db/…/requests-2.32.5-py3-none-any.whl</span>
+<span class="p">$ </span><span class="cmd">uv pip install numpy --verbose --no-cache 2&gt;&amp;1 | grep -F '.whl'</span>
+<span class="o">DEBUG Selecting: numpy==2.2.1 [compatible] (numpy-2.2.1-cp312-cp312-macosx_14_0_arm64.whl)</span></pre></div>
+<p>文件名里的 <code>py3-none-any</code> 是三个标签。意思是任何 Python 3、任何操作系统、任何架构都能用。含编译代码的包则和平台绑定。<code>cp312-cp312-macosx_14_0_arm64</code> 只给 macOS 14 以上、ARM64 上的 CPython 3.12，也就是 Apple Silicon。换个平台，pip 会下载另一个 wheel。或者从源码构建（讲义）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>在 Mac 上下载好 wheel，拷到 Linux 服务器上装，会报平台不支持。原因就写在文件名里，比如 <code>macosx_14_0_arm64</code>。只有纯 Python 的包才是 <code>none-any</code>。带编译代码的包，要按目标平台另下一份。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s20" data-nav="PyPI 与镜像仓库" data-t="57:29">发布到注册表，别人一条命令就能装 <span class="ts">57:29</span></h2>
+<p class="lead">PyPI、npm、Docker Hub 这些都是注册表。<code>uv publish</code> 把包传上去，别人就能按名字安装。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>uv build                                                <span class="cm"># 先产出 dist/ 里的 wheel 和 sdist</span>
+uv publish --publish-url https://test.pypi.org/legacy/  <span class="cm"># 传到练习用的 TestPyPI，要 token</span>
+uv pip install --index-url https://test.pypi.org/simple/ greeting   <span class="cm"># 别人这样装</span></pre></div>
+<p class="like"><b>打个比方</b>注册表像应用商店。你把 App 交上去，商店登记版本号和校验和。用户搜名字就能下载，还能确认下到的是你那一份。</p>
+<p>要让别人找得到你的包，就要把它发布到注册表（registry）。Python 的主注册表是 PyPI。pip 帮不了这一步，uv 可以：</p>
+<div class="code term"><div class="cap">讲义原文</div><pre><span class="p">$ </span><span class="cmd">uv publish --publish-url https://test.pypi.org/legacy/</span>
+<span class="o">Publishing greeting-0.1.0.tar.gz
+Publishing greeting-0.1.0-py3-none-any.whl</span>
+<span class="p">$ </span><span class="cmd">uv pip install --index-url https://test.pypi.org/simple/ greeting</span></pre></div>
+<p><a href="https://test.pypi.org/" target="_blank" rel="noopener">TestPyPI</a> 是一个独立的练习用注册表。专门用来测发布流程，不会污染真正的 PyPI。视频里 greeting 这个名字已经被人占了。讲师改用 missing-semester 包演示。上传前，他把版本号比上次测试升了一个 patch（<span class="ts">58:07</span>）。本机没有 TestPyPI 账号，只跑了不上传的 <code>--dry-run</code>，见练习 5 的 ex05-a：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">uv publish --dry-run --trusted-publishing never --publish-url https://test.pypi.org/legacy/ dist/*</span>
+<span class="o">Checking 2 files against https://test.pypi.org/legacy/
+Checking greeting-0.1.0-py3-none-any.whl (1.5KiB)
+Uploading greeting-0.1.0-py3-none-any.whl (1.5KiB)
+Checking greeting-0.1.0.tar.gz (1.0KiB)
+Uploading greeting-0.1.0.tar.gz (1.0KiB)</span></pre></div>
+<p>dry-run 下会打印 Uploading，但不会真的上传。见 <code>uv help publish</code> 对 <code>--dry-run</code> 的说明。</p>
+<ul class="keys">
+<li><strong>信任</strong>：用户怎么确认，下载的包真的来自你，没被篡改？注册表用<strong>校验和</strong>验证完整性。有的生态还支持<strong>包签名</strong>（讲义）。它用密码学证明作者身份。</li>
+<li><strong>各语言的注册表</strong>：Rust 有 <a href="https://crates.io" target="_blank" rel="noopener">crates.io</a>，JavaScript 有 <a href="https://www.npmjs.com" target="_blank" rel="noopener">npm</a>，Ruby 有 <a href="https://rubygems.org" target="_blank" rel="noopener">RubyGems</a>。容器镜像有 <a href="https://hub.docker.com" target="_blank" rel="noopener">Docker Hub</a>。私有或内部的包，组织会自建仓库。比如私有 PyPI 和私有镜像仓库。也可以用云厂商的托管服务。</li>
+<li><strong>Docker 镜像</strong>：只能推到你有权限的注册表（<span class="ts">59:23</span>）。讲师只能推以自己用户名开头的镜像。所以先按这个规则重新打标签，再 <code>docker push</code>。之前推过的层会被跳过。之后谁都能从 Docker Hub 拉下这个镜像。里面是完整的文件系统。</li>
+<li><strong>问答：怎么和同学共享镜像？</strong>用镜像仓库（container registry）（<span class="ts">1:01:47</span>）。Docker Hub 不是唯一的，GitHub 也有。只要双方都能访问同一个仓库，就能 push 和 pull。读取私有内容要认证，证明你是你，而且你有权限。</li>
+</ul>
+<p>把 Web 服务部署到互联网，还需要更多基础设施。要注册域名，配置 DNS 指向服务器。通常还要 nginx 这样的反向代理，处理 HTTPS 和路由流量。文档、静态网站这类简单场景，用 <a href="https://pages.github.com/" target="_blank" rel="noopener">GitHub Pages</a> 就够了。它直接从仓库免费托管（讲义，练习 6）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>同一个版本号不能重复上传。传错了想覆盖 0.1.0，注册表会拒绝。只能把版本升到 0.1.1 再传。讲师现场也是先升了 patch 才上传的。</p></div>
+<div data-vz="ch06-publish"></div>
+
+<!-- ============================================================ -->
+<h2 id="s21" data-nav="一页带走" data-t="1:00:20">一页带走：构件加上它对环境的假设 <span class="ts">1:00:20</span></h2>
+<p class="lead">把本讲浓缩成几行命令。每行的注释就是结论和考点。</p>
+<div class="code"><div class="cap">bash · 本讲速查（注释即考点）</div><pre>source venv/bin/activate          <span class="cm"># 激活就是把 venv/bin 插到 PATH 最前面</span>
+bash venv/bin/activate            <span class="cm"># 白跑：子进程改完 PATH 就退出了，必须 source</span>
+uv pip install .                  <span class="cm"># 按 pyproject.toml 把包装进当前环境</span>
+uv build                          <span class="cm"># 产出 sdist 和 wheel，wheel 就是带元数据的 zip</span>
+"1.10.0" &gt; "1.9.0"                <span class="cm"># 当字符串比是 False，版本号要按整数逐段比</span>
+^0.2.3                            <span class="cm"># 等于 &gt;=0.2.3,&lt;0.3.0，不允许升到 0.3.0</span>
+pandas~=2.1.0                     <span class="cm"># 等于 &gt;=2.1.0,&lt;2.2.0，不允许 2.2.0</span>
+dependencies = ["typer&gt;=0.9"]     <span class="cm"># 库写范围给用户留余地，应用靠锁文件钉死</span>
+uv lock &amp;&amp; uv sync --locked       <span class="cm"># 不同时间解析结果不同，锁文件记下确切版本和哈希</span>
+COPY pyproject.toml uv.lock ./    <span class="cm"># 依赖层放前面，改一行源码，这层照样命中缓存</span>
+docker run python:3.12 uname -r   <span class="cm"># 容器共享宿主内核，所以轻。代价是隔离更弱</span>
+redis://cache:6379                <span class="cm"># 容器里连别的服务用服务名，localhost 是自己</span>
+systemctl enable myapp            <span class="cm"># WantedBy 要 enable 才会开机自启（补充）</span></pre></div>
+<ul class="keys">
+<li>交付代码，就是定义构件，再说清它对环境的假设。</li>
+<li>安装器查索引、选构件、递归解析依赖，再下载安装。约束的交集为空，就是依赖地狱。用<strong>每个项目一个环境</strong>来隔离。</li>
+<li>虚拟环境只是一个目录。激活就是把它的 bin 或 Scripts 插到 PATH 最前面，必须 <code>source</code>。</li>
+<li><code>pyproject.toml</code> 描述项目。<code>uv build</code> 产出 sdist 和 wheel。wheel 是带元数据的 zip，文件名里的标签说明适用平台。</li>
+<li>SemVer 里，PATCH 修 bug，MINOR 加功能，MAJOR 破坏兼容。版本号按整数逐段比。库写范围，应用钉死。</li>
+<li>锁文件记着整棵树的确切版本和哈希。<code>uv sync</code> 照着装，结果可复现。</li>
+<li>VM 交付整个操作系统。容器共享内核，只隔离应用层。Dockerfile 每条指令一层，层可以缓存。</li>
+<li>Compose 声明多个服务和它们的依赖顺序。配置在运行时注入，密钥不进版本控制。systemd 负责开机自启。</li>
+<li>发布到 PyPI 或 TestPyPI、GitHub、镜像仓库。用校验和与签名建立信任。</li>
+</ul>
+<div class="callout key"><div class="ct">下一步</div>
+<p>这一讲把前几讲的工具串到了交付这一步。虚拟环境靠的是第 1、2 讲的 PATH 和环境变量。第 5 讲 Git 的标签，对应发布的版本。第 9 讲的持续集成，会自动跑构建和测试。下一讲是智能体编程。它也能帮你写 Dockerfile 和 systemd 单元这类专用语法。现在去做<a href="labs/lab06.html">本讲练习的可视化笔记</a>。</p></div>
+
+</article></main>
+<script src="assets/vz.js"></script>
+<script src="assets/viz/ch06-deps.js"></script>
+<script src="assets/viz/ch06-artifact.js"></script>
+<script src="assets/viz/ch06-deploy.js"></script>
+</body>
+</html>

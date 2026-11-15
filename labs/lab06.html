@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>练习 06 · 打包与交付代码 · Missing Semester 2026</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="../assets/vz.css">
+<link rel="stylesheet" href="../assets/lab.css">
+<script>window.PAGE = { key: 'lab06', ch: 'ch06', type: 'lab', base: '../' };</script>
+<script src="../assets/course.js"></script>
+<script src="../assets/dg.js"></script>
+<script src="../assets/app.js"></script>
+<script src="data/lab06.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<header class="lab-head">
+  <div class="k">LAB 06 · 对应 <a href="../ch06.html">第 6 讲 · 打包与交付代码</a></div>
+  <h1>练习可视化笔记 · 打包与交付代码</h1>
+  <p class="lede">讲义第 6 讲一共 6 道练习，这里逐题讲。每题先亮结论，再给真跑的代码和输出。接着打个比方讲原理，最后指出坑在哪。考点都写在代码注释里。官方不给答案，题解是笔记作者写的。<strong>能在本机跑的输出，都由脚本真跑后自动收集</strong>。生成时间是 <b id="labGen">…</b>。需要 Docker、账号或域名的步骤，标成了未实测。</p>
+  <div class="lab-prog" id="labProg"><span class="t"></span><div class="bar"><div class="f"></div></div><button class="btn sm" id="labGo" type="button">定位到第一道未完成的题</button></div>
+  <div class="lab-legend">
+    <span><span class="wb gb">Git Bash 5.3 · Windows 本机</span> 真跑</span>
+    <span><span class="ec na">未实测</span> 本机没有对应环境或账号，写明原因</span>
+    <span><span class="ann" style="display:inline-flex;margin:0;padding:1px 8px"><span class="ar">L3</span></span> 注释层（不可选中，复制不会带上）</span>
+  </div>
+</header>
+
+<h2 id="env" data-nav="环境检查">环境检查：本机能跑 Python 和 uv，跑不了 Docker</h2>
+<p class="lead">本页命令都在 Windows 的 Git Bash 里真跑。需要 Docker 或账号的步骤，标成了未实测。</p>
+<p>动手前先确认工具链。下面是生成本页时，在本机真跑的检查命令和输出：</p>
+<div data-env="gitbash"></div>
+<div class="callout warn"><div class="ct">本机限制与处理办法</div>
+<ul>
+<li><strong>没有 Docker</strong>：Docker Desktop 的后端一启动就崩。WSL 里也没有可用的发行版。练习 3、4、5 里的 <code>docker build</code>、<code>docker compose</code> 和 <code>docker push</code> 全部标成<strong>未实测</strong>。Dockerfile 和 compose 文件照样写出来，加了注释。能做的静态检查也做了，比如语法和 YAML 结构。练习 4 的服务改用一个 30 行的 Redis 替身，在本机真跑。</li>
+<li><strong>Windows 上的 venv</strong>：激活脚本在 <code>venv/Scripts/activate</code>，不在讲义里的 <code>venv/bin/activate</code>。其余行为相同。</li>
+<li><strong>隐私</strong>：每条命令的输出都先过一遍 <code>.sanitize.py</code>。沙箱绝对路径换成 <code>&lt;沙箱&gt;</code>，Python 安装目录换成 <code>&lt;Python&gt;</code>。临时目录换成 <code>&lt;TEMP&gt;</code>。练习 1 还把环境变量精简到几项，所以 diff 很短。这几项是 HOME、SYSTEMROOT、TEMP、TMP 和 PATH。</li>
+<li><strong>不全局安装</strong>：typer 这类第三方包，只装进沙箱 venv。每条命令用自己的那一个。uv 的下载缓存放在临时目录里。最后一条联网命令跑完，缓存就删掉。</li>
+<li><strong>需要账号的步骤</strong>一律不代你操作。包括 TestPyPI、ghcr.io、GitHub Pages 和自定义域名。页面给出完整步骤和验收标准。凭据只应由你本人输入。</li>
+</ul></div>
+<div class="callout tip"><div class="ct">怎么用这一页</div>
+<p>代码块右上角有个“复制”。它复制的是源文件的原始字节，不带行号和注释层。“注释”按钮能隐藏或显示所有注释。每道题标题右边可以勾“完成”。想自己验证，就按<a href="#selfcheck">页尾“自查”</a>的方法重跑。</p></div>
+
+<!-- ======================= 1 ======================= -->
+<h2 id="ex01" data-nav="1 · venv 改了什么">练习 1 · 激活 venv 只是改了当前 shell 的几个变量 <label class="ex-done"><input type="checkbox" data-ex="ex01">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：用 <code>printenv</code> 把环境保存到一个文件。建一个 venv 并激活，再 <code>printenv</code> 到另一个文件。然后 <code>diff before.txt after.txt</code>。环境里变了什么？shell 为什么会优先用 venv？提示：对比激活前后的 <code>$PATH</code>。再运行 <code>which deactivate</code>，推理一下 deactivate 这个 bash 函数在做什么。</p>
+<p class="lead">激活就是在<strong>当前 shell</strong> 里改 PATH，再设几个变量。所以必须 <code>source</code>，deactivate 再把它们改回去。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>$PATH 的查找规则，见<a href="../ch01.html#s7">第 1 讲第 7 节</a>。环境变量在第 2 讲。虚拟环境见<a href="../ch06.html#s4">第 6 讲第 4 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<figure class="fig"><script>
+DG('flow', { nodeH: 50, cols: [
+  [ { id: 'a', l: 'printenv > before', s: '激活前快照', tone: 'data' } ],
+  [ { id: 'b', l: 'source activate', s: '在当前 shell 执行', tone: 'teal' } ],
+  [ { id: 'c', l: '改 PATH / 设 VIRTUAL_ENV / 改 PS1', s: '并定义 deactivate 函数', tone: 'info' } ],
+  [ { id: 'd', l: 'printenv > after', s: '激活后快照', tone: 'data' } ],
+  [ { id: 'e', l: 'diff', s: '只剩变化的行', tone: 'ok' } ]
+], edges: [ ['a', 'b'], ['b', 'c'], ['c', 'd'], ['d', 'e'] ] });
+</script><figcaption>激活脚本只是一段在当前 shell 里执行的 bash 代码</figcaption></figure></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="ex01/envdiff.sh" data-new="1-16"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex01-a"></div>
+<p>输出这样读。<code>5c5</code> 表示第 5 行被改了，PATH 前面多了 <code>&lt;沙箱&gt;/ex01/venv/Scripts</code>。<code>6a7</code> 和 <code>12a14,15</code> 表示新增的行。分别是 <code>PS1</code>、<code>VIRTUAL_ENV</code> 和 <code>VIRTUAL_ENV_PROMPT</code>。<strong>shell 优先用 venv，就是因为它的目录插到了 PATH 最前面。</strong>按第 1 讲的规则，第一个命中的赢。</p>
+<div data-run="ex01-b"></div>
+<p><code>which deactivate</code> 失败了，退出码是 1。which 只在 PATH 的目录里找<strong>文件</strong>。deactivate 却是一个<strong>函数</strong>，由激活脚本定义在当前 shell 里。只有 <code>type</code> 看得到它。从函数体能读出它做了这些事。先把存在 <code>_OLD_VIRTUAL_PATH</code> 里的旧 PATH 换回来，再恢复 PYTHONHOME 和 PS1。然后 <code>hash -r</code> 清掉命令位置的缓存，unset VIRTUAL_ENV。最后不带参数调用时，<code>unset -f deactivate</code> 把自己也删掉。</p>
+<div data-run="ex01-d"></div>
+<p>PATH 决定运行哪个 python。运行起来之后，import 去哪找包，看 <code>sys.prefix</code> 和 <code>sys.path</code> 里的 site-packages。激活后，两者都指向 venv。</p></div>
+<p class="like"><b>打个比方</b>激活像在通讯录最上面插了一张名片。你喊一声 python，先接电话的就是 venv 里那个。deactivate 就是把这张名片抽走。</p>
+<p>下面的演示把 envdiff.sh 一行行跑给你看。先看两张快照怎么生成，diff 留下哪几行。再看 deactivate 怎么倒回去。</p>
+<div data-vz="lab06-envdiff"></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：执行了激活脚本，没有 source</div>
+<div data-run="ex01-c"></div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>bash venv/Scripts/activate</code> 或 <code>./venv/Scripts/activate</code></div></div>
+<div class="row"><b>现象</b><div>没有任何报错，但 <code>which python</code> 还是全局的。</div></div>
+<div class="row"><b>原因</b><div>两种写法都会启动一个<strong>子进程</strong>来执行脚本。子进程的 PATH 被改了，随后它退出，改动也跟着消失。道理和第 1 讲练习 7 一样。那题讲的是 cd 为什么必须内建。Linux 上，激活脚本通常没有执行位。<code>./activate</code> 会直接报 Permission denied，这条未实测。Git Bash 不检查执行位，所以本机静默“成功”。</div></div>
+<div class="row good"><b>正确写法</b><div><code>source venv/Scripts/activate</code>，或者 <code>. venv/bin/activate</code>。</div></div></div></div>
+<h3 id="ex01b">补充实验：一个环境装不下互相冲突的两个库</h3>
+<p>讲义说，依赖冲突要靠每个项目一个环境来解决。不联网也能复现。<code>make_wheels.py</code> 手工造了 4 个最小的 wheel。<code>liba</code> 要 <code>shared&lt;2.0</code>，<code>libb</code> 要 <code>shared&gt;=2.0</code>。</p>
+<div data-file="ex01/make_wheels.py" data-new="1-28"></div>
+<div data-run="ex01-e"></div>
+<p>三段输出依次是这样的。第一段同时安装，解析器证明无解，退出码 1。第二段先装 liba，选了 shared 1.5.0。第三段再装 libb，安装器<strong>把 shared 换成了 2.1.0</strong>。liba 就这样被悄悄破坏了，只有 <code>uv pip check</code> 查得出来。解法是两个环境：</p>
+<div data-run="ex01-f"></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>echo $PATH                      <span class="cm"># 激活后，全局目录还在，只是排在 venv 后面</span>
+<span class="cm"># 同名的 python、pip 先在 venv 里找到，所以不冲突</span>
+<span class="cm"># 全局目录只给 ls、git 这类 venv 里没有的命令兜底</span>
+venv/Scripts/python script.py   <span class="cm"># 不激活也能用：写全路径，就用这个解释器和它的包</span>
+venv/bin/python script.py       <span class="cm"># Linux 上的写法。激活只是为了少打字</span>
+<span class="cm"># ex01-f 里的 env-a/Scripts/python 就是这么用的</span></pre></div>
+
+<!-- ======================= 2 ======================= -->
+<h2 id="ex02" data-nav="2 · 打包与锁文件">练习 2 · pyproject 写范围，uv.lock 钉死整棵树 <label class="ex-done"><input type="checkbox" data-ex="ex02">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（联网下载依赖）</span></div>
+<p class="q-orig"><b>原题</b>：创建一个带 <code>pyproject.toml</code> 的 Python 包，把它装进虚拟环境。再创建一个锁文件，检查它的内容。</p>
+<p class="lead">装好以后，任何目录都能 import greeting，还多了 <code>greet</code> 命令。uv.lock 记下了 9 个包的确切版本和哈希。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>构件与 pyproject.toml，见<a href="../ch06.html#s6">第 6 讲第 6 节</a>。wheel 见<a href="../ch06.html#s7">第 7 节</a>，语义化版本见<a href="../ch06.html#s8">第 8 节</a>。锁文件见<a href="../ch06.html#s10">第 10 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p>先看没打包时的问题。一个裸的 greet.py，只能在它所在的目录里被 import。</p>
+<div data-file="ex02/greet.py"></div><div data-run="ex02-a"></div>
+<p>Python 只在 sys.path 里找模块。用 <code>python -c</code> 时，sys.path 的第一项是当前目录。换了目录就找不到了。打包就是按规则写好 <code>pyproject.toml</code>。安装器再把代码放进环境的 site-packages。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：两个文件都是讲义原文</div><div data-file="ex02/greeting/pyproject.toml"></div><div data-file="ex02/greeting/greeting.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：建环境，再安装</div><div data-run="ex02-b"></div>
+<p>输出这样读。<code>Resolved 9 packages</code>：greeting 自己，加上 typer，再加 typer 带来的 7 个传递依赖。<code>Built greeting @ file:///…</code> 表示先构建再安装。uv 在隔离环境里，用 setuptools 把源码构建成 wheel。最后换了个目录 import，也成功了。模块文件在 venv 的 site-packages 里。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：生成并检查锁文件</div><div data-run="ex02-c"></div>
+<p>输出这样读：</p>
+<ul>
+<li><code>99 uv.lock</code> 和 <code>9</code>：锁文件 99 行，有 9 个 <code>[[package]]</code> 条目。依赖树里的每个包都被钉死了，不只是你直接写的 typer。</li>
+<li>typer 条目里，<code>version = "0.27.3"</code> 是今天解析出的确切版本。pyproject 里只写了 <code>&gt;=0.9</code>。视频录制时锁到的是 0.21.1。<code>source</code> 是从哪个索引来的。</li>
+<li><code>dependencies</code> 里有 <code>marker = "sys_platform == 'win32'"</code>。意思是 colorama 只在 Windows 上才需要。</li>
+<li><code>sdist</code> 和 <code>wheels</code> 各带下载地址和 <code>hash = "sha256:…"</code>。哈希被 cut 截掉了。</li>
+<li><code>warning: No requires-python</code>：pyproject 没写支持哪些 Python 版本。uv 默认按当前解释器 3.13 锁定。给库写上 <code>requires-python = "&gt;=3.9"</code> 这类范围更好。</li>
+</ul></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：构建 wheel，看里面有什么</div><div data-run="ex02-d"></div></div>
+<p class="like"><b>打个比方</b>pyproject.toml 像招聘启事，写着“3 年以上经验”。uv.lock 像录用名单，写着具体录了谁。下次再招，照着名单来，就不会换人。</p>
+<div class="callout extra"><div class="ct">补充实验：自己构建的 wheel 能复现吗（ex02-e）</div>
+<p>锁文件保证了装进来的依赖逐字节相同。那你自己构建出的 wheel 呢？</p>
+<div data-run="ex02-e"></div>
+<p>只改源码的修改时间，哈希就变了。设好 <code>SOURCE_DATE_EPOCH</code> 后，两次构建完全相同。下面的演示一行行画出来：</p>
+<div data-vz="lab06-repro"></div></div>
+<div class="callout extra"><div class="ct">补充：手推版本范围（ex02-g）</div>
+<p>锁文件里的版本，是解析器在各个范围的交集里挑的。<code>semver_check.py</code> 手写了 <code>^</code> 的规则。再用 packaging 库交叉验证，pip 内部也在用这个库：</p>
+<div data-file="ex02/semver_check.py" data-new="1-43"></div>
+<div data-run="ex02-g"></div></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：改了依赖，忘了重新 lock</div>
+<div data-run="ex02-f"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>把约束改成 <code>typer&gt;=0.9,&lt;0.20</code>，再跑 <code>uv sync --locked</code>。它报 “The lockfile at uv.lock needs to be updated”，退出码 1。</div></div>
+<div class="row"><b>原因</b><div>锁文件里的 typer 0.27.3，已经不满足新约束。<code>--locked</code> 的意思是锁文件必须和 pyproject 一致，否则报错。它专门给 CI 和部署用。宁可失败，也不悄悄换版本。</div></div>
+<div class="row good"><b>正确写法</b><div>改完依赖就运行 <code>uv lock</code>。pyproject.toml 和 uv.lock 要<strong>一起提交</strong>。</div></div></div>
+<div class="pit-card"><div class="row bad"><b>另一个坑</b><div>构建输出放进了项目目录，比如 <code>uv build -o out1</code>。再构建时，setuptools 报 <code>Multiple top-level packages discovered in a flat-layout</code>。</div></div>
+<div class="row"><b>原因</b><div>没有显式配置时，setuptools 会自动找包。顶层的每个目录，都被当成要打包的包。这叫 flat-layout 自动发现。默认的 <code>dist/</code> 和 <code>build/</code> 在排除名单里，你自己起的名字不在。下面是本机实测：</div></div>
+<div data-run="ex02-h"></div>
+<div class="row good"><b>正确写法</b><div>用默认的 dist/，或者输出到项目外面。本页用的是 <code>-o ../w1</code>。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>dependencies = ["typer&gt;=0.9"]   <span class="cm"># greeting 能被 import，是库：pyproject 写范围，给用户留余地</span>
+uv lock                         <span class="cm"># 部署和 CI 要可复现，靠 uv.lock 钉死整棵树。两者不矛盾</span>
+uv sync --locked                <span class="cm"># 锁文件和 pyproject 对不上就报错，退出码 1</span>
+uv build -o out1                <span class="cm"># 坑：输出目录在项目里，下次构建会被当成包</span></pre></div>
+
+<!-- ======================= 3 ======================= -->
+<h2 id="ex03" data-nav="3 · 用 compose 跑课程网站">练习 3 · 装好 Docker，一条 compose 命令就能预览课程网站 <label class="ex-done"><input type="checkbox" data-ex="ex03">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（静态检查）</span><span class="tag lnx">Docker 未实测</span></div>
+<p class="q-orig"><b>原题</b>：安装 Docker。用 docker compose 在本地构建 Missing Semester 课程网站。</p>
+<p class="lead">镜像里只装 Ruby 和 gem 依赖。网站内容运行时挂载进去，Jekyll 监视改动，自动重建。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>容器与镜像，见<a href="../ch06.html#s12">第 6 讲第 12 到 15 节</a>。Compose 见<a href="../ch06.html#s16">第 16 节</a>，锁文件见<a href="../ch06.html#s10">第 10 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p>课程网站用 Ruby 的静态站点生成器 Jekyll 构建。仓库里自带了下面两个文件。本页是逐字节复制的，<code>cmp</code> 验证过。镜像里只装 Ruby 和 gem 依赖。网站内容通过<strong>绑定挂载</strong>（<code>./:/app</code>）实时映射进容器。Jekyll 的 <code>-w</code> 监视改动，自动重建。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>读：课程仓库原文件</div><div data-file="ex03/Dockerfile"></div><div data-file="ex03/docker-compose.yml"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：能在本机验证的部分</div><div data-run="ex03-a"></div>
+<p>输出这样读。<code>Gemfile</code> 只写了一行 <code>gem 'github-pages'</code>，这是范围。<code>Gemfile.lock</code> 把它和全部传递依赖都钉死了。github-pages 是 232 版，jekyll 是 3.10.0，一共 110 个 gem 条目。末尾还记着用哪个 bundler 版本生成的。这和 pyproject.toml 加 uv.lock 是同一个模式。</p>
+<div data-run="ex03-b"></div>
+<p>本机没有 Ruby、Bundler 和 Jekyll。Docker CLI 在，但守护进程连不上。这正是用容器交付要解决的处境。装好 Docker，就不必在宿主机上装 Ruby 工具链。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：在装好 Docker 的机器上</div><div data-run="ex03-c"></div><div data-run="ex03-d"></div>
+<p>验收标准如下。第一次 <code>up --build</code> 会拉取 <code>ruby:3.4-alpine3.21</code>，再执行 <code>bundle install</code>，比较慢。日志里会出现 Jekyll 的服务地址提示，形如 <code>Server address: http://0.0.0.0:4000</code>。这时浏览器打开 <code>http://localhost:4000</code>，能看到课程首页。改动任意一个 <code>_2026/*.md</code>，刷新页面就能看到变化。这靠的是绑定挂载加 <code>-w</code>。按 <kbd>Ctrl</kbd>+<kbd>C</kbd> 停止，<code>docker compose down</code> 清理。</p></div>
+<p class="like"><b>打个比方</b>绑定挂载像把自家书架直接搬进图书馆的阅览室。你在家改了书，阅览室里那本立刻就变。不用每次重新印一本送过去。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>COPY Gemfile Gemfile.lock /app/   <span class="cm"># 只先拷依赖清单：清单很少变，bundle install 那层能命中缓存</span>
+- ./:/app                         <span class="cm"># compose 的绑定挂载：网站内容不进镜像，运行时挂进去</span>
+<span class="cm"># 所以 Dockerfile 根本不用 COPY 网站内容，边改边预览</span>
+jekyll serve -w --host 0.0.0.0    <span class="cm"># -w 监视改动自动重建，0.0.0.0 让宿主机访问得到</span></pre></div>
+
+<!-- ======================= 4 ======================= -->
+<h2 id="ex04" data-nav="4 · Dockerfile + Redis">练习 4 · 同一份代码，只换配置就能进容器 <label class="ex-done"><input type="checkbox" data-ex="ex04">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（Redis 替身）</span><span class="tag lnx">Docker 未实测</span></div>
+<p class="q-orig"><b>原题</b>：给一个简单的 Python 应用写 Dockerfile。再写一个 <code>docker-compose.yml</code>，让应用和一个 Redis 缓存一起运行。</p>
+<p class="lead">web 每收到一次请求，就让 Redis 里的计数加一。监听地址和缓存地址都做成配置。容器里用环境变量覆盖就行。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>Dockerfile 见<a href="../ch06.html#s14">第 6 讲第 14、15 节</a>。Compose 见<a href="../ch06.html#s16">第 16 节</a>，配置注入见<a href="../ch06.html#s17">第 17 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<figure class="fig"><script>
+DG('seq', { actors: [ { l: 'curl', tone: 'neutral' }, { l: 'web', s: 'app.py', tone: 'info' }, { l: 'cache', s: 'Redis', tone: 'teal' } ], msgs: [
+  { f: 0, t: 1, l: 'GET /', tone: 'data' },
+  { f: 1, t: 2, l: 'INCR visits（RESP 协议）', tone: 'data', mono: true },
+  { f: 2, t: 1, l: ':3', tone: 'ok', mono: true },
+  { f: 1, t: 0, l: 'visited 3 times', tone: 'ok' },
+  { note: '连不上 cache 就返回 503，不崩溃', at: 1, tone: 'bad' }
+] });
+</script><figcaption>web 每处理一次请求，就让缓存里的计数加一。视频 46:57 的 etcd 计数器是同一个结构</figcaption></figure>
+<p>本机没有 Docker，为了也能真跑，应用只用标准库。它自己用 socket 说 Redis 的 RESP 协议。另外写了一个 30 行的 <code>fake_redis.py</code> 当测试替身。真部署时，由 compose 里的官方 <code>redis:7-alpine</code> 镜像提供真的 Redis。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="ex04/app.py" data-new="1-61"></div><div data-file="ex04/Dockerfile" data-new="1-11"></div><div data-file="ex04/docker-compose.yml" data-new="1-18"></div>
+<p>本机测试用的替身，不进镜像：</p><div data-file="ex04/fake_redis.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：配置优先级</div><div data-run="ex04-a"></div>
+<p>同一份代码，端口被一层层覆盖。依次是配置文件、环境变量和命令行。8080 变 9000，再变 9100，最后是 9200。Dockerfile 里的 <code>ENV HOST=0.0.0.0</code> 和 compose 里的 <code>REDIS_URL=redis://cache:6379</code>，走的都是第 3 层环境变量。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：两个服务，故意先起 web</div><div data-run="ex04-b"></div>
+<p>输出这样读。缓存没起来时，web 返回 503。Windows 上连不上本机端口，要重试约 2 秒才放弃。所以异常是 TimeoutError，Linux 上通常立即是 ConnectionRefusedError。缓存起来后，计数是 1、2、3。缓存被 kill 后又回到 503，web 始终没崩。这正是 <code>depends_on</code> 要解决的启动顺序问题。它也说明服务本身要容忍依赖暂时不可用。</p></div>
+<div data-vz="lab06-service"></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：静态检查，以及在装好 Docker 的机器上</div><div data-run="ex04-c"></div><div data-run="ex04-d"></div>
+<p>有 Docker 时的验收标准如下。<code>docker compose ps</code> 显示 web 和 cache 两个服务都在运行。连续 <code>curl localhost:8080</code>，计数递增。<code>docker compose down</code> 后再 <code>up -d</code>，计数接着上次的值。因为具名卷 redis_data 保存了数据。<code>docker compose down -v</code> 会连卷一起删，计数归零。</p></div>
+<p class="like"><b>打个比方</b>配置分层像穿衣服。默认值是内衣，配置文件是衬衫。环境变量是外套，命令行参数是雨衣。别人看到的，是最外面那一层。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：容器里的 127.0.0.1 和 localhost</div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div>在容器里还监听 <code>127.0.0.1</code>。比如把 HOST 写死在代码里。</div></div>
+<div class="row"><b>现象</b><div>容器日志显示服务已经启动。宿主机 <code>curl localhost:8080</code> 却连不上。这条未实测，是按原理推断的。</div></div>
+<div class="row"><b>原因</b><div>容器有自己的网络命名空间，127.0.0.1 指的是容器自己。端口映射的流量，是从容器的网卡进来的。只有监听 0.0.0.0 才收得到，这条是补充。</div></div>
+<div class="row good"><b>正确写法</b><div>把监听地址做成配置。本机默认 127.0.0.1，容器里用 <code>ENV HOST=0.0.0.0</code> 覆盖。就是本练习 Dockerfile 的第 6 行。</div></div></div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div>把 <code>REDIS_URL=redis://localhost:6379</code> 写进 compose。</div></div>
+<div class="row"><b>原因</b><div>在 web 容器里，localhost 是 web 自己，Redis 在另一个容器。要用服务名 <code>cache</code>，由 Compose 的内部 DNS 解析。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>cache:                         <span class="cm"># 为什么 Redis 单独一个服务，不装进 web 的镜像？</span>
+  image: redis:7-alpine        <span class="cm"># 各用最合适的镜像，独立升级和扩展，靠网络通信</span>
+<span class="cm"># 硬塞进一个镜像，就得协调两边的全部依赖，可能很难，甚至做不到（讲义）</span>
+ENV HOST=0.0.0.0               <span class="cm"># 容器里监听所有网卡，端口映射才连得进来</span>
+REDIS_URL=redis://cache:6379   <span class="cm"># 用服务名，不用 localhost</span>
+docker compose down -v         <span class="cm"># -v 连具名卷一起删，计数归零</span></pre></div>
+
+<!-- ======================= 5 ======================= -->
+<h2 id="ex05" data-nav="5 · 发布到 TestPyPI / ghcr">练习 5 · 发布有两条链：包进索引，镜像进仓库 <label class="ex-done"><input type="checkbox" data-ex="ex05">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（dry-run）</span><span class="tag lnx">上传 / Docker 未实测</span></div>
+<p class="q-orig"><b>原题</b>：把一个 Python 包发布到 <a href="https://test.pypi.org/" target="_blank" rel="noopener">TestPyPI</a>。除非真的值得分享，别发到正式的 PyPI。然后用这个包构建一个 Docker 镜像，推送到 <code>ghcr.io</code>。</p>
+<p class="lead">包这条链是构建、上传到索引、别人安装。镜像这条链是构建、推到仓库、别人 docker run。两条都离不开你本人的凭据。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>发布见<a href="../ch06.html#s19">第 6 讲第 19、20 节</a>。Dockerfile 见<a href="../ch06.html#s15">第 15 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<figure class="fig"><script>
+DG('flow', { nodeH: 50, cols: [
+  [ { id: 'b', l: 'uv build', s: 'dist/*.whl *.tar.gz', tone: 'teal' } ],
+  [ { id: 'p', l: 'uv publish', s: '需要 TestPyPI token', tone: 'info' }, { id: 'd', l: 'docker build', s: '镜像里装好 wheel', tone: 'info' } ],
+  [ { id: 'r1', l: 'test.pypi.org', s: '包索引', tone: 'data' }, { id: 'r2', l: 'ghcr.io/用户名/…', s: '镜像仓库', tone: 'data' } ],
+  [ { id: 'u1', l: 'uv pip install', s: '--index-url …test.pypi…', tone: 'ok' }, { id: 'u2', l: 'docker run', s: 'docker pull', tone: 'ok' } ]
+], edges: [ ['b', 'p'], ['b', 'd'], ['p', 'r1'], ['d', 'r2', 'docker push'], ['r1', 'u1'], ['r2', 'u2'] ] });
+</script><figcaption>两条发布链：包索引和镜像仓库</figcaption></figure></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：本机能做的部分，不上传</div><div data-run="ex05-a"></div>
+<p>输出这样读。<code>sha256sum</code> 打出的是两个构件的指纹。上传以后，索引页面会显示同样的哈希。安装器下载后，就拿它来校验。<code>uv help publish</code> 说，<code>--dry-run</code> 会做检查，但不上传任何文件。所以虽然打印了 Uploading，TestPyPI 上并没有这个包。<code>--trusted-publishing never</code> 关掉了可信发布的自动探测。可信发布只在 GitHub Actions 这类 CI 里才能用。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：需要你本人账号的步骤</div><div data-run="ex05-b"></div>
+<ol>
+<li>在 test.pypi.org 注册，开启双因素认证。再在账号设置里创建 API token。</li>
+<li>把 <code>pyproject.toml</code> 的 <code>name</code> 改成没人用过的名字。greeting 早被占了，视频里讲师也只好换名。每次上传，版本号都要变。同一版本不能重复上传。</li>
+<li>运行 <code>uv publish --publish-url https://test.pypi.org/legacy/</code>，按提示输入 token。用户名填 <code>__token__</code>。<strong>token 只在你自己的终端里输入。别写进脚本，也别提交进 git。</strong></li>
+<li>验收：在一个全新的 venv 里，执行 ex05-b 的第二条命令。能装上，<code>greet Alice</code> 输出 <code>Hello, Alice!</code> 就行。注意 TestPyPI 上一般没有 typer。所以要加 <code>--extra-index-url https://pypi.org/simple/</code>，让依赖从正式 PyPI 来。补充一句，混用多个索引有依赖混淆的风险。正式项目要谨慎。</li>
+</ol></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：镜像</div><div data-file="ex05/Dockerfile" data-new="1-8"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：构建并推送镜像，需要 Docker 和 GitHub 账号</div><div data-run="ex05-c"></div>
+<p>验收标准如下。<code>docker run --rm ghcr.io/你的用户名/greeting:0.1.0 Alice</code> 输出 <code>Hello, Alice!</code>。push 成功后，在 GitHub 个人主页的 Packages 里能看到这个镜像。把它设为 public，别的机器不用登录就能 <code>docker pull</code>。<code>docker login ghcr.io</code> 需要一个 personal access token，要带 <code>write:packages</code> 权限。它同样只由你本人输入。</p></div>
+<p class="like"><b>打个比方</b>发布像寄快递，地址写对了东西才送得到。镜像名开头的 <code>ghcr.io/用户名</code> 就是收件地址。你只能往自己名下的地址寄。</p>
+<p>视频里讲师推 Docker Hub 时，也得先改名（<span class="ts" data-v="KBMiB-8P4Ns">59:23</span>）。新名字是“用户名/镜像名”这种格式。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>ghcr.io/用户名/greeting:0.1.0   <span class="cm"># 主机名决定推到哪个仓库，用户名那段是命名空间</span>
+<span class="cm"># 你只有权限往自己的命名空间推，所以镜像名必须这样开头</span>
+uv publish --dry-run            <span class="cm"># 只检查不上传：打印了 Uploading，也没真传</span>
+version = "0.1.1"               <span class="cm"># 同一版本不能重复上传，每次都要改版本号</span></pre></div>
+
+<!-- ======================= 6 ======================= -->
+<h2 id="ex06" data-nav="6 · GitHub Pages">练习 6 · 静态网站推到 GitHub 就能上线 <label class="ex-done"><input type="checkbox" data-ex="ex06">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（本地预览）</span><span class="tag lnx">推送 / 域名未实测</span></div>
+<p class="q-orig"><b>原题</b>：按 <a href="https://docs.github.com/en/pages/quickstart" target="_blank" rel="noopener">GitHub Pages 快速入门</a>做一个网站。加分题，不计分：给它配一个自定义域名。</p>
+<p class="lead">静态网站就是一堆文件。仓库里放好 index.html 推上去，GitHub Pages 原样发布。自定义域名靠一个 CNAME 文件加一条 DNS 记录。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>发布与静态站点托管，见<a href="../ch06.html#s20">第 6 讲第 20 节</a>。Git 的提交与推送在第 5 讲。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="ex06/site/index.html" data-new="1-11"></div><div data-file="ex06/site/CNAME" data-new="1"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：推送前，先在本地预览</div><div data-run="ex06-a"></div>
+<p>静态站点就是一堆文件，任何静态文件服务器都能预览。Python 自带的 <code>http.server</code> 就够了。<code>--bind 127.0.0.1</code> 只对本机开放。</p>
+<div data-run="ex06-b"></div>
+<p>CRLF 警告来自 Git for Windows 的系统级 <code>core.autocrlf</code> 设置。提交前把换行符登记成 LF，检出时再换成 CRLF。不影响网站。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：需要 GitHub 账号和域名的步骤</div><div data-run="ex06-c"></div>
+<ol>
+<li>在 GitHub 新建一个公开仓库，名字是 <code>你的用户名.github.io</code>。这是快速入门的做法。再把上面的提交推上去。</li>
+<li>进仓库的 Settings，再进 Pages，确认来源是 <code>main</code> 分支的根目录。稍等片刻，页面顶部会显示网址。</li>
+<li>验收：浏览器打开 <code>https://你的用户名.github.io/</code>，看到 “Hello, GitHub Pages!”。<code>curl -sI</code> 返回 200。</li>
+<li>加分：在 Settings 的 Pages 里填入自定义域名。它会提交一个 CNAME 文件，内容就是域名。再到域名服务商那里加一条 CNAME 记录。让这个子域名指向 <code>你的用户名.github.io</code>。生效后，<code>dig +short 子域名 CNAME</code> 能看到它。最后在 Pages 设置里勾选 Enforce HTTPS。具体以 GitHub 文档为准。</li>
+</ol></div>
+<p class="like"><b>打个比方</b>GitHub Pages 像商场给的免费橱窗。你把成品摆进去，路过的人就能看到。CNAME 像在橱窗上挂了自家的招牌。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>index.html           <span class="cm"># 只放现成的 HTML：GitHub Pages 原样托管，不用构建</span>
+_config.yml + *.md   <span class="cm"># 放 Markdown 加 Jekyll 配置：Pages 内置 Jekyll，在服务器端构建</span>
+gem 'github-pages'   <span class="cm"># 练习 3 的 Gemfile 只依赖它，为的是在本地复现 Pages 的构建环境</span>
+CNAME                <span class="cm"># 课程仓库也有这个文件，它用了自定义域名 missing.csail.mit.edu</span></pre></div>
+
+<!-- ======================= 自查 ======================= -->
+<h2 id="selfcheck" data-nav="自查">自查：自己重跑一遍</h2>
+<p class="lead">本页的代码和输出，都是生成笔记时在本机真跑收集的。想验证，就把题解复制到空目录，在 Git Bash 里重跑。</p>
+<p>生成脚本和题解源文件都已删除，<strong>代码以本页为准</strong>。代码块的“复制”按钮，拿到的是原文件的原始字节。生成时间见页头。</p>
+<p>练习 2 和 5 要联网下载依赖。练习 1 的每条命令都要新建 venv，Windows 上各要 20 到 30 秒。</p>
+<div class="code"><div class="cap">考点速查（注释里写着答案）</div><pre>bash venv/Scripts/activate; which python   <span class="cm"># 还是全局的 python：脚本在子进程里跑，改动随它消失（练习 1）</span>
+uv sync --locked                           <span class="cm"># 改了约束不 lock：报 lockfile needs to be updated，退出码 1（练习 2）</span>
+uv pip install liba libb                   <span class="cm"># 交集为空，换哪个解析器都无解，只能分两个环境（练习 1）</span>
+REDIS_URL=redis://localhost:6379           <span class="cm"># 写进 compose 会得到 503：web 容器里的 localhost 是它自己（练习 4）</span>
+export SOURCE_DATE_EPOCH=1767225600        <span class="cm"># wheel 是 zip，记着修改时间。时间固定了，哈希才相同（练习 2）</span></pre></div>
+
+</article></main>
+<script src="../assets/vz.js"></script>
+<script src="../assets/viz/lab06-run.js"></script>
+<script src="../assets/lab.js"></script>
+</body>
+</html>

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>练习 05 · 版本控制与 Git · Missing Semester 2026</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="../assets/vz.css">
+<link rel="stylesheet" href="../assets/lab.css">
+<script>window.PAGE = { key: 'lab05', ch: 'ch05', type: 'lab', base: '../' };</script>
+<script src="../assets/course.js"></script>
+<script src="../assets/dg.js"></script>
+<script src="../assets/app.js"></script>
+<script src="data/lab05.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<header class="lab-head">
+  <div class="k">LAB 05 · 对应 <a href="../ch05.html">第 5 讲 · 版本控制与 Git</a></div>
+  <h1>练习可视化笔记 · 版本控制与 Git</h1>
+  <p class="lede">讲义第 5 讲一共 8 道练习，这里逐题讲。每题先亮结论，再给真跑的代码和输出。接着打个比方讲原理，最后指出坑在哪。考点都写在代码注释里。官方不给答案，题解是笔记作者写的。<strong>所有输出都由脚本在本机真跑后自动收集</strong>。生成时间是 <b id="labGen">…</b>。Git 在本机完全能用。所以这一页几乎每条命令都是真跑的。</p>
+  <div class="lab-prog" id="labProg"><span class="t"></span><div class="bar"><div class="f"></div></div><button class="btn sm" id="labGo" type="button">定位到第一道未完成的题</button></div>
+  <div class="lab-legend">
+    <span><span class="wb gb">Git Bash 5.3 · Windows 本机</span> 真跑</span>
+    <span><span class="ec na">未实测</span> 需要账户或额外工具，写明原因</span>
+    <span><span class="ann" style="display:inline-flex;margin:0;padding:1px 8px"><span class="ar">L3</span></span> 注释层（不可选中，复制不会带上）</span>
+  </div>
+</header>
+
+<h2 id="env" data-nav="环境检查">环境检查：每个实验都在全新的临时目录里跑</h2>
+<p class="lead">本页命令都在 Windows 的 Git Bash 里真跑。实验不碰你的 Git 配置，哈希也能复现。</p>
+<p>动手前先确认工具链。下面是生成本页时，在本机真跑的检查命令和输出：</p>
+<div data-env="gitbash"></div>
+<div class="callout warn"><div class="ct">本机设置与处理办法</div>
+<ul>
+<li><strong>不碰你的 Git 配置</strong>：每个实验都在全新的临时目录里跑。<code>HOME</code> 指向这个临时目录，还设了 <code>GIT_CONFIG_NOSYSTEM=1</code>。所以读写的 <code>~/.gitconfig</code> 都是临时的，练习 5、6 改的就是它。</li>
+<li><strong>固定的示例身份与时间</strong>：提交者统一是 <code>Ada Example &lt;ada@example.com&gt;</code>。提交时间固定为 2026-01-16 10:00 UTC，也就是讲座当天。提交哈希取决于这些信息。固定之后，<strong>你用同样的设置重跑，哈希会完全相同</strong>。练习 4 例外，见那里的说明。</li>
+<li><strong>联网只发生一次</strong>：练习 2 从 GitHub 克隆了课程网站仓库。大小约 13 MB。之后的实验复制这份本地克隆，不再重复下载。</li>
+<li><strong>没装的工具</strong>：本机没有 git-filter-repo 和 GitHub CLI（gh）。练习 3 改用 Git 自带的 filter-branch。练习 7 需要 GitHub 账户，笔记没有替你提交 PR。</li>
+</ul></div>
+<div class="callout tip"><div class="ct">怎么用这一页</div>
+<p>代码块右上角有个“复制”。它复制的是源文件的原始字节。每道题标题右边可以勾“完成”。想自己验证，就按<a href="#selfcheck">页尾“自查”</a>的方法重跑。</p></div>
+
+<!-- ======================= 1 ======================= -->
+<h2 id="ex01" data-nav="1 · 命令 ↔ 数据模型">练习 1 · 学一条命令，就说出它动了哪些对象和引用 <label class="ex-done"><input type="checkbox" data-ex="ex01">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：如果你没用过 Git，先读 <a href="https://git-scm.com/book/en/v2" target="_blank" rel="noopener">Pro Git</a> 的前几章。或者玩一遍 <a href="https://learngitbranching.js.org/" target="_blank" rel="noopener">Learn Git Branching</a>。边学边把 Git 命令和数据模型对应起来。</p>
+<p class="lead">这是开放题。每学一条命令，都要能说出两件事。它新建了哪些对象，挪了哪个引用。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>对象与内容寻址，见<a href="../ch05.html#s6">第 5 讲第 6 节</a>。引用和 HEAD，见<a href="../ch05.html#s7">第 7 节</a>和<a href="../ch05.html#s8">第 8 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>怎么做</div>
+<ol>
+<li>读 Pro Git 第 1 到 3 章，讲基础和分支。或者在 Learn Git Branching 里，过完 Main 页签的前两组关卡。那个网站会把每条命令画成提交图的变化。正适合这道题。</li>
+<li>每学一条命令，就在空的实验仓库里真跑一次。再用三招看穿它：<code>git cat-file -p</code> 看对象，<code>cat .git/HEAD</code> 看引用，<code>git log --all --graph --oneline</code> 看图。</li>
+<li>判断标准是不看文档也能回答。这条命令执行后，对象库多了什么？哪个引用动了？工作区和暂存区变成什么样？下面 9 组实验就是按这个方法做的。每组都对应第 5 讲的一个演示。</li>
+</ol>
+<p>读 Pro Git、玩 Learn Git Branching，要你自己完成。本页不写读后感。</p></div>
+<p class="like"><b>打个比方</b>学 Git 命令像学下棋。背开局口诀，不如看懂每一步棋盘怎么变。每走一步，就看对象库和引用变成了什么样。</p>
+<div class="blk run"><div class="bh"><i>▶</i>跑 1-a：blob 与 SHA-1，哈希和讲义一字不差</div><div data-run="ex01-a"></div>
+<p>第 2 行用 sha1sum 手算出了同一个 ID。Git 哈希的是 <code>blob 17\0</code> 加上内容。对象存在 <code>.git/objects/44/48adbf…</code>。前 2 位做目录，后 38 位做文件名。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑 1-b：tree、commit 与引用</div><div data-run="ex01-b"></div>
+<p>根 tree <code>698281bc…</code> 和 foo tree <code>c68d233a…</code>，都和讲义完全一致。<code>git commit</code> 新建了 5 个对象：2 个 blob、2 个 tree、1 个 commit。它还让 master 指向那个 commit。HEAD 里只有一行 <code>ref: refs/heads/master</code>。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑 1-c：改一个字节，哪些对象会变</div><div data-run="ex01-c"></div>
+<p>bar.txt 变了，foo tree 就变了。foo tree 一变，根 tree 也变，于是有了新 commit。没变的 baz.txt 继续用原来的 blob <code>4448adbf…</code>。对象数从 5 变成 9，新增 4 个，不是 5 个。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑 1-d：暂存区的三种状态</div><div data-run="ex01-d"></div>
+<p><code>git add</code> 只把文件此刻的内容复制进暂存区。之后再改，就出现 MM。<code>git commit</code> 提交的是暂存区。<code>git restore</code> 用暂存区覆盖工作区。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑 1-e：分支与合并，复刻视频里的 nato.txt 演示</div><div data-run="ex01-e"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑 1-f：游离 HEAD 与 reflog</div><div data-run="ex01-f"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑 1-g：rebase 产生新的提交</div><div data-run="ex01-g"></div>
+<p>feature 上两个提交的哈希，从 19113a7、1fc7223 变成了 8736fc2、88a446a。改动一样，但 parent 变了。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑 1-h：远程仓库，本地裸仓库扮演 GitHub</div><div data-run="ex01-h"></div>
+<p>bob 推送之后，alice 的 <code>git status</code> 仍说一致。<code>git fetch</code> 之后，她才知道自己 behind 1。<code>git pull --ff-only</code> 直接快进。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写 1-i：给 git bisect 造一段历史</div><div data-file="ex01/make_history.sh"></div><div data-file="ex01/test_add.sh"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑 1-i：git bisect run</div><div data-run="ex01-i"></div>
+<p>15 个嫌疑提交，只测了 4 次就定位到 v11。顺序是 v8 好、v12 坏、v10 好、v11 坏。最后一行确认 <code>git bisect reset</code> 回到了 master 的 v16。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>git commit -am exclaim   <span class="cm"># 只改了 bar.txt：新增 4 个对象，不是 5 个（1-c）</span>
+<span class="cm"># baz.txt 没变，新的根 tree 直接引用原来的 blob 4448adbf</span>
+cp baz.txt copy.txt; git add copy.txt; git commit -m copy
+<span class="cm"># 内容和 baz.txt 一样：blob 不新增，只多了新根 tree 和新 commit</span>
+<span class="cm"># 对象数从 5 变成 7（本机补充实测）。内容寻址天然去重</span></pre></div>
+
+<!-- ======================= 2 ======================= -->
+<h2 id="ex02" data-nav="2 · 课程网站仓库">练习 2 · 谁改了哪行：log 加路径，blame 加 show <label class="ex-done"><input type="checkbox" data-ex="ex02">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（联网一次）</span></div>
+<p class="q-orig"><b>原题</b>：克隆<a href="https://github.com/missing-semester/missing-semester" target="_blank" rel="noopener">课程网站的仓库</a>。（1）把版本历史画成图。（2）最后修改 <code>README.md</code> 的是谁？提示：给 <code>git log</code> 加一个参数。（3）<code>_config.yml</code> 里 <code>collections:</code> 这一行，最后一次修改的提交说明是什么？提示：<code>git blame</code> 和 <code>git show</code>。</p>
+<p class="lead">答案是两条路子。<code>git log -1 -- README.md</code> 找最后改文件的人。<code>git blame</code> 找到改某行的提交，再用 <code>git show</code> 看它的说明。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>git log 的选项和路径限定，见<a href="../ch05.html#s10">第 5 讲第 10 节</a>。blame 见<a href="../ch05.html#s19">第 19 节</a>。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：克隆</div><div data-run="ex02-a"></div>
+<p>一共 861 个提交，最早的在 2019-01-04。克隆完成后，脚本把这份副本留在系统临时目录。后面的实验都复制它，不再联网。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑（1）：历史画成图</div><div data-run="ex02-b"></div>
+<p>图里有很多 Merge branch 和 Merge pull request。贡献者的修改先在各自分支上提交，再合进 master。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑（2）：最后修改 README.md 的人</div><div data-run="ex02-c"></div>
+<p>答案是 <code>git log -1 -- README.md</code>。<code>--</code> 后面的路径，把历史限定在改过这个文件的提交。<code>-1</code> 只取最新一个。第二行是改过 README.md 的提交总数。答案会随仓库更新而变，这里是生成本页时的结果。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写（3）：blame 加 show</div><div data-file="ex02/blame_show.sh"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑（3）</div><div data-run="ex02-d"></div>
+<p>答案是 “Redo lectures as a collection”，时间是 2020-01-17。<code>collections:</code> 这一行，就是那次把讲义改成 Jekyll collection 时加的。</p></div>
+<p class="like"><b>打个比方</b>git blame 像查监控录像，看是谁最后动了这一行。git show 是调出那次的工单，看他为什么动。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：在 U 盘上的仓库里跑 git</div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>笔记作者第一次在 U 盘上的仓库副本里跑 <code>git log</code>。结果报 <code>fatal: detected dubious ownership in repository at '…'</code>。后面还有一句 is on a file system that does not record ownership。</div></div>
+<div class="row"><b>原因</b><div>从 Git 2.35.2 起，为了安全，Git 有一条新规矩。属主不是当前用户的目录，它拒绝在里面运行。FAT32 不记录属主，于是一律被当作可疑。</div></div>
+<div class="row good"><b>解决</b><div>把仓库放到 NTFS 盘上。或者按提示，把这个目录加进 <code>safe.directory</code>。只对你信任的目录这样做。本页实验都在系统临时目录里跑，所以没这个问题。这是补充，是本机遇到的情况。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>git log -1 -- README.md            <span class="cm"># -- 后面是路径：只看改过这个文件的提交</span>
+git blame -L 19,19 _config.yml     <span class="cm"># 这一行最后是哪次提交改的</span>
+<span class="cm"># 那次提交只是改了缩进，怎么找更早真正写这行的人（补充）</span>
+git blame -w _config.yml           <span class="cm"># -w 忽略空白改动</span>
+git blame &lt;提交&gt;^ -- _config.yml   <span class="cm"># 从那次的父提交开始，再 blame 一次</span>
+git log -L 19,19:_config.yml       <span class="cm"># 看这一行的完整演变</span></pre></div>
+
+<!-- ======================= 3 ======================= -->
+<h2 id="ex03" data-nav="3 · 从历史里删除文件">练习 3 · 从历史里删文件，就得重建它之后的每个提交 <label class="ex-done"><input type="checkbox" data-ex="ex03">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span><span class="tag lnx">filter-repo 未实测</span></div>
+<p class="q-orig"><b>原题</b>：初学 Git 时，常犯两种错。一是提交了不该管的大文件，二是加进了敏感信息。试着往仓库里加一个文件，提交几次。然后把它从<strong>历史</strong>里删掉，不只是从最新提交里删。可以参考 GitHub 的文档 <a href="https://help.github.com/articles/removing-sensitive-data-from-a-repository/" target="_blank" rel="noopener">Removing sensitive data</a>。</p>
+<p class="lead">只删最新提交里的文件，旧快照里它还在。要从历史里抹掉，得重建它出现之后的每个提交。这串提交的哈希必然全变。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>提交不可变、引用可变，见<a href="../ch05.html#s7">第 5 讲第 7 节</a>。不可达的对象会被回收，见<a href="../ch05.html#s13">第 13 节</a>。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：问题重现</div><div data-run="ex03-a"></div>
+<p>最新提交已经是 remove secret 了。可 <code>git show HEAD~2:secret.txt</code> 照样打印出 key。每个提交都是完整快照，旧快照里的文件永远在。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：改写全部历史</div><div data-file="ex03/scrub.sh"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex03-b"></div>
+<p><strong>输出怎么读</strong>：第一个提交 984ec36 本来就没有 secret.txt。它的树不变，哈希也没变。从 config 开始，三个提交都换了新哈希：bc3c8bf、67efda1、b721e90。之后没有任何提交含 secret.txt。那个 blob 也被 gc 删了，<code>git cat-file</code> 找不到它。</p></div>
+<p class="like"><b>打个比方</b>改写历史像重印一套账本。改了第 2 页，后面每页的“上一页编号”都得跟着改。旧账本还在柜子里，得把柜子也清掉。</p>
+<div data-vz="lab05-scrub"></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：GitHub 文档推荐的工具</div><div data-run="ex03-filter-repo"></div>
+<p>filter-repo 更快，也更安全，不用手动清理备份引用。装好以后，一条命令就完成。BFG Repo-Cleaner 是另一个常见选择。</p></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑</div>
+<div class="pit-card"><div class="row bad"><b>误区 1</b><div>以为 <code>git rm secret.txt &amp;&amp; git commit</code> 就删干净了。见 ex03-a，历史里它还在。</div></div>
+<div class="row bad"><b>误区 2</b><div>filter-branch 跑完就以为完事了。<code>refs/original/</code> 备份和 reflog 还指着旧提交。不清理的话，gc 不会删那个 blob。scrub.sh 第 7 到 9 行就是干这个的。</div></div>
+<div class="row bad"><b>误区 3</b><div>以为改写本地历史，就能撤回推出去的秘密。别人的克隆、GitHub 上的缓存和 fork 都可能还有旧提交。第一步永远是<strong>作废那个 key</strong>（视频 27:05）。改写历史只是第二步。推送时还要 force push，并通知协作者。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>git rm secret.txt &amp;&amp; git commit   <span class="cm"># 只删了最新快照里的，HEAD~2 的快照里照样有</span>
+bash scrub.sh secret.txt           <span class="cm"># 去掉第 7 到 9 行再跑：cat-file -t 仍输出 blob</span>
+<span class="cm"># 原因：refs/original 和 reflog 还指着旧提交，gc 不删可达对象（本机补充实测）</span>
+<span class="cm"># 大文件同理：进了历史，每个克隆都要下载它。只能改写历史瘦身</span>
+<span class="cm"># 更好的做法是一开始就用 .gitignore 或 Git LFS（补充）</span></pre></div>
+
+<!-- ======================= 4 ======================= -->
+<h2 id="ex04" data-nav="4 · git stash">练习 4 · stash 就是两个临时提交加一个引用 <label class="ex-done"><input type="checkbox" data-ex="ex04">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：从 GitHub 克隆一个仓库，改一个已有的文件。执行 <code>git stash</code> 会怎样？运行 <code>git log --all --oneline</code>，看到了什么？用 <code>git stash pop</code> 撤销刚才的 stash。什么场景下这会有用？</p>
+<p class="lead">stash 把改动存成两个提交。一个存暂存区，一个存工作区。<code>refs/stash</code> 指着后者，工作区随即变干净。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>暂存区见<a href="../ch05.html#s9">第 5 讲第 9 节</a>。合并提交可以有两个 parent，见<a href="../ch05.html#s12">第 12 节</a>。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：在练习 2 克隆的课程网站仓库里</div><div data-run="ex04-a"></div>
+<p><strong>输出怎么读</strong>：stash 之后，工作区干净了。<code>git log --all --graph</code> 顶部多出两个提交。<code>index on master</code> 存暂存区，<code>WIP on master</code> 存工作区，后者有两个 parent。<code>git stash pop</code> 把改动放回工作区，再删掉这条 stash。输出里的 Dropped refs/stash@{0} 说的就是这个。</p></div>
+<p class="like"><b>打个比方</b>stash 像把桌上没写完的作业先塞进抽屉。桌面清空了，可以干别的。回来再把抽屉里的东西摊回桌上。</p>
+<div data-vz="lab05-stash"></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：stash 提交没出现在顶部</div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>笔记作者第一次跑时，把提交时间固定成了 2026-01-16。结果 stash 的两个提交，没出现在 <code>git log</code> 顶部。</div></div>
+<div class="row"><b>原因</b><div>固定时间让 stash 提交比仓库里最新的提交还早。<code>git log</code> 按时间排序时，它们就排不到顶部。</div></div>
+<div class="row good"><b>处理</b><div>这一条实验<strong>不</strong>固定提交时间。所以这两个 stash 哈希每次运行都不同。</div></div></div></div>
+<div class="callout tip"><div class="ct">什么时候有用</div>
+<ul>
+<li>写到一半，得马上切去别的分支修紧急 bug。现在的改动还不值得提交。</li>
+<li>本地有没提交的修改，<code>git pull</code> 拒绝合并。先 stash，pull 完再 pop。</li>
+<li>想试试没有这些改动时，测试过不过。</li>
+</ul></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>git stash        <span class="cm"># 存成两个提交：index on master 存暂存区，WIP on master 存工作区</span>
+git stash list   <span class="cm"># refs/stash 指着 WIP 那个提交，它有两个 parent</span>
+git stash pop    <span class="cm"># 放回工作区，再删掉这条 stash</span>
+<span class="cm"># pop 时冲突了，stash 会被保留。解决完要手动 git stash drop（补充，见 git help stash）</span></pre></div>
+
+<!-- ======================= 5 ======================= -->
+<h2 id="ex05" data-nav="5 · 别名 git graph">练习 5 · 别名的值不写 git，整串要加引号 <label class="ex-done"><input type="checkbox" data-ex="ex05">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：和很多命令行工具一样，Git 有配置文件 <code>~/.gitconfig</code>。在里面建一个别名，让 <code>git graph</code> 输出 <code>git log --all --graph --decorate --oneline</code> 的结果。可以直接<a href="https://git-scm.com/docs/git-config#Documentation/git-config.txt-alias" target="_blank" rel="noopener">编辑</a> <code>~/.gitconfig</code>，也可以用 <code>git config</code> 命令。参考 <a href="https://git-scm.com/book/en/v2/Git-Basics-Git-Aliases" target="_blank" rel="noopener">Git Aliases</a>。</p>
+<p class="lead">答案是 <code>git config --global alias.graph 'log --all --graph --decorate --oneline'</code>。Git 会自动在别名前补上 git，所以值里不写 git。</p>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex05-a"></div>
+<p><code>git config --global</code> 写的就是 <code>~/.gitconfig</code>。可以看到 <code>[alias]</code> 一节多了 <code>graph = …</code>。前几节是本页实验统一设的示例身份和选项。手动编辑这个文件，加上同样两行，效果完全相同。</p></div>
+<p class="like"><b>打个比方</b>别名像手机里的快捷短语。你打 graph，它替你展开成一长串。展开时，它自动在前面加上 git。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：忘了引号，或者别名里多写了 git</div>
+<div data-run="ex05-b"></div>
+<div class="pit-card"><div class="row bad"><b>错误写法 1</b><div><code>git config --global alias.graph git log --all --graph</code>，没加引号</div></div>
+<div class="row"><b>真实报错</b><div><code>error: no action specified</code>，退出码 129，配置文件根本没写。不加引号时，shell 把后面拆成好几个参数。git config 就认不出你想做什么。</div></div>
+<div class="row bad"><b>错误写法 2</b><div><code>alias.graph 'git log --oneline'</code>，值以 git 开头</div></div>
+<div class="row"><b>真实报错</b><div><code>expansion of alias 'graph' failed; 'git' is not a git command</code>。Git 会自动在别名前补上 git，于是变成了 <code>git git log</code>。想执行任意 shell 命令，别名要以 <code>!</code> 开头。</div></div>
+<div class="row good"><b>正确写法</b><div><code>git config --global alias.graph 'log --all --graph --decorate --oneline'</code></div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>git config --global alias.graph 'log --all --graph --decorate --oneline'   <span class="cm"># 对</span>
+git config --global alias.graph git log --all --graph   <span class="cm"># 错：没引号，报 no action specified</span>
+git config --global alias.graph 'git log --oneline'     <span class="cm"># 错：展开成 git git log</span>
+git config --global alias.st '!git status -s'           <span class="cm"># ! 开头，才交给 shell 执行（补充）</span></pre></div>
+
+<!-- ======================= 6 ======================= -->
+<h2 id="ex06" data-nav="6 · 全局 gitignore">练习 6 · 全局 gitignore 管住所有仓库的垃圾文件 <label class="ex-done"><input type="checkbox" data-ex="ex06">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：运行 <code>git config --global core.excludesfile ~/.gitignore_global</code>。之后就能在 <code>~/.gitignore_global</code> 里定义全局忽略规则。这条命令只设置了位置，文件要你自己建。设好全局 gitignore，用来忽略系统或编辑器生成的临时文件。比如 <code>.DS_Store</code>。</p>
+<p class="lead">两步就够了。先用 <code>core.excludesfile</code> 指定全局规则文件的位置，再把规则写进去。之后每个仓库都会照它忽略。</p>
+<div class="blk write"><div class="bh"><i>{}</i>写：~/.gitignore_global</div><div data-file="ex06/gitignore_global.txt" data-title="~/.gitignore_global（源文件 ex06/gitignore_global.txt）"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex06-a"></div>
+<p><strong>输出怎么读</strong>：<code>??</code> 是未跟踪。notes.txt 是正常文件，应该被注意到。<code>!!</code> 是被忽略。<code>git check-ignore -v</code> 能查出忽略的来源。哪个文件、第几行的规则，一清二楚。排查“这个文件怎么不见了”时很有用。</p></div>
+<p class="like"><b>打个比方</b>全局 gitignore 像你随身带的垃圾分类表。不管走到哪个仓库，都按这张表把垃圾挑出去。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：规则对已跟踪的文件无效</div>
+<div class="pit-card"><div class="row bad"><b>误区</b><div>以为加了忽略规则，提交过的文件就不再被跟踪。</div></div>
+<div class="row"><b>实际</b><div>gitignore 只管<strong>未跟踪</strong>的文件。已经在仓库里的文件，要先 <code>git rm --cached 文件</code> 再提交。之后规则才对它生效。这是补充。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>git config --global core.excludesfile '~/.gitignore_global'   <span class="cm"># 只设位置，文件要自己建</span>
+git status --short --ignored    <span class="cm"># ?? 是未跟踪，!! 是被忽略</span>
+git check-ignore -v .DS_Store   <span class="cm"># 查出是哪个文件第几行的规则忽略了它</span>
+git rm --cached file            <span class="cm"># 已跟踪的文件先移出暂存区，忽略规则才生效（补充）</span></pre></div>
+
+<!-- ======================= 7 ======================= -->
+<h2 id="ex07" data-nav="7 · Fork 与 PR">练习 7 · 没有写权限，就先推到自己的 fork 再发 PR <label class="ex-done"><input type="checkbox" data-ex="ex07">完成</label></h2>
+<div class="ex-meta"><span class="tag lnx">未实测（需要 GitHub 账户）</span></div>
+<p class="q-orig"><b>原题</b>：Fork <a href="https://github.com/missing-semester/missing-semester" target="_blank" rel="noopener">课程网站的仓库</a>。找一个错别字或别的可改进之处，在 GitHub 上提交 pull request。可以参考 <a href="https://github.com/firstcontributions/first-contributions" target="_blank" rel="noopener">first-contributions</a>。请只提交有用的 PR，不要刷屏！找不到可改进的地方，就跳过这题。</p>
+<p class="lead">你没有上游仓库的写权限。所以流程是 fork、克隆、建分支、提交。再推到自己的 fork，最后发 PR 请维护者合并。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<figure class="fig"><script>
+DG('seq', { actors: [ { l: '上游仓库', s: 'missing-semester', tone: 'warn' }, { l: '你的 fork', s: 'GitHub 上', tone: 'info' }, { l: '本地克隆', s: '你的电脑', tone: 'data' } ], msgs: [
+  { f: 0, t: 1, l: 'Fork：在 GitHub 上复制一份', tone: 'info' },
+  { f: 1, t: 2, l: 'git clone', mono: true, tone: 'data' },
+  { note: 'git switch -c fix-typo，编辑，git commit', at: 2, tone: 'ok' },
+  { f: 2, t: 1, l: 'git push -u origin fix-typo', mono: true, tone: 'data' },
+  { f: 1, t: 0, l: 'Pull Request：请上游合并 fix-typo', tone: 'warn' }
+] });
+</script><figcaption>你没有上游仓库的写权限。所以先推到自己的 fork，再请维护者把分支合进去</figcaption></figure></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex07-gh"></div></div>
+<p class="like"><b>打个比方</b>fork 像把别人的菜谱复印一份带回家。你在复印件上改好，再寄回去问原作者收不收。</p>
+<div class="callout extra"><div class="ct">未实测部分与判断标准</div>
+<p>笔记作者没有替你提交 PR。一来需要你自己的 GitHub 账户。二来讲义明确要求，只提交真正有用的修改。</p>
+<p>自己做时，可以这样检查。PR 只包含一个主题的改动，一个分支一件事。提交说明写清改了什么、为什么改。改动前先看仓库有没有贡献指南。再查一下，是否已经有人报过同样的问题。</p>
+<p>分支、提交、推送这些本地步骤，前面都实测过。和练习 1-e、1-h 完全一样。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>git switch -c fix-typo        <span class="cm"># 一件事开一个分支，别直接在 main 上改</span>
+git commit -am "Fix typo"     <span class="cm"># 说明写清改了什么</span>
+git push -u origin fix-typo   <span class="cm"># origin 是你自己的 fork，不是上游</span>
+<span class="cm"># 最后在 GitHub 网页上发 PR，请上游合并 fix-typo</span></pre></div>
+
+<!-- ======================= 8 ======================= -->
+<h2 id="ex08" data-nav="8 · 解决合并冲突">练习 8 · 同一行被两边改了才冲突，解决完要 add <label class="ex-done"><input type="checkbox" data-ex="ex08">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：模拟协作，练习解决合并冲突。（1）<code>git init</code> 一个新仓库，建 <code>recipe.txt</code>，写几行菜谱。（2）提交，然后建两个分支：<code>git branch salty</code> 和 <code>git branch sweet</code>。（3）在 salty 上把 “1 cup sugar” 改成 “1 cup salt”，提交。（4）在 sweet 上把同一行改成 “2 cups sugar”，提交。（5）回到 master，先 <code>git merge salty</code>，再 <code>git merge sweet</code>。发生了什么？看看 recipe.txt。<code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>、<code>=======</code> 和 <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> 是什么意思？（6）编辑文件，保留你想要的内容，删掉冲突标记。再用 <code>git add</code> 加 <code>git commit</code> 完成合并，或者用 <code>git merge --continue</code>。也可以试试 <code>git mergetool</code>。（7）用 <code>git log --graph --oneline</code> 看合并历史。</p>
+<p class="lead">两边改了同一行，Git 不替你拍板，就报冲突。你编辑文件、删掉标记，再 <code>git add</code> 标记已解决，最后提交。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>三方合并与冲突，见<a href="../ch05.html#s12">第 5 讲第 12 节</a>。那里演示的第 2 幕就是这道题。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>准备的文件</div><div data-file="ex08/recipe.txt"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑（1）到（5）</div><div data-run="ex08-a"></div>
+<p><strong>输出怎么读</strong>：第一次 <code>git merge salty</code> 是 <strong>Fast-forward</strong>。master 自己没有新提交，salty 就在它正前方。Git 直接把 master 挪过去，不产生合并提交。</p>
+<p>第二次 <code>git merge sweet</code> 时，merge base 是 base recipe。两边都改了同一行，于是报 CONFLICT。状态是 <code>UU</code>，意思是双方都改了。</p>
+<p>再看文件。<code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</code> 到 <code>=======</code> 之间，是当前分支的内容。此时的 master 就是 salty 的内容。<code>=======</code> 到 <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; sweet</code> 之间，是合并进来的 sweet 的内容。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>（6）解决：写成你想要的样子</div><div data-file="ex08/recipe_resolved.txt"></div>
+<p>这里两边的意图都保留：糖维持一杯，另加一撮盐。没有“正确答案”。冲突的本质，就是需要人来做决定。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑（6）到（7）</div><div data-run="ex08-b"></div>
+<p>合并提交 7cba7ea 有两个 parent。3f5228a 来自 salty，25b74f8 来自 sweet。<code>git log --graph</code> 画出了一个菱形。</p></div>
+<p class="like"><b>打个比方</b>冲突像两个同事改了同一份报价单的同一格。一个写 1 杯盐，一个写 2 杯糖。系统不敢替你选，就把两种写法都摆出来，等你定。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：冲突没解决就提交</div>
+<div data-run="ex08-c"></div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div>冲突后直接 <code>git commit</code>。</div></div>
+<div class="row"><b>真实报错</b><div><code>error: Committing is not possible because you have unmerged files.</code></div></div>
+<div class="row good"><b>正确做法</b><div>编辑文件，再 <code>git add</code> 标记已解决，然后 <code>git commit</code>。不想合了，就 <code>git merge --abort</code> 回到合并之前。上面实测里，文件回到了 salty 的内容。还要小心把冲突标记也提交进去。提交前搜一下 <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>。</div></div></div></div>
+<div class="callout extra"><div class="ct">关于 git mergetool（未实测）</div>
+<p><code>git mergetool</code> 会给每个冲突文件，依次打开配置好的工具。比如 vimdiff、meld 或 VS Code。通常并排显示 base、ours、theirs 三个版本和结果。要先用 <code>git config merge.tool &lt;工具名&gt;</code> 配置好。本页没有交互式终端，所以没有实测。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>git merge salty      <span class="cm"># master 没有新提交：fast-forward，不产生合并提交</span>
+git merge sweet      <span class="cm"># 同一行两种改法：CONFLICT，状态 UU</span>
+git add recipe.txt   <span class="cm"># 编辑完、删掉标记，add 才算“已解决”</span>
+git merge --abort    <span class="cm"># 不想合了，回到合并之前</span>
+<span class="cm"># 反过来先 merge sweet 再 merge salty：sweet 快进，salty 冲突</span>
+<span class="cm"># 只是 HEAD 那一侧成了 "2 cups sugar"，另一侧是 "1 cup salt"（本机补充实测）</span></pre></div>
+
+<!-- ======================= 自查 ======================= -->
+<h2 id="selfcheck" data-nav="自查">自查：自己重跑一遍</h2>
+<p class="lead">本页的代码和输出，都是生成笔记时真跑收集的。实验在本机临时目录里进行。想验证，就把题解复制到空目录，在 Git Bash 里重跑。</p>
+<p>生成脚本和题解源文件都已删除，<strong>代码以本页为准</strong>。代码块的“复制”按钮，拿到的是原文件的原始字节。生成时间见页头。</p>
+<p>生成时固定了提交身份和时间。所以除了练习 2 和 4，哈希都是确定的。你手动重跑时，把身份和时间设成和本页一样。得到的哈希就会完全一致。这本身就验证了内容寻址。</p>
+<div class="code"><div class="cap">考点速查（注释里写着答案）</div><pre>printf 'git is wonderful' | git hash-object --stdin   <span class="cm"># 10e1b4d8…：少了换行，头变成 blob 16\0，哈希全变（练习 1）</span>
+git commit -am exclaim             <span class="cm"># 只新增 4 个对象：baz.txt 的 blob 被新根 tree 直接复用（练习 1-c）</span>
+bash scrub.sh secret.txt           <span class="cm"># 删掉第 7 到 9 行，秘密 blob 还在：备份引用和 reflog 还指着它（练习 3）</span>
+git merge sweet; git merge salty   <span class="cm"># 顺序反过来：sweet 快进，salty 冲突（练习 8）</span>
+git bisect run bash test_add.sh    <span class="cm"># 靠退出码判好坏：0 好，125 跳过，1 到 127 的其他值算坏（练习 1-i）</span></pre></div>
+
+</article></main>
+<script src="../assets/vz.js"></script>
+<script src="../assets/viz/lab05-run.js"></script>
+<script src="../assets/lab.js"></script>
+</body>
+</html>

@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>练习 09 · 代码质量 · Missing Semester 2026</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="../assets/vz.css">
+<link rel="stylesheet" href="../assets/lab.css">
+<script>window.PAGE = { key: 'lab09', ch: 'ch09', type: 'lab', base: '../' };</script>
+<script src="../assets/course.js"></script>
+<script src="../assets/dg.js"></script>
+<script src="../assets/app.js"></script>
+<script src="data/lab09.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<header class="lab-head">
+  <div class="k">LAB 09 · 对应 <a href="../ch09.html">第 9 讲 · 代码质量</a></div>
+  <h1>练习可视化笔记 · 代码质量</h1>
+  <p class="lede">讲义第 9 讲一共 6 道练习。第 6 题还带 6.1 和 6.2 两个小问。前三题要用“你正在做的项目”。本页统一换成按视频重建的示例库 <strong>Minilib</strong>。每题先亮结论，再给真跑的代码和输出。接着打个比方讲原理，最后指出坑在哪。考点都写在代码注释里。<strong>所有输出都由脚本在本机真跑后自动收集</strong>。生成时间是 <b id="labGen">…</b>。有些部分要用你本人的账号或 AI 智能体。这些只给步骤和验收标准。</p>
+  <div class="lab-prog" id="labProg"><span class="t"></span><div class="bar"><div class="f"></div></div><button class="btn sm" id="labGo" type="button">定位到第一道未完成的题</button></div>
+  <div class="lab-legend">
+    <span><span class="wb gb">Git Bash 5.3 · Windows 本机</span> 真跑</span>
+    <span><span class="ec na">未实测</span> 需要你本人的账号或对外动作，写明原因</span>
+    <span><span class="ann" style="display:inline-flex;margin:0;padding:1px 8px"><span class="ar">L3</span></span> 注释层（不可选中，复制不会带上）</span>
+  </div>
+</header>
+
+<h2 id="env" data-nav="环境检查">环境检查：工具装在临时沙箱里，不碰全局</h2>
+<p class="lead">本页命令都在 Windows 的 Git Bash 里真跑。ruff、pre-commit 和 semgrep 是临时装进沙箱的。</p>
+<p>动手前先确认工具链。下面是生成本页时，在本机真跑的检查命令和输出：</p>
+<div data-env="gitbash"></div>
+<div class="callout warn"><div class="ct">本机限制与处理办法</div>
+<ul>
+<li><strong>不全局安装</strong>：本机没有 ruff、pre-commit 和 semgrep。用到它们时，“准备”步骤会用 <code>uv</code> 建一个 venv 装好。venv 建在<strong>本次运行的临时沙箱</strong>里。版本固定为 ruff 0.17.3、pre-commit 4.7.0、semgrep 1.182.1。运行结束，连同下载缓存一起删除。所以每次重新生成本页，都要联网下载这几个包。semgrep 比较大，约需半分钟。</li>
+<li><strong>不碰你的家目录</strong>：semgrep 和 pre-commit 默认会往家目录写设置和缓存。所以准备步骤把 <code>USERPROFILE</code>、<code>UV_CACHE_DIR</code>、<code>PRE_COMMIT_HOME</code> 都指向沙箱。git 配置也用 <code>GIT_CONFIG_GLOBAL=/dev/null</code> 隔离开。</li>
+<li><strong>pytest、coverage、PyYAML</strong> 用本机已有的。<strong>hatch、just、make、shellcheck</strong> 没装，本页也用不到。</li>
+<li><strong>不推送到 GitHub</strong>：练习 3 的工作流文件写好了。但推送到 GitHub Actions 看结果是对外动作，标成未实测。本页用 <code>ci_local.sh</code> 在本机执行同样的检查命令。</li>
+<li><strong>AI 智能体</strong>：练习 1 和 2 里，有些步骤要靠智能体。比如循环修 lint、补测试。这要用你本人的智能体账号。本页只给提示词和验收标准。</li>
+</ul></div>
+<div class="callout tip"><div class="ct">示例项目 Minilib</div><p>讲师在一个叫 Minilib 的单文件小库上演示。视频没有完整展示它的源码。<code>minilib/</code> 是按视频描述重建的版本。<code>utils.py</code> 里故意留着视频提到的格式问题和 lint 问题。还有两个 bug：fizzbuzz 的分支顺序，left_pad 的截断。下面每题都在它的一份<strong>新拷贝</strong>上运行，互不影响。</p>
+<div data-file="minilib/src/minilib/utils.py"></div>
+<div data-file="minilib/src/minilib/__init__.py"></div>
+<div data-file="minilib/pyproject.toml"></div></div>
+
+<!-- ======================= 1 ======================= -->
+<h2 id="ex01" data-nav="1 · 格式化 + lint + 钩子">练习 1 · 能自动修的交给工具，剩下的才轮到人 <label class="ex-done"><input type="checkbox" data-ex="ex01">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span><span class="tag lnx">AI 智能体部分需你本人完成</span></div>
+<p class="q-orig"><b>原题</b>：为你正在做的项目配置格式化器、linter 和 pre-commit 钩子。报错很多也不怕。格式问题交给自动格式化。lint 错误试着让 <a href="../ch07.html">AI 智能体</a>去修。要确保智能体能运行 linter，并看到结果。这样它能循环修复，直到全部解决。仔细检查结果，确保 AI 没有弄坏你的代码！</p>
+<p class="lead">先跑 <code>ruff format</code> 和 <code>ruff check --fix</code>，让工具修完它能安全修的。剩下的照规则文档人工改，最后用钩子守住每次提交。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>格式化器见<a href="../ch09.html#s2">第 9 讲第 2 节</a>。linter 与 noqa 见<a href="../ch09.html#s3">第 9 讲第 3 节</a>。pre-commit 钩子见<a href="../ch09.html#s8">第 9 讲第 8 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<figure class="fig"><script>
+DG('flow', { nodeH: 50, cols: [
+  [ { id: 'a', l: 'ruff format --check', s: '看看要改什么', tone: 'warn' } ],
+  [ { id: 'b', l: 'ruff format', s: '自动改格式', tone: 'ok' } ],
+  [ { id: 'c', l: 'ruff check --fix', s: '自动修安全的问题', tone: 'ok' } ],
+  [ { id: 'd', l: '人工 / 智能体', s: '看文档修剩下的', tone: 'info' } ],
+  [ { id: 'e', l: 'pre-commit install', s: '以后每次提交自动检查', tone: 'data' } ]
+], edges: [ ['a', 'b', '', 'data'], ['b', 'c', '', 'data'], ['c', 'd', '', 'data'], ['d', 'e', '', 'data'] ] });
+</script><figcaption>先让工具做完它能安全完成的部分。剩下的才需要人或智能体来判断</figcaption></figure></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：配置（pyproject.toml 里的 ruff 部分见上方 Minilib）</div>
+<div data-file="minilib/.pre-commit-config.yaml"></div>
+<div data-file="minilib/.editorconfig"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：格式化</div><div data-run="ex01-fmt"></div>
+<p>输出怎么读：<code>--check --diff</code> 给出 unified diff，<code>-</code> 是原行，<code>+</code> 是格式化后。这时退出码非 0。去掉 <code>--check</code> 才真正写回。最后一次检查通过了。灰字的准备步骤，是在沙箱里装 ruff。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：lint 与自动修复</div><div data-run="ex01-lint"></div>
+<p>6 个问题里，3 个带 <code>[*]</code>，能安全自动修。<code>--fix</code> 之后，报告说 8 个里修了 5 个。因为修掉一个 RET505 以后，后面的 elif 又成了新的 RET505。ruff 会循环修，修到不动为止。剩下的 F403、EM101、S602 要人来处理。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：让 linter 教你</div><div data-run="ex01-rule"></div></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：人工修完的版本（绿色是手工改的行）</div>
+<p>对照的基准，是 ruff 自动修复后的文件。</p>
+<div data-file="ex01/utils_clean.py" data-new="3-4,23-24,33"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：全部通过</div><div data-run="ex01-clean"></div>
+<p><code>import *</code> 是有意保留的，视频里讲师也这样做。所以用 sed 在那一行末尾加了 <code># noqa: F403</code>。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：pre-commit 钩子拦下格式不对的提交</div><div data-run="ex01-hook"></div>
+<p>输出怎么读：第一次 <code>git commit</code> 时，<code>ruff format --check</code> 失败了。git 没有创建提交，commit exit=1。<code>ruff format</code> 修好后再提交，两个钩子都 Passed。<code>git log</code> 里多了 4d26b19。</p></div>
+<p class="like"><b>打个比方</b>像先把碗丢进洗碗机，再手洗它洗不掉的锅底。钩子是柜子前的检查员，碗不干净不许放进去。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：钩子能被绕过</div>
+<div data-run="ex01-noverify"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>带着两个 lint 错误，E402 和 F401，<code>git commit --no-verify</code> 照样提交成功。</div></div>
+<div class="row"><b>原因</b><div>钩子只装在每个人自己的 <code>.git/hooks/</code> 里。没执行过 <code>pre-commit install</code> 的人不受约束。用 <code>--no-verify</code> 的人也一样（视频 41:45）。</div></div>
+<div class="row good"><b>对策</b><div>把同样的检查也放进 CI，见练习 3。服务器上的检查，谁也绕不过去。</div></div></div></div>
+<div class="callout extra"><div class="ct">需你本人完成：让 AI 智能体循环修 lint</div>
+<p>在你自己的项目上，可以这样指挥编码智能体（示意）：</p>
+<p>“运行 <code>ruff check .</code>，逐个修复报告的问题。每改一轮，都重新运行 ruff 和测试。直到 ruff 没有输出，测试也全部通过。不要用 noqa 掩盖问题，除非你在回复里说明理由。”</p>
+<p><b>验收标准</b>有三条。第一，<code>ruff check</code> 和 <code>ruff format --check</code> 的退出码都是 0。第二，测试全部通过。第三，你逐个看过它的 diff。尤其是“不安全修复”和新加的 <code># noqa</code>，确认没有改变行为。讲义也说，要仔细检查，确保 AI 没弄坏代码。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>entry: ruff format --check   <span class="cm"># 钩子只检查，不修改</span>
+<span class="cm"># 提交途中偷偷改文件，提交进去的就不是你暂存、看过的内容</span>
+<span class="cm"># 所以让钩子失败，你跑完格式化、看过 diff 再提交</span>
+<span class="cm"># pre-commit 也有“改了文件就判失败”的钩子，效果类似（补充）</span>
+ruff check --fix             <span class="cm"># 修完会再查一轮，修掉一个 RET505 可能冒出新的 RET505</span></pre></div>
+
+<!-- ======================= 2 ======================= -->
+<h2 id="ex02" data-nav="2 · 测试与覆盖率">练习 2 · 覆盖率 100% 不等于测对了 <label class="ex-done"><input type="checkbox" data-ex="ex02">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span><span class="tag lnx">AI 智能体部分需你本人完成</span></div>
+<p class="q-orig"><b>原题</b>：选一门你熟悉的语言，学它的测试库。为你的项目写一个单元测试。运行覆盖率工具，生成 HTML 格式的报告，观察结果。你能找出被覆盖的行吗？覆盖率多半很低。手工补一些测试提高它。再让 AI 智能体来提高覆盖率。要确保它能跑带覆盖率的测试，还能生成逐行报告。这样它才知道该把精力放在哪里。AI 生成的测试真的好吗？</p>
+<p class="lead">覆盖率只说明哪些行跑过，不说明结果对不对。高覆盖率加上有意义的 assert，测试才真有用。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>测试见<a href="../ch09.html#s5">第 9 讲第 5 节</a>。覆盖率和手推公式见<a href="../ch09.html#s6">第 9 讲第 6 节</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：第一个测试文件</div><div data-file="minilib/tests/test_fizzbuzz.py"></div></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：测试本身也有 bug</div>
+<div data-file="ex02/test_noimport.py"></div>
+<div data-run="ex02-noimport"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div><code>NameError: name 'fizzbuzz' is not defined</code>。失败的不是被测代码，而是测试本身。</div></div>
+<div class="row good"><b>正确写法</b><div>先写 <code>from minilib import fizzbuzz</code>。看到失败时，先分清是哪种。<code>AssertionError</code> 是被测代码的结果不对。别的异常，多半是测试或环境有问题。讲师在视频 25:09 现场踩过。</div></div></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：测试发现 bug</div><div data-run="ex02-fail"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：覆盖率</div><div data-run="ex02-cov"></div>
+<p>手推：(22 − 11) / 22 = 50%。注意 <code>Missing</code> 里的 12 到 13 行。明明有 fizzbuzz(30) 的测试，<code>return "fizzbuzz"</code> 却没被执行。它是永远走不到的死代码，bug 正在这里。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：修 bug（补丁）</div><div data-file="ex02/fizzbuzz_fix.diff"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex02-fix"></div></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：手工补测试</div><div data-file="ex02/test_more.py" data-new="1-22"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：覆盖率与 HTML 报告</div><div data-run="ex02-more"></div>
+<p>手推：(22 − 1) / 22 = 95.45%，显示为 95%。只剩 cat() 的第 33 行没跑到。<code>coverage html</code> 会生成 <code>htmlcov/index.html</code>。在浏览器里打开，就能逐行查看。绿色是执行过的，红色是没执行的。本页从 HTML 里 grep 出了总覆盖率。</p></div>
+<p class="like"><b>打个比方</b>覆盖率像点名册，只记谁来过教室。来过不代表听懂了。assert 才是那场考试。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：覆盖率 100% 不等于测对了</div>
+<div data-file="ex02/test_useless.py"></div>
+<div data-run="ex02-useless"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>覆盖率 100%，测试全部通过。可 <code>left_pad('00', 1)</code> 返回 <code>'0'</code>，截断 bug 一直在。</div></div>
+<div class="row"><b>原因</b><div>覆盖率只统计执行到了没有，不管结果对不对。没有 assert 的测试，也能把每一行都执行一遍。讲师见过 AI 生成的这种测试。覆盖率 100%，却几乎毫无用处（视频 31:05）。</div></div>
+<div class="row good"><b>对策</b><div>审查测试有没有在检查<strong>行为</strong>。每个测试至少一个有意义的 assert。边界情况要专门测，这里是 <code>len(s) &gt; i</code>。也可以用性质测试，见第 9 讲第 7 节。</div></div></div></div>
+<div class="callout extra"><div class="ct">需你本人完成：让 AI 智能体提高覆盖率</div>
+<p>给智能体的指令（示意）：</p>
+<p>“用 <code>coverage run -m pytest</code> 跑测试。再用 <code>coverage report -m</code> 看哪些行没覆盖。也可以用 <code>coverage xml</code>，它更紧凑，适合你读。为没覆盖的行补测试。每个测试都要 assert 一个看得见的行为。不要修改被测代码。如果你认为发现了 bug，就写一个会失败的测试。然后告诉我。”</p>
+<p><b>验收标准</b>：覆盖率提高了。然后逐个读它写的测试。有没有像 <code>test_useless.py</code> 那样，只调用不检查的？有没有把错误的现有行为写成期望值？那样 bug 反而被测试“保护”起来了。</p>
+<p>视频问答里讲师的经验是，一开始给的测试很有用。越往后越容易生成没用的。这时需要你引导（视频 1:07:19）。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>python -m coverage report -m    <span class="cm"># __init__.py 是 100%，utils.py 的 def 行也都算执行过</span>
+<span class="cm"># 因为导入模块时，顶层语句会执行一遍，import 和 def 都在其中</span>
+<span class="cm"># def 只是创建函数对象。函数体要等调用时才执行，没调用的函数体就是红的</span>
+assert fizzbuzz(95) == "buzz"   <span class="cm"># 补这一条，buzz 分支才算覆盖（视频 28:28）</span></pre></div>
+
+<!-- ======================= 3 ======================= -->
+<h2 id="ex03" data-nav="3 · 持续集成">练习 3 · CI 只能抓到你写了检查的东西 <label class="ex-done"><input type="checkbox" data-ex="ex03">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（本地等价检查）</span><span class="tag lnx">推送到 GitHub 需你本人完成</span></div>
+<p class="q-orig"><b>原题</b>：为你的项目配置持续集成，每次 push 时运行。让 CI 跑格式检查、lint 和测试。故意弄坏代码，例如引入一个 lint 违规。确认 CI 能抓住它。</p>
+<p class="lead">工作流在 push、PR 和每周定时触发。故意加一行 <code>import os</code>，lint 作业就变红。可没写测试的 bug，CI 照样是绿的。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>CI 的触发、作业、步骤与矩阵，见<a href="../ch09.html#s9">第 9 讲第 9 节</a>。还会用到第 1 讲的退出码和 shell 函数。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：工作流</div><div data-file="minilib/.github/workflows/ci.yml"></div>
+<p>一共三类作业：format、lint 和 test。test 是 3 个系统乘 2 个 Python 版本的矩阵。任何一项失败，整次运行就变红。</p></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：on 在 YAML 里会变成 True</div>
+<div data-run="ex03-yaml"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>用 PyYAML 读这个工作流，顶层的键是 <code>['name', True, 'jobs']</code>。<code>on</code> 变成了布尔值 True。</div></div>
+<div class="row"><b>原因</b><div>YAML 1.1 把 on、off、yes、no 都当成布尔值（补充）。GitHub Actions 自己的解析器能正确处理，工作流本身没问题。可你要是写脚本去检查或生成工作流，就得用 <code>d[True]</code> 来取。或者把键写成 <code>"on":</code>。</div></div></div></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：在本机执行同样的检查</div>
+<div data-file="ex03/ci_local.sh" data-new="1-21"></div>
+<p>基线代码是练习 1 修完 lint，再加上练习 2 修好的 fizzbuzz：</p>
+<div data-file="ex03/utils_ci.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：全部通过</div><div data-run="ex03-pass"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：故意引入 lint 违规</div><div data-run="ex03-break"></div>
+<p>输出怎么读：在第 3 行后插入 <code>import os</code>。lint 作业失败，报 I001 import 顺序和 F401 没用到。test 照样跑了，而且通过，最后退出码是 1。注意 left_pad 的截断 bug 没让 CI 变红。CI 只能检查你写了检查的东西。</p></div>
+<p class="like"><b>打个比方</b>CI 像机场安检。它只查清单上写了的违禁品。清单上没有的东西，带上飞机它也不拦。</p>
+<div data-vz="lab09-ci"></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：以为没开 set -e 才能接着跑</div>
+<div data-run="ex03-sete"></div>
+<div class="pit-card"><div class="row bad"><b>误解</b><div>ci_local.sh 能在 lint 失败后接着跑 test，是因为没开 <code>set -e</code>。</div></div>
+<div class="row"><b>实测</b><div>给它开上 -e，三个作业照样都跑完，exit=1。而逐行直接运行命令的 naive.sh，在 ruff 失败处就退出了。lint ok 和测试都没出现。</div></div>
+<div class="row good"><b>原因</b><div>命令失败时，有几种情况<strong>不会</strong>触发 -e。一是它在 <code>if</code>、<code>while</code> 的条件里，二是它在 <code>&amp;&amp;</code>、<code>||</code> 的左边。这条是补充，见 Bash 手册的 The Set Builtin。ci_local.sh 第 9 行把每个检查放进了 <code>if</code> 条件。所以开不开 -e，都会接着跑。</div></div></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：推送到 GitHub（未实测）</div><div data-run="ex03-push"></div></div>
+<div class="callout extra"><div class="ct">需你本人完成：在 GitHub 上看它真的变红</div>
+<ol><li>在 GitHub 新建仓库。把 <code>minilib/</code> 推上去，连同 <code>.github/workflows/ci.yml</code>。</li>
+<li>打开 Actions 标签页。应该看到 format、lint 和 6 个 test 作业，全部变绿。</li>
+<li>新建分支，加一行 <code>import os</code>。推送并开一个 PR，PR 页面上应显示 lint 检查失败。</li>
+<li>可选：在 README 里加上状态徽章。讲义链接了 GitHub 文档。</li></ol>
+<p><b>验收标准</b>：截图或链接显示主分支是绿的。破坏后的 PR 是红的，失败的正是 lint 作业。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>- run: ruff check .   <span class="cm"># 同一作业里这一步失败，后面的步骤默认不再执行</span>
+<span class="cm"># 除非给后面的步骤加上 if: always() 之类的条件</span>
+<span class="cm"># 不同作业互不影响，照样运行，除非用 needs 声明了依赖</span>
+<span class="cm"># ci_local.sh 模仿的就是“作业之间互不影响”（补充，未在 GitHub 上实测）</span></pre></div>
+
+<!-- ======================= 4 ======================= -->
+<h2 id="ex04" data-nav="4 · grep vs semgrep">练习 4 · grep 漏掉拆行和别名，semgrep 漏掉字典传参 <label class="ex-done"><input type="checkbox" data-ex="ex04">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：写一个正则，用 <code>grep</code> 在你的代码里找出 <code>subprocess.Popen(..., shell=True)</code>。然后试着“打破”这个正则。那些让 grep 失手的危险代码，semgrep 还能匹配上吗？</p>
+<p class="lead">字符级搜索会漏报，也会误报。semgrep 按语法树匹配，准得多，但也有盲区。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>semgrep 见<a href="../ch09.html#s4">第 9 讲第 4 节</a>。正则里的转义 <code>\.</code> 和 <code>\(</code>，见<a href="../ch09.html#s13">第 9 讲第 13 节</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：9 种写法的样本</div><div data-file="ex04/shell_calls.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：两版 grep</div><div data-run="ex04-grep"></div>
+<p>第一版命中 5 行，其中只有 1、2 是真调用。文档字符串、注释 8、字符串 9 都是误报。3 跨行、4 有空格、5 是别名、6 藏在字典里，全漏了。</p>
+<p>第二版放宽了 <code>=</code> 两边的空格，还排除了 # 开头的行。它多找到了 4，去掉了 8。可 3、5、6 照样漏，文档字符串和 9 照样误报。</p>
+<p>注意正则里的 <code>\(</code>。讲师在视频里一开始没转义括号。结果 <code>(</code> 被当成了分组（视频 18:11）。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：semgrep</div><div data-run="ex04-semgrep"></div>
+<p>semgrep 找到了 1 到 5。跨行调用、多余参数、空格都认得出来。连 <code>from subprocess import Popen as P</code> 这种别名也认得。注释、字符串和 <code>shell=False</code> 都没有误报。它漏掉了 6。<code>shell=True</code> 藏在字典里，语法树上看不到这个关键字参数。完整对比见<a href="../ch09.html#s4">第 9 讲的演示</a>。</p></div>
+<p class="like"><b>打个比方</b>grep 像只认长相的保安，换件衣服就认不出。semgrep 像查身份证的保安。可人要是躲进箱子里，他也看不见。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>grep -nE 'subprocess\.Popen\(.*shell=True'              <span class="cm"># \. 和 \( 要转义，不然 . 是任意字符，( 是分组</span>
+semgrep -l python -e 'subprocess.Popen(..., **$KW)'   <span class="cm"># 补 6 号的一种办法：凡是 ** 传参都拿出来人工审</span>
+<span class="cm"># 也可以靠 ruff 的 S602、S604 这类规则，再加代码评审</span>
+<span class="cm"># 或者约定“禁止把 **kwargs 传给 subprocess”</span>
+<span class="cm"># 没有一种静态分析是完美的，几层叠加更可靠（补充，未实测）</span></pre></div>
+
+<!-- ======================= 5 ======================= -->
+<h2 id="ex05" data-nav="5 · 替换项目符号">练习 5 · 只换行首的项目符号，用 ^ 把位置锚住 <label class="ex-done"><input type="checkbox" data-ex="ex05">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（sed + Vim）</span></div>
+<p class="q-orig"><b>原题</b>：在你的 IDE 或编辑器里练习正则搜索替换。把<a href="https://raw.githubusercontent.com/missing-semester/missing-semester/refs/heads/master/_2026/code-quality.md" target="_blank" rel="noopener">这份讲义</a>里的 <code>-</code> <a href="https://spec.commonmark.org/0.31.2/#bullet-list-marker" target="_blank" rel="noopener">Markdown 项目符号</a>换成 <code>*</code>。注意，直接替换所有 “-” 是错的。文件里很多 “-” 并不是项目符号。</p>
+<p class="lead">模式写成 <code>^( *)- </code>，只认行首、缩进之后的那个 - 加空格。正好 28 行被改，和项目符号的行数一致。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p><code>^</code> 行首、捕获组与 <code>\1</code>，见<a href="../ch09.html#s14">第 9 讲第 14 节</a>。还会用到第 1 讲的 sed、diff 和 grep -c。</p></div>
+<div class="callout extra"><div class="ct">实测改动</div><p>实测没有联网下载。用的是<a href="https://github.com/missing-semester/missing-semester/blob/master/_2026/code-quality.md" target="_blank" rel="noopener">讲义源文件 code-quality.md</a> 的本地副本。它正是题目链接的那个文件。准备步骤把它复制进沙箱。这份副本在生成笔记后已删除。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：先数一数</div><div data-run="ex05-count"></div></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：把所有 - 都换掉</div><div data-run="ex05-naive"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>68 行被改。YAML 头的 <code>---</code> 变成了 <code>***</code>，日期变成 2026*01*23。high-quality、regular-expressions 这样的连字符和锚点，也全坏了。上面列出的，是非项目符号的受害行。</div></div></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：只换行首的项目符号</div><div data-run="ex05-right"></div>
+<p>模式 <code>^( *)- </code> 拆开看。行首，可选的缩进，一个 <code>-</code>，一个空格。缩进被捕获为 <code>\1</code>，替换时原样放回。正好 28 行被改，和项目符号的行数一致。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：在编辑器里做同样的事（Vim）</div><div data-run="ex05-vim"></div>
+<p>Vim 方言里，分组要写成 <code>\(</code> 和 <code>\)</code>，<code>\s</code> 是空白字符。<code>-Es</code> 让 Vim 以无界面的 Ex 模式执行命令。结果和 sed 逐字节相同，用 <code>cmp</code> 验证过。</p>
+<p>在 VS Code 里也能做。打开查找替换，点亮 <code>.*</code> 按钮。查找 <code>^(\s*)- </code>，替换为 <code>$1* </code>。</p></div>
+<p class="like"><b>打个比方</b>像只把每段开头的小圆点换成星号。正文里的连字符，一个都不碰。<code>^</code> 就是告诉工具，只看行首。</p>
+<div data-vz="lab09-bullets"></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>sed -E 's/^( *)- /\1* /'   <span class="cm"># 对：缩进捕获下来，替换时原样放回</span>
+sed 's/^- /* /'            <span class="cm"># 缩进的子列表项，它的 - 不在行首，会漏掉</span>
+sed 's/^\s*- /* /'         <span class="cm"># 缩进被一起吃掉又没放回，子列表被“拍平”到第一层</span>
+<span class="cm"># 这份讲义恰好没有缩进的 - 项目符号，所以三种写法都改 28 行（推理，未实测）</span>
+<span class="cm"># 可练习 6 的子题前面带缩进，说明文件里确实有嵌套列表。捕获缩进更稳妥</span></pre></div>
+
+<!-- ======================= 6 ======================= -->
+<h2 id="ex06" data-nav="6 · 从 JSON 取名字">练习 6 · 正则取名字会吃过头，JSON 还是交给解析器 <label class="ex-done"><input type="checkbox" data-ex="ex06">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：写一个正则，从形如 <code>{"name": "Alyssa P. Hacker", "college": "MIT"}</code> 的 JSON 里捕获名字。本例是 <code>Alyssa P. Hacker</code>。提示：第一次尝试可能会得到 <code>Alyssa P. Hacker", "college": "MIT</code>。读 Python 正则文档里讲贪婪量词的部分，来修正它。<b>6.1</b> 让模式在名字含有 <code>"</code> 时也能工作。JSON 里双引号转义成 <code>\"</code>。<b>6.2</b> 实践中<strong>不</strong>推荐用正则做复杂解析。用你的语言自带的 JSON 解析器，写一个命令行程序。它从 stdin 读这种 JSON，把名字输出到 stdout。Python 里除了 <code>import json</code>，只需一行。</p>
+<p class="lead"><code>(.*)</code> 贪婪，会一直吃到最后一个引号。换成 <code>[^"]*</code> 就停在下一个引号。要处理转义，就让 <code>\\.</code> 成对吃。真遇到复杂 JSON，交给解析器。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>量词与回溯、贪婪与非贪婪，见<a href="../ch09.html#s13">第 9 讲第 13 节</a>。捕获组见<a href="../ch09.html#s14">第 9 讲第 14 节</a>。正则的局限见<a href="../ch09.html#s15">第 9 讲第 15 节</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：四个正则加两条样本</div>
+<div data-file="ex06/people.jsonl"></div>
+<div data-file="ex06/extract.py" data-new="1-15"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex06-regex"></div>
+<p>第 1 行：贪婪版吃过头，正是题目提示的那个错误结果。其余三种都对。第 2 行：非贪婪版和非引号版，都停在 <code>\"</code> 的引号上。它们只拿到 <code>Ben \</code>。只有“转义感知”的版本拿到了完整名字。不过转义符仍原样留着。</p></div>
+<p class="like"><b>打个比方</b>贪婪的 <code>.*</code> 像吃自助，先把盘子堆满。吃不下了，再一样样放回去。非贪婪是一样样拿，够了就停。</p>
+<div data-vz="lab09-greedy"></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：在 shell 里用 grep -P</div><div data-run="ex06-grep"></div>
+<p><code>\K</code> 是 PCRE 的写法，意思是丢掉之前已匹配的部分。于是 <code>-o</code> 只输出名字（补充）。第三条命令是同一个模式的另一种写法 <code>[^"\\]</code>。在本机的 GNU grep 3.0 上，它报错 missing terminating ] for character class（本机实测）。改用十六进制转义 <code>\x5c</code> 表示反斜杠，就正常了。不同工具、不同版本，对反斜杠的处理并不一致。这正是讲师说的方言差异。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：6.2 用 JSON 解析器</div><div data-file="ex06/name.py" data-new="1-2"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex06-json"></div>
+<p>解析器把 <code>\"</code> 还原成了真正的引号：<code>Ben "Bitdiddle" B.</code>。</p></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：JSON 换个写法，正则就失灵</div><div data-run="ex06-pit"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>键的顺序换了，冒号后面没有空格。这都是合法 JSON，grep 却一个都没匹配到，退出码 1。</div></div>
+<div class="row"><b>原因</b><div>正则依赖表面写法。<code>"name": "</code> 里那个空格就是硬性要求。JSON 的语法有嵌套、转义和任意空白。这些超出了正则擅长的范围。</div></div>
+<div class="row good"><b>正确写法</b><div>用解析器。<code>name.py</code> 照样输出 Alyssa P. Hacker。讲义也说，不推荐用正则解决复杂的解析问题。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>"name": "((?:[^"\\]|\\.)*)"   <span class="cm"># 转义感知：每步吃一个普通字符，或者吃“反斜杠加任意字符”这一对</span>
+<span class="cm"># 为什么要写 [^"\\]，不能只写 [^"]</span>
+<span class="cm"># [^"] 允许单独吃掉反斜杠。遇到 \" 时，它可能先吃掉 \</span>
+<span class="cm"># 下一步再把 " 当成结束引号，又回到被截断的结果</span>
+<span class="cm"># 把反斜杠排除在外，它只能走 \\. 这条分支，和后面的字符成对被吃掉</span></pre></div>
+
+<!-- ======================= 自查 ======================= -->
+<h2 id="selfcheck" data-nav="自查">自查：自己重跑一遍</h2>
+<p class="lead">本页的代码和输出，都是生成笔记时在本机真跑收集的。想验证，就把题解复制到空目录，在 Git Bash 里重跑。</p>
+<p>生成脚本和题解源文件都已删除，<strong>代码以本页为准</strong>。代码块的“复制”按钮，拿到的是原文件的原始字节。生成时间见页头。</p>
+<p>ruff、pre-commit、semgrep 本机没有全局安装。实测时，它们装在临时 venv 里。你重跑前要先装好它们，这需要联网。</p>
+<div class="code"><div class="cap">考点速查（注释里写着答案）</div><pre>python -m coverage report -m   <span class="cm"># 原版只跑 test_fizzbuzz.py，Missing 里有第 13 行（练习 2）</span>
+                               <span class="cm"># 因为 return "fizzbuzz" 永远走不到</span>
+set -euo pipefail              <span class="cm"># 写进 ci_local.sh 第 4 行，test 照样会跑（练习 3）</span>
+                               <span class="cm"># 检查都在 if 条件里，不触发 -e。naive.sh 那样直接跑才会停</span>
+repo: local                    <span class="cm"># 配 language: system，直接用 PATH 里的 ruff（练习 1）</span>
+                               <span class="cm"># 不用去 GitHub 克隆钩子仓库，离线能跑。代价是每人自己装 ruff</span>
+"name": "(.+)"                 <span class="cm"># 和 (.*) 一样贪婪（练习 6）</span>
+                               <span class="cm"># 得到 Alyssa P. Hacker", "college": "MIT</span>
+s/^- /* /                      <span class="cm"># 对这份讲义也是 28 行（练习 5）</span>
+                               <span class="cm"># 遇到缩进的子列表就漏掉，它的 - 不在行首</span></pre></div>
+
+</article></main>
+<script src="../assets/vz.js"></script>
+<script src="../assets/viz/lab09-run.js"></script>
+<script src="../assets/lab.js"></script>
+</body>
+</html>

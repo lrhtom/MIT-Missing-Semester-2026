@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>练习 01 · 课程概览 + Shell 入门 · Missing Semester 2026</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="../assets/vz.css">
+<link rel="stylesheet" href="../assets/lab.css">
+<script>window.PAGE = { key: 'lab01', ch: 'ch01', type: 'lab', base: '../' };</script>
+<script src="../assets/course.js"></script>
+<script src="../assets/dg.js"></script>
+<script src="../assets/app.js"></script>
+<script src="data/lab01.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<header class="lab-head">
+  <div class="k">LAB 01 · 对应 <a href="../ch01.html">第 1 讲 · 课程概览 + Shell 入门</a></div>
+  <h1>练习可视化笔记 · Shell 入门</h1>
+  <p class="lede">讲义第 1 讲一共 18 道练习，这里逐题讲。每题先亮结论，再给真跑的代码和输出。接着打个比方讲原理，最后指出坑在哪。考点都写在代码注释里。官方不给答案，题解是笔记作者写的。<strong>所有输出都由脚本在本机真跑后自动收集</strong>。生成时间是 <b id="labGen">…</b>。</p>
+  <div class="lab-prog" id="labProg"><span class="t"></span><div class="bar"><div class="f"></div></div><button class="btn sm" id="labGo" type="button">定位到第一道未完成的题</button></div>
+  <div class="lab-legend">
+    <span><span class="wb gb">Git Bash 5.3 · Windows 本机</span> 真跑</span>
+    <span><span class="ec na">未实测</span> 本机没有对应环境，写明原因</span>
+    <span><span class="ann" style="display:inline-flex;margin:0;padding:1px 8px"><span class="ar">L3</span></span> 注释层（不可选中，复制不会带上）</span>
+  </div>
+</header>
+
+<h2 id="env" data-nav="环境检查">环境检查：本机是 Git Bash，不是真 Linux</h2>
+<p class="lead">本页命令都在 Windows 的 Git Bash 里真跑。需要真 Linux 的几条，标成了未实测。</p>
+<p>动手前先确认工具链。下面是生成本页时，在本机真跑的检查命令和输出：</p>
+<div data-env="gitbash"></div>
+<div class="callout warn"><div class="ct">本机限制与处理办法</div>
+<ul>
+<li><strong>没有真正的 Linux</strong>：本机的 Docker Desktop 一启动就崩。日志说 <code>…\Docker\run\dockerInference</code> 这个文件无法访问。那是 10 月 16 日残留的套接字文件。WSL 里也只有 docker-desktop 这个内部发行版。需要 Linux 的 4 条命令标成了<strong>未实测</strong>。它们在练习 1、2、9 里，页面写明了视频里的现象。</li>
+<li><strong>Git Bash 不是 Linux</strong>：它把 NTFS 映射成 Unix 路径，但不记录执行位。以 <code>#!</code> 开头的文件会自动显示成 <code>rwx</code>，练习 9 实测过。</li>
+<li><strong>缺 jq 和 stress</strong>：练习 16 的 jq 命令没实测。改用 Python 的 json 模块，真跑出同样的结果。练习 12 用一个 <code>exec sleep 30</code> 的小脚本冒充 stress，准备步骤里写明了。</li>
+<li><strong>隐私</strong>：练习 13 和 18 涉及家目录和历史记录。笔记没读你的真实文件。13 题改在课程仓库副本上跑，18 题改用一份示意历史。命令本身不变。</li>
+</ul></div>
+<div class="callout tip"><div class="ct">怎么用这一页</div>
+<p>代码块右上角有个“复制”。它复制的是源文件的原始字节，不带行号和注释层。“注释”按钮能隐藏或显示所有注释。开关状态记在浏览器里。每道题标题右边可以勾“完成”。想自己验证，就按<a href="#selfcheck">页尾“自查”</a>的方法重跑。</p></div>
+
+<!-- ======================= 1 ======================= -->
+<h2 id="ex01" data-nav="1 · 确认是 Unix shell">练习 1 · $SHELL 只记登录 shell，不一定是眼前这个 <label class="ex-done"><input type="checkbox" data-ex="ex01">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span><span class="tag lnx">Linux 未实测</span></div>
+<p class="q-orig"><b>原题</b>：本课需要 Bash 或 Zsh 这样的 Unix shell。Windows 上别用 cmd.exe 或 PowerShell，可以用 WSL 或 Linux 虚拟机。用 <code>echo $SHELL</code> 检查，输出像 <code>/bin/bash</code> 或 <code>/usr/bin/zsh</code> 就对了。</p>
+<p class="lead"><code>echo $SHELL</code> 只能看出登录时用的 shell。想确认眼前这个是不是 bash，看 <code>$BASH_VERSION</code> 更准。</p>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex01-gb"></div><div data-run="ex01-dk"></div></div>
+<p class="like"><b>打个比方</b>$SHELL 像入职登记表上写的部门。你后来借调到别的组，登记表不会跟着改。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p><code>$SHELL</code> 是一个环境变量，记的是你的<strong>登录 shell</strong>。<code>$BASH_VERSION</code> 只有 bash 自己会设置。所以它能直接说明，正在解释这行命令的就是 bash。</p></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑</div>
+<div class="pit-card"><div class="row bad"><b>误解</b><div>以为 <code>$SHELL</code> 就是当前正在跑的 shell。</div></div>
+<div class="row"><b>真相</b><div>它只是登录 shell 的记录。在 bash 里再敲 <code>zsh</code> 进入 zsh，<code>$SHELL</code> 不会变。想知道当前进程是谁，看 <code>$BASH_VERSION</code> 或 <code>ps -p $$</code>。<code>$$</code> 是当前 shell 的 PID。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>echo $SHELL          <span class="cm"># 登录 shell，进了 zsh 也不会变</span>
+echo $BASH_VERSION   <span class="cm"># 只有 bash 会设置，空的就说明不是 bash</span>
+ps -p $$             <span class="cm"># $$ 是当前 shell 的 PID，看它到底是谁</span>
+<span class="cm"># 在 PowerShell 里 echo $SHELL 是空的</span>
+<span class="cm"># Unix shell 才会从环境里继承 SHELL，所以这正说明你不在 Unix shell 里</span></pre></div>
+
+<!-- ======================= 2 ======================= -->
+<h2 id="ex02" data-nav="2 · ls -l 的 10 个字符">练习 2 · ls -l 开头 10 个字符：类型加三组权限 <label class="ex-done"><input type="checkbox" data-ex="ex02">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span><span class="tag lnx">Linux 未实测</span></div>
+<p class="q-orig"><b>原题</b>：<code>ls</code> 的 <code>-l</code> 参数是干什么的？运行 <code>ls -l /</code>，每行前 10 个字符是什么意思？提示：<code>man ls</code>。</p>
+<p class="lead">第 1 个字符是文件类型。后面 9 个分成三组 rwx，依次给属主、属组和其他人。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<p><code>-l</code> 是长格式，每个文件占一行。依次是权限、链接数、属主、属组、大小、时间和名字。前 10 个字符是这样拆的：</p>
+<figure class="fig"><script>
+DG('flow', { nodeH: 46, cols: [
+  [ { id: 't', l: 'd', s: '第 1 位：类型', tone: 'neutral', mono: true } ],
+  [ { id: 'u', l: 'rwx', s: '2 到 4 位：属主 u', tone: 'ok', mono: true } ],
+  [ { id: 'g', l: 'r-x', s: '5 到 7 位：属组 g', tone: 'data', mono: true } ],
+  [ { id: 'o', l: 'r-x', s: '8 到 10 位：其他人 o', tone: 'warn', mono: true } ]
+], edges: [] });
+</script><figcaption>类型：- 普通文件，d 目录，l 符号链接。c 和 b 是设备文件。r 读，w 写，x 执行，目录的 x 表示能进入。- 表示没有这个权限</figcaption></figure>
+</div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div>
+<div data-run="ex02-gb"></div><div data-run="ex02-gb2"></div><div data-run="ex02-dk"></div><div data-run="ex02-dk2"></div></div>
+<p class="like"><b>打个比方</b>rwx 像一扇门上的三把锁：能看、能改、能进。三组锁分别发给房主、室友和路人。</p>
+<div class="callout extra"><div class="ct">补充（非视频内容）：在真 Linux 上你会看到</div>
+<p>Ubuntu 的 <code>/bin</code> 是指向 <code>usr/bin</code> 的符号链接，显示成 <code>lrwxrwxrwx … bin -&gt; usr/bin</code>。<code>/tmp</code> 显示成 <code>drwxrwxrwt</code>。最后的 <code>t</code> 是粘滞位，人人能写，但只能删自己的文件。<code>/dev/null</code> 以 <code>c</code> 开头，是字符设备。这些都没在本机实测，因为没有 Linux 环境。</p></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑</div>
+<div class="pit-card"><div class="row bad"><b>误解</b><div>Git Bash 里所有目录都是 <code>drwxr-xr-x</code>，属组是 <code>197610</code>。以为 Linux 就是这样。</div></div>
+<div class="row"><b>原因</b><div>Git Bash 按 Windows 的文件属性，拼出 Unix 风格的权限。数字属组是从 Windows 的 SID 映射来的。这些权限位在 NTFS 上并不真实存在。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>drwxr-xr-x   <span class="cm"># d 是目录，属主 rwx，属组和其他人 r-x</span>
+<span class="cm"># 目录的 r：能列出里面的文件名</span>
+<span class="cm"># 目录的 x：能进去，也能访问里面的文件</span>
+<span class="cm"># 只有 r 没有 x：看得到名字，打不开内容（补充，非视频内容）</span></pre></div>
+
+<!-- ======================= 3 ======================= -->
+<h2 id="ex03" data-nav="3 · glob 通配符">练习 3 · glob 由 shell 展开，没匹配上就原样留着 <label class="ex-done"><input type="checkbox" data-ex="ex03">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：<code>find ~/Downloads -type f -name "*.zip" -mtime +30</code> 里的 <code>*.zip</code> 是 glob。glob 是什么？建一个测试目录，试试 <code>ls *.txt</code>、<code>ls file?.txt</code> 和 <code>ls {a,b,c}.txt</code>。参考 Bash 手册的 <a href="https://www.gnu.org/software/bash/manual/html_node/Pattern-Matching.html" target="_blank" rel="noopener">Pattern Matching</a>。</p>
+<p class="lead"><code>*</code> 和 <code>?</code> 由 shell 按磁盘上已有的文件展开。<code>{a,b,c}</code> 不看磁盘，直接生成三个词。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>glob 和正则的区别，见<a href="../ch01.html#s9b">第 1 讲第 9 节</a>。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<div class="tbl-wrap"><table class="tbl"><tr><th>写法</th><th>含义</th><th>谁展开</th></tr>
+<tr><td><code>*</code></td><td>任意长度的任意字符，可以是 0 个</td><td>shell 展开。按<strong>已有的文件</strong>匹配，结果按名字排序</td></tr>
+<tr><td><code>?</code></td><td>恰好 1 个任意字符</td><td>同上</td></tr>
+<tr><td><code>{a,b,c}</code></td><td>花括号展开，直接生成 a、b、c 三个词</td><td>shell 展开。<strong>不管文件在不在</strong></td></tr>
+</table></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex03-a"></div><div data-run="ex03-b"></div></div>
+<p>读输出时注意两点。<code>file?.txt</code> 匹配到 file1 和 file2，<strong>没有 file10</strong>，因为 ? 只匹配一个字符。<code>{a,b,c}.txt</code> 不看磁盘，照样生成 c.txt。于是 ls 报错，整条命令退出码是 2。</p>
+<p class="like"><b>打个比方</b>glob 像点名册，只喊到场的人。花括号像摆座位牌，不管人来没来，牌子先摆上。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑</div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>echo *.md</code>，以为没匹配时什么都不输出</div></div>
+<div class="row"><b>实际</b><div>bash 默认把<strong>没匹配上的 glob 原样留着</strong>。于是输出字面上的 <code>*.md</code>，见上面 ex03-b 的第一行。后面要是接 <code>rm</code>，就会去删一个叫 <code>*.md</code> 的文件。</div></div>
+<div class="row good"><b>正确写法</b><div>想要“没匹配就为空”，先 <code>shopt -s nullglob</code>。实测输出 <code>[]</code>。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>ls *.txt               <span class="cm"># 不加引号：要的就是 shell 先展开成文件列表</span>
+find . -name "*.zip"   <span class="cm"># 加引号：模式原样交给 find，它在每层目录里自己匹配</span>
+find . -name *.zip     <span class="cm"># 坑：当前目录正好有 zip 时，find 收到的是具体文件名</span></pre></div>
+
+<!-- ======================= 4 ======================= -->
+<h2 id="ex04" data-nav="4 · 三种引号">练习 4 · 三种引号：要不要展开，认不认转义 <label class="ex-done"><input type="checkbox" data-ex="ex04">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：<code>'单引号'</code>、<code>"双引号"</code> 和 <code>$'ANSI 引号'</code> 有什么区别？写一条命令，echo 一个字符串。它要同时含有字面的 <code>$</code>、<code>!</code> 和换行符。参考 <a href="https://www.gnu.org/software/bash/manual/html_node/Quoting.html" target="_blank" rel="noopener">Quoting</a>。</p>
+<p class="lead">单引号里什么都不展开。双引号会展开变量。<code>$'…'</code> 会把 <code>\n</code> 这类转义变成真字符。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<div class="tbl-wrap"><table class="tbl"><tr><th></th><th><code>'…'</code></th><th><code>"…"</code></th><th><code>$'…'</code></th></tr>
+<tr><td><code>$name</code> 变量展开</td><td>不展开</td><td><strong>展开</strong></td><td>不展开</td></tr>
+<tr><td><code>\n</code> <code>\t</code></td><td>原样两个字符</td><td>原样两个字符</td><td><strong>变成换行或制表符</strong></td></tr>
+<tr><td><code>!</code>（交互式）</td><td>安全</td><td><strong>可能触发历史展开</strong></td><td>安全</td></tr>
+</table></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex04-a"></div><p>题目要的答案在下面，三种写法输出完全一样：</p><div data-run="ex04-b"></div></div>
+<p class="like"><b>打个比方</b>单引号是密封袋，里面原样封存。双引号是透明袋，变量会被换成实物。<code>$'…'</code> 是带说明书的袋子，<code>\n</code> 会按说明变成换行。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑</div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>echo "Cost: $5!"</code></div></div>
+<div class="row"><b>实际</b><div>双引号里的 <code>$5</code> 是<strong>第 5 个位置参数</strong>，通常为空。所以输出变成 <code>Cost: !</code>：</div></div></div>
+<div data-run="ex04-d"></div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div>在交互式 shell 里敲 <code>echo "Cost: 5!Thanks"</code></div></div>
+<div class="row"><b>报错</b><div><code>bash: !Thanks: event not found</code>。<code>!</code> 后面跟字符，会被当成引用历史命令。脚本里默认不开历史展开，所以只在终端里踩坑。</div></div>
+<div class="row good"><b>正确写法</b><div>带 <code>!</code> 的串用单引号。下面用 <code>bash -i</code> 模拟交互式 shell 实测：</div></div></div>
+<div data-run="ex04-c"></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>echo 'It'"'"'s'   <span class="cm"># 输出 It's</span>
+<span class="cm"># 单引号里写不了单引号，所以拆成三段</span>
+<span class="cm"># 'It' 先关掉单引号，"'" 用双引号包一个 '，'s' 再开单引号</span>
+<span class="cm"># 三段挨着，shell 把它们拼成一个词（补充，非视频内容）</span></pre></div>
+
+<!-- ======================= 5 ======================= -->
+<h2 id="ex05" data-nav="5 · stdout / stderr 分流">练习 5 · 2&gt;&amp;1 要写在 &gt; file 后面 <label class="ex-done"><input type="checkbox" data-ex="ex05">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：shell 有三条标准流：stdin(0)、stdout(1) 和 stderr(2)。运行 <code>ls /nonexistent /tmp</code>，把 stdout 和 stderr 分别重定向到两个文件。怎么让两者进同一个文件？参考 <a href="https://www.gnu.org/software/bash/manual/html_node/Redirections.html" target="_blank" rel="noopener">Redirections</a>。</p>
+<p class="lead"><code>&gt; out 2&gt; err</code> 让两路各进各的文件。想进同一个文件，写 <code>&gt; all 2&gt;&amp;1</code>，顺序不能反。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>重定向见<a href="../ch01.html#s13">第 1 讲第 13 节</a>。那里演示的第 2 幕画了接线过程。</p></div>
+<div class="callout extra"><div class="ct">实测改动</div><p>Git Bash 的 <code>/tmp</code> 是 Windows 临时目录，里面全是不相干的文件。所以实测时把 <code>/tmp</code> 换成沙箱里的 <code>demo</code> 目录，它只有一个文件。命令结构完全不变。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex05-a"></div><p>两者进同一个文件有两种写法。结果逐字节相同，用 <code>cmp</code> 验证过：</p><div data-run="ex05-b"></div></div>
+<p class="like"><b>打个比方</b><code>2&gt;&amp;1</code> 是让 2 号“跟 1 号走”。它只看 1 号<strong>此刻</strong>在哪。1 号要是还没搬家，2 号就跟着留在终端。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑</div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>ls /nonexistent demo 2&gt;&amp;1 &gt; wrong.txt</code></div></div>
+<div class="row"><b>现象</b><div>错误信息还是打在终端上，文件里只有正常输出。</div></div>
+<div class="row"><b>原因</b><div>重定向<strong>从左到右</strong>处理。<code>2&gt;&amp;1</code> 的意思是，1 号此刻指向哪，2 号就跟着指向哪。执行它时 1 号还连着终端，于是 2 号也连到终端。之后的 <code>&gt; wrong.txt</code> 只改了 1 号。</div></div>
+<div class="row good"><b>正确写法</b><div>先改 1 再复制，写成 <code>&gt; file 2&gt;&amp;1</code>。或者用 bash 的 <code>&amp;&gt; file</code>。</div></div></div>
+<div data-run="ex05-c"></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>cmd 2&gt;/dev/null | wc -l   <span class="cm"># 只数 stdout 的行数</span>
+<span class="cm"># stderr 被扔进 /dev/null，而且管道本来就只接 stdout</span>
+cmd &gt; all 2&gt;&amp;1            <span class="cm"># 对：先把 1 改到文件，2 再跟过去</span>
+cmd 2&gt;&amp;1 &gt; all            <span class="cm"># 错：2 先跟了终端，报错还在屏幕上</span></pre></div>
+
+<!-- ======================= 6 ======================= -->
+<h2 id="ex06" data-nav="6 · && 与 ||">练习 6 · a &amp;&amp; b || c 不等于 if-else <label class="ex-done"><input type="checkbox" data-ex="ex06">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：<code>$?</code> 是上一条命令的退出码，0 表示成功。<code>&amp;&amp;</code> 只在前一条成功时运行下一条。<code>||</code> 只在前一条失败时运行。写一行命令，仅当 <code>/tmp/mydir</code> 不存在时才创建它。参考 <a href="https://www.gnu.org/software/bash/manual/html_node/Exit-Status.html" target="_blank" rel="noopener">Exit Status</a>。</p>
+<p class="lead">答案是 <code>[ -d /tmp/mydir ] || mkdir /tmp/mydir</code>。目录存在时，左边退出码是 0，右边直接跳过。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p>目录存在时，<code>[ -d /tmp/mydir ]</code> 退出 0，<code>||</code> 右边被跳过。不存在时退出 1，就执行 <code>mkdir</code>。整行的退出码，是最后真正执行的那条命令的退出码。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex06-a"></div>
+<p>第二次运行时，<code>mkdir</code> 根本没执行，所以不会报 File exists。另一个常见答案是 <code>mkdir -p /tmp/mydir</code>。<code>-p</code> 在目录已存在时也返回成功。实测完，脚本自动删掉了 /tmp/mydir。</p></div>
+<p class="like"><b>打个比方</b><code>||</code> 像“不行就找备胎”。前一条办成了，备胎就不用出场。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑</div>
+<div class="pit-card"><div class="row bad"><b>误解</b><div>以为 <code>a &amp;&amp; b || c</code> 就等于 <code>if a; then b; else c; fi</code>。</div></div>
+<div class="row"><b>实际</b><div>a 成功但 <strong>b 失败</strong>时，c 也会执行。实测 <code>true &amp;&amp; false || echo …</code> 打印了 “c ran”。if 版本不会进 else：</div></div></div>
+<div data-run="ex06-b"></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>cd mydir &amp;&amp; rm -rf *   <span class="cm"># cd 失败，rm 就不跑</span>
+cd mydir; rm -rf *     <span class="cm"># 危险：cd 失败后，照样在当前目录 rm -rf *</span>
+<span class="cm"># 所以脚本里推荐 set -e，或者用 &amp;&amp; 串起来</span></pre></div>
+
+<!-- ======================= 7 ======================= -->
+<h2 id="ex07" data-nav="7 · cd 为何内建">练习 7 · cd 必须内建，因为子进程改不了父进程的目录 <label class="ex-done"><input type="checkbox" data-ex="ex07">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：为什么 <code>cd</code> 必须内建在 shell 里，而不能是一个独立程序？提示：想想子进程能影响父进程什么，不能影响什么。</p>
+<p class="lead">外部程序跑在子进程里。它只能改自己那份当前目录，退出时那份就没了。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p>每个进程都有自己的当前目录。shell 运行外部程序时，会创建一个子进程。子进程拿到的是父进程目录的<strong>拷贝</strong>。它只能改自己的拷贝，退出时拷贝也跟着消失。所以外部的 cd 程序改不了你 shell 的目录。“fork 加拷贝”这一层是补充的系统知识，不在视频里。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex07-a"></div></div>
+<p class="like"><b>打个比方</b>子进程像你复印了一张地图交给跑腿的。他在复印件上画了新路线，你手里的原件一点没变。</p>
+<p>下面的演示把这段输出画成两个进程框。看子进程的当前目录怎么被拷贝、修改，然后消失：</p>
+<div data-vz="lab01-cd"></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>./setenv.sh        <span class="cm"># 脚本在子进程里跑，里面的 export FOO=1 随它消失</span>
+echo $FOO          <span class="cm"># 所以这里还是空的</span>
+source setenv.sh   <span class="cm"># 在当前 shell 里执行，FOO 才会留下</span>
+. setenv.sh        <span class="cm"># 和 source 一样。第 2 讲会讲环境变量</span></pre></div>
+
+<!-- ======================= 8 ======================= -->
+<h2 id="ex08" data-nav="8 · 判断文件是否存在">练习 8 · [ -f "$1" ] 的引号一个都不能省 <label class="ex-done"><input type="checkbox" data-ex="ex08">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：写一个脚本，接收文件名参数 <code>$1</code>。用 <code>test -f</code> 或 <code>[ -f … ]</code> 检查文件在不在。存在和不存在时，打印不同的信息。参考 <a href="https://www.gnu.org/software/bash/manual/html_node/Bash-Conditional-Expressions.html" target="_blank" rel="noopener">Conditional Expressions</a>。</p>
+<p class="lead">核心就一行 <code>if [ -f "$1" ]; then</code>。<code>$1</code> 外面的双引号一定要加。不然空参数和带空格的文件名，都会出错。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>if 与退出码、test 和 <code>[</code>，见<a href="../ch01.html#s14">第 1 讲第 14 节</a>。脚本参数是 <code>$1</code>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="ex08/check.sh" data-new="1-7"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex08-a"></div></div>
+<p class="like"><b>打个比方</b>双引号像给文件名套个信封。名字里有空格也好，是空的也好，信封都只算一件。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：<code>$1</code> 没加引号</div>
+<div data-file="ex08/check_bad.sh" data-title="ex08/check_bad.sh（错误示范）"></div>
+<div data-run="ex08-b"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div>不传参数时，错误版说文件 <code>''</code> <strong>存在</strong>。文件名带空格时，报 <code>[: my: binary operator expected</code>。正确版两种情况都对。</div></div>
+<div class="row"><b>原因</b><div>不加引号的 <code>$1</code> 会先按空白切词。空参数让 <code>[ -f ]</code> 只剩一个参数 <code>-f</code>。test 规定单个非空字符串就算真。带空格时，参数变成 <code>-f my file.txt</code> 三个，语法就错了。</div></div>
+<div class="row good"><b>正确写法</b><div>变量展开<strong>永远加双引号</strong>，写成 <code>"$1"</code>。shellcheck 会对这个报 SC2086。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>[ -f $1 ]     <span class="cm"># 错：$1 会被切词，空参数时误判为存在</span>
+[ -f "$1" ]   <span class="cm"># 对：引号保证它永远是一个参数</span>
+[[ -f $1 ]]   <span class="cm"># [[ ]] 是 bash 关键字，里面不切词，所以不出错</span>
+<span class="cm"># 讲义说 [[ ]] 更安全，就是这个原因。为了习惯和可移植，照样加引号（补充）</span></pre></div>
+
+<!-- ======================= 9 ======================= -->
+<h2 id="ex09" data-nav="9 · chmod +x">练习 9 · ./ 运行要 x 权限，bash 读文件只要 r <label class="ex-done"><input type="checkbox" data-ex="ex09">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span><span class="tag lnx">Linux 未实测</span></div>
+<p class="q-orig"><b>原题</b>：把上一题的脚本存成 <code>check.sh</code>，试试 <code>./check.sh somefile</code> 会怎样。再 <code>chmod +x check.sh</code> 后重试。为什么需要这一步？提示：对比 chmod 前后的 <code>ls -l check.sh</code>。</p>
+<p class="lead"><code>./check.sh</code> 是让内核<strong>执行</strong>这个文件，没有 x 就拒绝。<code>bash check.sh</code> 是让 bash <strong>读</strong>它，只要 r 就行。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p>在 Linux 上，新建的文件默认是 <code>-rw-r--r--</code>，没有 x。<code>./check.sh</code> 会被拒绝，报 <code>Permission denied</code>，退出码 126。<code>chmod +x</code> 给 u、g、o 都加上 x。之后内核读第一行的 <code>#!</code>，找到解释器去运行。</p>
+<p>视频 <span class="ts" data-v="MSgoeuMqUmU">1:11:05</span> 讲师现场演示了 Permission denied。<span class="ts" data-v="MSgoeuMqUmU">1:12:51</span> 演示了 chmod +x 之后 ls 的颜色变化。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex09-dk"></div><p>下面是本机 Git Bash 的实测结果。NTFS 不记录 x 位，所以 chmod 前后都是 rwx，也复现不了 Permission denied：</p><div data-run="ex09-gb"></div></div>
+<p class="like"><b>打个比方</b><code>./check.sh</code> 是让这张纸自己站起来干活，得有许可证。<code>bash check.sh</code> 是你拿着纸照着念，看得见字就行。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>bash check.sh       <span class="cm"># 运行的是 bash，它本身有 x。check.sh 只是被读进去的数据</span>
+./check.sh          <span class="cm"># 把 check.sh 本身当程序执行，所以它自己得有 x</span>
+chmod +x check.sh   <span class="cm"># 加上 x，Linux 下就不再 Permission denied</span></pre></div>
+
+<!-- ======================= 10 ======================= -->
+<h2 id="ex10" data-nav="10 · set -x 追踪">练习 10 · set -x 让你看到展开后的真实参数 <label class="ex-done"><input type="checkbox" data-ex="ex10">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：在脚本的 set 参数里加上 <code>-x</code> 会怎样？写个简单脚本观察输出。参考 <a href="https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html" target="_blank" rel="noopener">The Set Builtin</a>。</p>
+<p class="lead"><code>set -x</code> 会在每条命令执行前，把展开后的样子打到 stderr。变量被切成几个参数，一眼就能看出来。</p>
+<div class="blk write"><div class="bh"><i>{}</i>写</div><div data-file="ex10/trace.sh" data-new="1-6"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex10-a"></div>
+<p>带 <code>+</code> 的是追踪行，写到 stderr。不带的是程序真正的输出。追踪最有用的场景，是排查变量被切词这类问题：</p><div data-run="ex10-b"></div>
+<p>一眼就能看到 <code>ls a b</code>。<code>$f</code> 没加引号，被切成了两个参数。</p></div>
+<p class="like"><b>打个比方</b>set -x 像给脚本装了行车记录仪。每条命令出发前，都先拍一张它真实的样子。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>+ echo 'hello missing 1'   <span class="cm"># 追踪用引号标出参数边界：这是一个参数</span>
++ ls a b                   <span class="cm"># 这里是两个参数，说明 $f 被切词了</span>
+bash -x script.sh          <span class="cm"># 不改脚本也能开追踪</span></pre></div>
+
+<!-- ======================= 11 ======================= -->
+<h2 id="ex11" data-nav="11 · 带日期的备份">练习 11 · 备份名带日期：用 $(date +%Y-%m-%d) <label class="ex-done"><input type="checkbox" data-ex="ex11">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：写一条命令，把文件复制成带今天日期的备份。比如 <code>notes.txt</code> 变成 <code>notes_2026-01-12.txt</code>。提示：<code>$(date +%Y-%m-%d)</code>。参考 <a href="https://www.gnu.org/software/bash/manual/html_node/Command-Substitution.html" target="_blank" rel="noopener">Command Substitution</a>。</p>
+<p class="lead">一行答案是 <code>cp notes.txt "notes_$(date +%Y-%m-%d).txt"</code>。<code>$( )</code> 先跑 date，再把输出塞进文件名。</p>
+<div class="blk run"><div class="bh"><i>▶</i>跑：一行命令版</div><div data-run="ex11-a"></div></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：通用脚本版（补充）</div><div data-file="ex11/backup.sh" data-new="1-5"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex11-b"></div>
+<p>带空格的 <code>my report.md</code> 也正确备份了。忘了传参数时，<code>set -u</code> 让脚本立刻报错退出。它不会去执行 <code>cp "" "_2026-…"</code>。</p></div>
+<p class="like"><b>打个比方</b>命令替换像填空题。shell 先把括号里的题做完，再把答案抄进空格里。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>date +%Y-%m-%d   <span class="cm"># 2026-10-29：年月日的字典序就是时间顺序</span>
+date +%d-%m-%Y   <span class="cm"># 29-10-2026：按名字排序就乱了</span>
+ls notes_*       <span class="cm"># 用年月日命名，ls 默认就按日期排好（补充）</span></pre></div>
+
+<!-- ======================= 12 ======================= -->
+<h2 id="ex12" data-nav="12 · 让 flaky 脚本接收参数">练习 12 · 测试命令换成 "$@"，参数原样传下去 <label class="ex-done"><input type="checkbox" data-ex="ex12">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：修改讲义里的 flaky test 脚本。让它把测试命令当参数接收，不再写死 <code>cargo test my_test</code>。提示：<code>$1</code> 或 <code>$@</code>。参考 <a href="https://www.gnu.org/software/bash/manual/html_node/Special-Parameters.html" target="_blank" rel="noopener">Special Parameters</a>。</p>
+<p class="lead">把第 19 行的 <code>cargo test my_test</code> 换成 <code>"$@"</code>。调用时给的每个参数，都会原样变成一个词。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>讲义脚本的逐行解释见<a href="../ch01.html#s16">第 1 讲第 16 节</a>。还会用到后台 <code>&amp;</code>、<code>$!</code> 和重定向 <code>&gt; file 2&gt;&amp;1</code>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写（绿色是相对讲义新增或改动的行）</div><div data-file="ex12/flaky.sh" data-new="4-7,19"></div>
+<p>为了能真跑，再写一个第 4 次必定失败的假测试：</p><div data-file="ex12/fake_test.sh"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex12-a"></div><div data-run="ex12-b"></div></div>
+<p class="like"><b>打个比方</b><code>"$@"</code> 像原封不动地转交一摞信。每封信还是一封，不拆开，也不合并。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：把整条命令塞进一个引号</div>
+<div data-run="ex12-c"></div>
+<div class="pit-card"><div class="row bad"><b>现象</b><div><code>bash fake_test.sh: command not found</code>，第 1 轮就“失败”了。</div></div>
+<div class="row"><b>原因</b><div>引号让 <code>bash fake_test.sh</code> 成了<strong>一个</strong>参数。<code>"$@"</code> 原样展开成这一个词。shell 就去找一个名字带空格的程序。下面的演示画出了两种调用的差别。</div></div>
+<div class="row good"><b>正确写法</b><div>每个词分开传：<code>./flaky.sh bash fake_test.sh</code>。脚本里用 <code>"$@"</code>。别用 <code>$*</code>、<code>"$*"</code> 或 <code>$1</code>。<code>$1</code> 只拿得到命令名，丢了它的参数。</div></div></div></div>
+<div data-vz="lab01-args"></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>if [ $# -eq 0 ]; then ...   <span class="cm"># 一个参数都没给，就报用法退出</span>
+<span class="cm"># 去掉这个检查会怎样：没有参数时 "$@" 展开为空</span>
+<span class="cm"># while 的条件成了空命令，退出码是 0</span>
+<span class="cm"># 于是无限打印 Run N passed（补充推理，未实测）</span></pre></div>
+
+<!-- ======================= 13 ======================= -->
+<h2 id="ex13" data-nav="13 · 最常见的扩展名">练习 13 · 提取、排序、计数、再排序、取前 N <label class="ex-done"><input type="checkbox" data-ex="ex13">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：用管道找出家目录里最常见的 5 种扩展名。提示：组合 find、grep/sed/awk、sort、<code>uniq -c</code> 和 head。</p>
+<p class="lead">先把扩展名抠出来，再 <code>sort | uniq -c</code> 计数，最后 <code>sort -rn | head -5</code>。和讲义的 SSH 日志流水线是同一个套路。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<figure class="fig"><script>
+DG('flow', { nodeH: 50, cols: [
+  [ { id: 'a', l: 'find', s: '列出所有带点的文件', tone: 'teal' } ], [ { id: 'b', l: 'sed', s: '只留最后一个点之后', tone: 'info' } ],
+  [ { id: 'c', l: 'sort | uniq -c', s: '计数', tone: 'info' } ], [ { id: 'd', l: 'sort -rn', s: '次数从大到小', tone: 'info' } ], [ { id: 'e', l: 'head -5', s: '前 5 名', tone: 'ok' } ]
+], edges: [ ['a', 'b', '|', 'data'], ['b', 'c', '|', 'data'], ['c', 'd', '|', 'data'], ['d', 'e', '|', 'data'] ] });
+</script><figcaption>和讲义的 SSH 日志流水线是同一个套路</figcaption></figure></div>
+<div class="callout extra"><div class="ct">实测改动</div><p>题目的答案是 <code>find ~ …</code>。笔记不想读你家目录里的私人文件，也想让结果能复现。所以实测时，把 <code>~</code> 换成了<a href="https://github.com/missing-semester/missing-semester" target="_blank" rel="noopener">课程讲义仓库</a>的一份本地克隆。.git 目录也排除了。这份克隆在生成笔记后已经删掉。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex13-a"></div><p>用 awk 按 <code>.</code> 分列，取最后一列，结果相同：</p><div data-run="ex13-b"></div></div>
+<p class="like"><b>打个比方</b>像统计班里同学的姓。先把姓抄下来，按顺序排好。同姓的数一数，再按人数排个名次。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：awk 版把 ./ 里的点也算进去了</div>
+<div data-run="ex13-c"></div>
+<div class="pit-card"><div class="row"><b>原因</b><div>路径都以 <code>./</code> 开头。没有扩展名的文件，比如 Dockerfile，按 <code>.</code> 切开后 NF 是 2。最后一列成了 <code>/Dockerfile</code>。它们都只出现 1 次，没进前 5 名，但统计里混进了垃圾。sed 版先用 <code>-name '*.*'</code> 只挑名字里有点的文件，就没有这个问题。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>sort | uniq -c   <span class="cm"># 对：先排序，相同的扩展名才挨在一起</span>
+uniq -c | sort   <span class="cm"># 错：uniq 只合并相邻行，没排序就数不准</span>
+sort -rn         <span class="cm"># -r 倒序，-n 按数值，次数多的排前面</span></pre></div>
+
+<!-- ======================= 14 ======================= -->
+<h2 id="ex14" data-nav="14 · find + xargs">练习 14 · 文件名过管道，用 -print0 配 xargs -0 <label class="ex-done"><input type="checkbox" data-ex="ex14">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：<code>xargs</code> 把 stdin 里的行变成命令参数。用 find 和 xargs 找出目录里所有 .sh 文件。再用 <code>wc -l</code> 统计每个的行数，不许用 <code>find -exec</code>。加分项：处理带空格的文件名，提示 <code>-print0</code> 和 <code>-0</code>。</p>
+<p class="lead">xargs 默认按空白切参数，文件名里的空格会把它切坏。<code>find -print0 | xargs -0</code> 改用空字节分隔，文件名原样保留。</p>
+<div class="blk run"><div class="bh"><i>▶</i>跑：朴素写法</div><div data-run="ex14-a"></div>
+<p>xargs 退出码 123，表示它调用的命令有失败。<code>my script.sh</code> 被拆成了两个参数。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：加分版，也就是正确答案</div><div data-run="ex14-b"></div></div>
+<p class="like"><b>打个比方</b>换行分隔像用逗号隔开名单，名字里一有逗号就乱了。空字节像用一种名字里绝不会出现的符号来隔。</p>
+<p>下面的演示把字节流里的分隔符画出来。<code>\n</code> 换成 <code>\0</code> 之后，xargs 再也不会从文件名中间下刀。</p>
+<div data-vz="lab01-xargs"></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>find . -name '*.sh' -exec wc -l {} \;          <span class="cm"># 每个文件启动一次 wc</span>
+find . -name '*.sh' -print0 | xargs -0 wc -l   <span class="cm"># 攒成一批交给一次 wc，所以有 total 行</span>
+find . -name '*.sh' -exec wc -l {} +           <span class="cm"># 用 + 结尾，-exec 也能批量（补充）</span></pre></div>
+
+<!-- ======================= 15 ======================= -->
+<h2 id="ex15" data-nav="15 · curl + grep 数讲次">练习 15 · 从网页抠数据，先找每项只出现一次的模式 <label class="ex-done"><input type="checkbox" data-ex="ex15">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测（联网）</span></div>
+<p class="q-orig"><b>原题</b>：用 curl 取课程网站 <code>https://missing.csail.mit.edu/</code> 的 HTML，管道给 grep，数出列了几讲。提示：找每讲只出现一次的模式。用 <code>curl -s</code> 关掉进度输出。</p>
+<p class="lead">每一讲都是一个 <code>href="/2026/讲名/"</code> 链接。用 <code>grep -o</code> 抠出来，<code>sort -u</code> 去重，<code>wc -l</code> 一数，就是 9。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p>首页上每一讲都是一个链接，形如 <code>&lt;a href="/2026/course-shell/"&gt;</code>。<code>grep -o</code> 只输出匹配到的部分，一个匹配占一行。<code>sort -u</code> 去重，<code>wc -l</code> 计数。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex15-a"></div></div>
+<p class="like"><b>打个比方</b>像在通讯录里数人数。要挑每人只出现一次的东西数，比如手机号。数名字容易把同名的人算重。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：模式太宽</div><div data-run="ex15-b"></div>
+<div class="pit-card"><div class="row"><b>原因</b><div>结果是 10 不是 9。顶部导航栏的 lectures 链接 <code>href="/2026/"</code> 也含 <code>/2026/</code>。另外 <code>grep -c</code> 数的是<strong>行数</strong>，不是匹配次数。同一行有两个匹配，只算 1。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>grep -o 'href="/2026/[a-z-]*/"' | sort -u | wc -l   <span class="cm"># 9：只认讲次链接</span>
+grep -c '/2026/'                                    <span class="cm"># 10：导航栏也被算进去了</span>
+<span class="cm"># 网页一改版，模式就可能失效。正经做法是用 HTML 解析器（补充）</span></pre></div>
+
+<!-- ======================= 16 ======================= -->
+<h2 id="ex16" data-nav="16 · jq 处理 JSON">练习 16 · jq 三件套：.[] 展开、select 过滤、.字段 取值 <label class="ex-done"><input type="checkbox" data-ex="ex16">完成</label></h2>
+<div class="ex-meta"><span class="tag lnx">jq 未实测</span><span class="tag gb">Python 交叉验证</span></div>
+<p class="q-orig"><b>原题</b>：<a href="https://jqlang.github.io/jq/" target="_blank" rel="noopener">jq</a> 是处理 JSON 的利器。用 curl 下载 <code>https://microsoftedge.github.io/Demos/json-dummy-data/64KB.json</code>，再用 jq 取出 version 大于 6 的人的名字。提示：先 <code>jq .</code> 看结构，再试 <code>jq '.[] | select(...) | .name'</code>。</p>
+<p class="lead">答案是 <code>jq -r '.[] | select(.version &gt; 6) | .name'</code>。数据里 version 是小数，6.1 也算大于 6。</p>
+<div class="blk why"><div class="bh"><i>?</i>原理</div><p>数据是一个对象数组。每个对象长这样：<code>{"name": "Adeel Solangi", "language": "Sindhi", "id": "…", "bio": "…", "version": 6.1}</code>。这是本机 curl 实测看到的第一条。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div>
+<div data-run="ex16-a"></div><div data-run="ex16-b"></div><div data-run="ex16-c"></div>
+<p>交叉验证：同样的数据和条件，用 Python 真跑。一共 197 人，其中 89 人 version 大于 6，前 8 个名字如下。jq 版的输出应当一致。<code>-r</code> 让 jq 输出不带引号的原始字符串。</p>
+<div data-run="ex16-py"></div></div>
+<p class="like"><b>打个比方</b>jq 像一条筛子流水线。<code>.[]</code> 把一箱人倒出来。<code>select</code> 只放过符合条件的，<code>.name</code> 只留下名牌。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>jq '.[] | select(.version &gt; 6) | .name'      <span class="cm"># 每个名字带双引号，是 JSON 字符串</span>
+jq -r '.[] | select(.version &gt; 6) | .name'   <span class="cm"># -r 输出原始文本，方便再接给别的命令</span></pre></div>
+
+<!-- ======================= 17 ======================= -->
+<h2 id="ex17" data-nav="17 · awk 过滤与换列">练习 17 · awk 里跟数字比，别跟字符串比 <label class="ex-done"><input type="checkbox" data-ex="ex17">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：<code>awk '$3 ~ /pattern/ {$4=""; print}'</code> 只打印第 3 列匹配 pattern 的行，并去掉第 4 列。写一条 awk 命令，只打印第 2 列大于 100 的行。再把第 1、3 列交换。用 <code>printf 'a 50 x\nb 150 y\nc 200 z\n'</code> 测试。</p>
+<p class="lead">答案是 <code>awk '$2 &gt; 100 {print $3, $2, $1}'</code>。<code>100</code> 不能加引号，加了就成了按字典序比。</p>
+<div class="blk run"><div class="bh"><i>▶</i>跑：写法一，直接按新顺序打印</div><div data-run="ex17-a"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：写法二，真的交换字段再 print</div><div data-run="ex17-b"></div>
+<p>给 <code>$1</code> 和 <code>$3</code> 赋值后，awk 会重组整行。分隔符用输出分隔符，默认是空格。所以不带参数的 <code>print</code>，打印的就是交换后的行。</p></div>
+<p class="like"><b>打个比方</b>字典序比数字，像查字典只看第一个字母。9 开头的 99 排在 1 开头的 100 后面，于是它“更大”。</p>
+<p>下面的演示逐行播放 awk 的执行过程。还会<strong>手推</strong>字符串比较，看 99 为什么“大于” 100：</p>
+<div data-vz="lab01-awk"></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：和字符串常量比较</div><div data-run="ex17-c"></div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>awk '$2 &gt; "100"'</code></div></div>
+<div class="row"><b>现象</b><div>50 和 99 也被当成“大于 100”。</div></div>
+<div class="row"><b>原因</b><div>只要一边是字符串常量，awk 就按字典序比较。<code>"99"</code> 和 <code>"100"</code> 先比第 1 个字符。<code>'9' &gt; '1'</code>，直接判定 99 更大。</div></div>
+<div class="row good"><b>正确写法</b><div>和数字常量比：<code>$2 &gt; 100</code>。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>awk '$2 &gt; 100'     <span class="cm"># 对：跟数字比，按数值大小</span>
+awk '$2 &gt; "100"'   <span class="cm"># 错：跟字符串比，按字典序，99 会赢</span></pre></div>
+
+<!-- ======================= 18 ======================= -->
+<h2 id="ex18" data-nav="18 · 拆解流水线 + 常用命令">练习 18 · 仿照 SSH 流水线，统计自己最常用的命令 <label class="ex-done"><input type="checkbox" data-ex="ex18">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：拆解讲义里的 SSH 日志流水线，每一步在做什么？然后仿照它，从 <code>~/.bash_history</code> 或 <code>~/.zsh_history</code> 里找出你最常用的 shell 命令。</p>
+<p class="lead">取每行第一个词，再接 <code>sort | uniq -c | sort -rn | head</code>。套路和练习 13 一模一样。</p>
+<div class="blk know"><div class="bh"><i>K</i>拆解答案</div><p>逐段拆解写在<a href="../ch01.html#s12">第 1 讲第 12 节</a>的表格里。那一节的演示会逐段播放。每一级都是在示意日志上的<strong>真跑输出</strong>。</p></div>
+<div class="callout extra"><div class="ct">实测改动</div><p>实测没读你真实的历史记录。用的是一份 20 行的示意历史文件 <code>ex18/history.txt</code>。在自己电脑上，把文件名换成 <code>~/.bash_history</code> 就行。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="ex18-a"></div><p>统计“命令加第一个参数”，比如 <code>git status</code> 和 <code>git push</code> 分开算：</p><div data-run="ex18-b"></div></div>
+<p class="like"><b>打个比方</b>就像翻自己的外卖记录，看哪家店点得最多。</p>
+<div class="callout extra"><div class="ct">补充（非视频内容）：zsh 的历史格式</div><p>开了 EXTENDED_HISTORY 的 zsh，历史行长这样：<code>: 1700000000:0;git status</code>。要先用 <code>sed 's/^: [0-9]*:[0-9]*;//'</code> 去掉时间戳前缀，再统计。这条没在本机实测。</p></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>awk '{print $1}' history.txt | sort | uniq -c | sort -rn | head -5   <span class="cm"># 只看命令名</span>
+awk '{print $1, $2}' history.txt | sort | uniq -c | sort -rn | head -3   <span class="cm"># 命令加第一个参数</span>
+<span class="cm"># 坑：zsh 历史行开头带时间戳，不先用 sed 去掉，第一列就全是冒号</span></pre></div>
+
+<!-- ======================= 自查 ======================= -->
+<h2 id="selfcheck" data-nav="自查">自查：自己重跑一遍</h2>
+<p class="lead">本页的代码和输出，都是生成笔记时在本机真跑收集的。想验证，就把题解复制到空目录，在 Git Bash 里重跑。</p>
+<p>生成脚本和题解源文件都已删除，<strong>代码以本页为准</strong>。代码块的“复制”按钮，拿到的是原文件的原始字节。生成时间见页头。</p>
+<div class="code"><div class="cap">考点速查（注释里写着答案）</div><pre>ls file?.txt                        <span class="cm"># 匹配不到 file10.txt：? 只匹配一个字符（练习 3）</span>
+[ -f $1 ]                           <span class="cm"># 去掉引号：空参数误判存在，带空格报错（练习 8）</span>
+cmd &gt; file 2&gt;&amp;1                     <span class="cm"># 2&gt;&amp;1 复制的是 1 号此刻的去向，所以写在后面（练习 5）</span>
+bash flaky.sh "bash fake_test.sh"   <span class="cm"># 第 1 轮就失败：整串成了一个命令名（练习 12）</span>
+/usr/bin/cd                         <span class="cm"># 做不成：子进程改完目录就退出，父 shell 不受影响（练习 7）</span></pre></div>
+
+</article></main>
+<script src="../assets/vz.js"></script>
+<script src="../assets/viz/lab01-run.js"></script>
+<script src="../assets/lab.js"></script>
+</body>
+</html>

@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05 · 版本控制与 Git · Missing Semester 2026 中文笔记</title>
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/vz.css">
+<script>window.PAGE = { key: 'ch05', type: 'ch', vzCount: 8 };</script>
+<script src="assets/course.js"></script>
+<script src="assets/dg.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<div class="callout key"><div class="ct">本讲结论</div>
+<p>Git 仓库里只有两样东西。一是<strong>对象</strong>：blob、tree 和 commit。它们按内容的 SHA-1 命名，写进去就不再改。二是<strong>引用</strong>：分支和 HEAD 这些能移动的名字。每条 git 命令，都只是在添加对象、移动引用。想清楚它对提交图做了什么，命令就不再是咒语。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s1" data-nav="版本控制是什么" data-t="0:00">Git 存的是快照，还能自动帮你找 bug <span class="ts">0:00</span></h2>
+<p class="lead">版本控制系统把目录在每个时刻的样子存成快照。每个快照都是整个目录，外加谁做的、为什么做。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>git log --oneline -3         <span class="cm"># 最近 3 个快照，一行一个</span>
+git blame main.py            <span class="cm"># 每一行最后是谁、哪次提交改的</span>
+git bisect start HEAD v1.0   <span class="cm"># 先说好坏：HEAD 是坏的，v1.0 是好的</span>
+git bisect run ./test.sh     <span class="cm"># 自动二分：脚本失败就算坏，几步就揪出元凶</span></pre></div>
+<p class="like"><b>打个比方</b>版本控制像游戏存档。每次存档存的是整个世界，不是比上次多走几步。想回到哪一档，直接读档。</p>
+<div class="grid2">
+  <div class="mini"><h4>一个人用</h4><p>能看旧版本，能记下为什么这么改。还能在并行的分支上开发。比如功能 1 写到一半，先切去修 bug。两边的改动互不干扰（<span class="ts">1:07</span>）。</p></div>
+  <div class="mini"><h4>多人协作</h4><p>能看别人改了什么，能解决并行开发的冲突。没有版本控制，就只能来回发 zip 包。很快就乱成一团（<span class="ts">1:40</span>）。</p></div>
+</div>
+<p>讲义还列了几个问题，现代 VCS 都能轻松回答。这个模块是谁写的？这一行是谁、什么时候、为什么改的？过去 1000 个版本里，某个单元测试是从哪次开始挂的？</p>
+<p>最后一个问题，Git 能<strong>自动二分查找</strong>来回答（<span class="ts">2:52</span>）。你写一个测试，有 bug 就失败。Git 会帮你定位引入 bug 的那次提交。演示见<a href="#s19">第 19 节</a>。Git 是当今事实上的标准。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>很多人把 Git 当成网盘，只会 add、commit、push 三板斧。出了问题不知道 Git 存了什么，就只能删库重来。其实每个快照都完整存着。提交过的东西，多半找得回来。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s2" data-nav="Git 的名声" data-t="3:24">命令只能死记，数据模型可以理解 <span class="ts">3:24</span></h2>
+<p class="lead">Git 的命令行界面很乱，硬背只能当咒语。但底层数据模型很简单。理解了它，命令自然就通了。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre><span class="cm"># 自顶向下：背咒语，出错了只能删库重来</span>
+git pull; git add .; git commit -m "fix"; git push
+<span class="cm"># 自底向上：每条命令都问一句，它对提交图做了什么</span>
+git commit     <span class="cm"># 新增一个 commit 对象，再把当前分支挪过去</span>
+git branch x   <span class="cm"># 不新增任何对象，只是多了一个名字</span></pre></div>
+<p class="like"><b>打个比方</b>背命令像背地铁换乘口诀，线路一改就懵。看懂线路图，怎么换乘自己就能推出来。</p>
+<p>讲义引了 <a href="https://xkcd.com/1597/" target="_blank" rel="noopener">xkcd 1597</a>。漫画里说，Git 用优美的分布式图论树模型跟踪协作。怎么用？没人知道，背下几条命令就行。出了错，就把工作存到别处，删掉项目，重新下一份。讲师问现场谁这么干过，不少人举手，包括他自己。</p>
+<p>原因是 Git 的命令行是一个<strong>有漏洞的抽象</strong>（leaky abstraction）。从命令学起，就只能把命令当咒语背。可 Git 底层的设计很漂亮。<strong>丑陋的界面只能死记，漂亮的设计可以理解。</strong>所以这一讲先讲数据模型，再讲命令。每条命令都对应回数据模型（<span class="ts">4:28</span>）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>平时用 Git 出错，多半是不知道命令改了哪里。比如以为 <code>git branch -d</code> 删了提交，其实只删了名字。先想数据模型，这类误会就少了。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s3" data-nav="blob 与 tree" data-t="5:46">文件是 blob，目录是 tree，快照是顶层 tree <span class="ts">5:46</span></h2>
+<p class="lead">Git 只用两种东西描述目录。文件叫 blob，就是一串字节。目录叫 tree，把名字映射到 blob 或别的 tree。</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习页 ex01-b 与 ex01-a，节选）</div><pre><span class="p">$ </span><span class="cmd">git cat-file -p HEAD:foo</span>    <span class="cm"># 子目录 foo 也是一个 tree，里面记着 bar.txt</span>
+<span class="o">100644 blob 3b18e512dba79e4c8300dd08aeb37f8e728b8dad	bar.txt</span>
+<span class="p">$ </span><span class="cmd">git cat-file -t 4448adbf</span>    <span class="cm"># baz.txt 的内容是一个 blob</span>
+<span class="o">blob</span></pre></div>
+<p class="like"><b>打个比方</b>tree 像一本书的目录页，只写“哪个标题在哪一页”。blob 是那一页的正文。目录页本身不装正文，只记页码。</p>
+<p>快照就是被跟踪的那个顶层 tree。目录可以一层套一层，所以 tree 也能嵌套。</p>
+<figure class="fig"><script>
+DG('tree', { noteX: 330, root: { l: '<root>', s: 'tree：顶层目录 = 快照', tone: 'warn', c: [
+  { l: 'foo', s: 'tree', tone: 'warn', c: [ { l: 'bar.txt', s: 'blob："hello world"', tone: 'teal' } ] },
+  { l: 'baz.txt', s: 'blob："git is wonderful"', tone: 'teal' }
+] } });
+</script><figcaption>讲义里的例子。视频 6:57 讲师在黑板上画的是同一棵树</figcaption></figure>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑（补充，非视频内容）</div>
+<p>blob 里只有内容，<strong>没有文件名</strong>。名字记在上一层的 tree 里。所以 Git 并不记录“改名”这个动作。改名之后，对新名字 <code>git log</code>，历史会停在改名那次。加上 <code>--follow</code>，Git 才会按内容相似度往前追。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s4" data-nav="提交历史 DAG" data-t="8:05">历史是一张图：每个提交记着自己的 parent <span class="ts">8:05</span></h2>
+<p class="lead">Git 的历史不是一条线，而是一张有向无环图。每个提交记着一组 parent。合并出来的提交有两个 parent。</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习页 ex01-e，节选）</div><pre><span class="p">$ </span><span class="cmd">git cat-file -p HEAD | head -4</span>   <span class="cm"># HEAD 是一次合并提交，所以有两行 parent</span>
+<span class="o">tree b6fe6fe890c2f61255f8c330c28aa2dfd93c302e
+parent 352b132d8e0501612e1848b6836d29f15d3b341f
+parent c560925a653e009456e6427c402986e7ef0b1998
+author Ada Example &lt;ada@example.com&gt; 1768557600 +0000</span></pre></div>
+<p class="like"><b>打个比方</b>提交图像家谱。每个人只记自己的父母是谁。合并提交就是有两个父母的孩子。往上一直追，就是整条血统。</p>
+<p>快照之间怎么连？最简单的是一条线：版本 1、2、3 排成一列。Git 不这么做。每个快照记着它的一组 <strong>parent</strong>，也就是之前的快照。说“一组”，是因为合并时会有两条线汇到一起。Git 把这种快照叫做 <strong>commit</strong>（提交）。</p>
+<div class="code"><div class="cap">讲义原文（箭头指向 parent，意思是“在它之前”）</div><pre>o &lt;-- o &lt;-- o &lt;-- o &lt;---- <strong>o</strong>
+            ^            /
+             \          v
+              --- o &lt;-- o</pre></div>
+<p>第三个提交之后，历史分成了两支。比如两个功能在并行开发。最后两支被<strong>合并</strong>成一个新提交，就是加粗的那个。它同时包含两边的改动，有两个 parent（<span class="ts">9:49</span>）。上面实测里那两行 parent，说的就是这件事。</p>
+<div class="callout tip"><div class="ct">提交是不可变的（视频 10:27）</div>
+<p>现实中没法回到过去改历史，Git 也一样。历史只能<strong>追加</strong>，不能修改。错误照样能纠正。所谓“修改历史”，其实是新建一批提交。再把引用（见<a href="#s7">第 7 节</a>）指到新的那批上。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p><code>git log</code> 默认把这张图拉平成一列显示。分叉和合并都看不出来，容易以为历史是一条线。想看图的形状，加上 <code>--graph</code>。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s5" data-nav="数据模型伪代码" data-t="12:13">commit 就是 parent、作者、说明加一个 tree <span class="ts">12:13</span></h2>
+<p class="lead">整个数据模型几行类型定义就能写完。blob 是字节数组，tree 是名字到对象的映射。commit 是一个结构体。</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习页 ex01-c）</div><pre><span class="p">$ </span><span class="cmd">git cat-file -p HEAD</span>   <span class="cm"># 一个真实的 commit 对象，对照下面的伪代码看</span>
+<span class="o">tree 12330f8cfe317d61bbf9690538896975910e22f2
+parent a9254971ec6ef8d6423964549097af7233cda0ac
+author Ada Example &lt;ada@example.com&gt; 1768557600 +0000
+committer Ada Example &lt;ada@example.com&gt; 1768557600 +0000
+
+exclaim</span></pre></div>
+<p class="like"><b>打个比方</b>commit 像一张快递单。单上写着寄件人、备注和上一单的单号。箱子里装着整个目录，也就是 tree。</p>
+<div class="code"><div class="cap">讲义原文（注释译成中文）</div><pre><span class="cm">// 文件就是一堆字节</span>
+type blob = array&lt;byte&gt;
+
+<span class="cm">// 目录：名字 → 文件或目录</span>
+type tree = map&lt;string, tree | blob&gt;
+
+<span class="cm">// 提交：父提交、元数据、顶层 tree</span>
+type commit = struct {
+    parents: array&lt;commit&gt;
+    author: string
+    message: string
+    snapshot: tree
+}</pre></div>
+<p>对照实测看。第一行 tree 就是伪代码里的 snapshot。parent 对应 parents，最后一行是 message。真实的 commit 比伪代码多一行 committer。第一个提交没有 parent 行，见练习页 ex01-b。</p>
+<p>讲师强调了几个词（<span class="ts">13:29</span>）。blob 和 tree 是这个递归结构里的元素。“快照”不完全是 Git 的标准术语。它指被跟踪目录对应的顶层 tree。commit 是历史图里的节点。它也是递归的，因为它会引用别的 commit。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>伪代码里 parents 是 commit 本身，好像提交里装着父提交。真实存储里只放父提交的哈希，见下一节。所以父提交一变，子提交的哈希就得跟着重算。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s6" data-nav="对象与内容寻址" data-t="15:28">对象按内容的 SHA-1 命名，引用别人只记哈希 <span class="ts">15:28</span></h2>
+<p class="lead">blob、tree、commit 统称对象。Git 用对象内容的 SHA-1 当键，存进对象库。这叫内容寻址：内容一样，ID 就一样。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Git 2.55，哈希和讲义原文相同）</div><pre><span class="p">$ </span><span class="cmd">git cat-file -p HEAD^{tree}</span>   <span class="cm"># tree 里不装子对象，只记它们的哈希</span>
+<span class="o">100644 blob 4448adbf7ecd394f42ae135bbeed9676e894af85	baz.txt
+040000 tree c68d233a33c5c06e0340e4c224f0afca87c8ce87	foo</span>
+<span class="p">$ </span><span class="cmd">git cat-file -p 4448adbf</span>      <span class="cm"># 拿哈希前缀就能取回内容</span>
+<span class="o">git is wonderful</span>
+<span class="p">$ </span><span class="cmd">printf 'blob 17\0git is wonderful\n' | sha1sum</span>   <span class="cm"># 手算一遍，结果一样</span>
+<span class="o">4448adbf7ecd394f42ae135bbeed9676e894af85 *-</span></pre></div>
+<p class="like"><b>打个比方</b>内容寻址像按指纹建档。同一个人永远是同一个指纹。档案柜按指纹编号，不按名字。别的档案提到他，只写指纹号。</p>
+<p>讲义用几行伪代码写出了对象库：</p>
+<div class="code"><div class="cap">讲义原文</div><pre>type object = blob | tree | commit
+objects = map&lt;string, object&gt;
+
+def store(object):
+    id = sha1(object)
+    objects[id] = object
+
+def load(id):
+    return objects[id]</pre></div>
+<p>关键细节是，对象引用别的对象时，<strong>并不装着</strong>它们。它只记下它们的哈希。可以把哈希当成指针（<span class="ts">17:26</span>）。讲义那个目录的顶层 tree，打开就是上面那样。本机按同样内容造了一个仓库，哈希和讲义一字不差。</p>
+<p>最后一条命令说明了哈希到底算的是什么。先是类型和长度，再是一个 <code>\0</code>，最后才是内容。</p>
+<div class="callout extra"><div class="ct">学生提问：SHA-1 是什么？（视频 21:52）</div>
+<p>哈希函数把任意长的字节，<strong>确定地</strong>变成固定长度的输出。SHA-1 输出 160 位，写成 40 个十六进制字符。结果看着像随机数。两个不同的输入，几乎不可能撞出同一个结果。</p>
+<p>讲师用“随机预言机”打比方。想象全世界共用一本登记簿。有人第一次查某个输入，就给它分配一个随机值。以后谁再查，都得到同一个值。</p>
+<p>另一个提问是，哈希为什么写成字符串。其实在磁盘上它是字节数组。写成十六进制，只是为了讲解方便（<span class="ts">23:35</span>）。</p></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）：SHA-1 已经不安全了吗</div>
+<p>2017 年已经有人造出了 SHA-1 碰撞。Git 从 2.13 起，换用能检测已知碰撞攻击的 SHA-1 实现。从 2.29 起，又实验性地支持 SHA-256 仓库，命令是 <code>git init --object-format=sha256</code>。内容寻址的思想不变。详见 <a href="https://git-scm.com/docs/hash-function-transition" target="_blank" rel="noopener">Git 文档 hash-function-transition</a>。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>两个人在不同电脑上提交同一份文件。blob 哈希一样，commit 哈希却不一样。因为 commit 里还有作者、时间和 parent。任何一项不同，哈希就变。练习页把身份和时间都固定了，哈希才能复现。</p></div>
+<p>下面的演示分两幕。第 1 幕从字节开始，算出一个 blob 的 ID。第 2 幕看 tree 和 commit 怎么用哈希互相指。再看改一个字节时，哪些对象会变，哪些被共享。</p>
+<div data-vz="ch05-objects"></div>
+
+<!-- ============================================================ -->
+<h2 id="s7" data-nav="引用" data-t="24:08">引用是给哈希起的名字，而且可以改 <span class="ts">24:08</span></h2>
+<p class="lead">40 位的哈希记不住，所以 Git 给它起名字，叫引用。对象写进去就不变。引用却随时能改成指向别的提交。</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习页 ex01-b，节选）</div><pre><span class="p">$ </span><span class="cmd">cat .git/HEAD .git/refs/heads/master</span>   <span class="cm"># 引用就是小文本文件</span>
+<span class="o">ref: refs/heads/master
+a9254971ec6ef8d6423964549097af7233cda0ac</span>
+<span class="cm"># HEAD 里写着“我跟着 master”，master 里写着一个提交哈希</span></pre></div>
+<p class="like"><b>打个比方</b>对象像图书馆里的书，上架后再也不改。引用像书架上的“新书推荐”标签。标签随时能挪到另一本书上。</p>
+<p>比如 <code>master</code> 通常指向主开发线上最新的提交。讲义把引用也写成了伪代码：</p>
+<div class="code"><div class="cap">讲义原文</div><pre>references = map&lt;string, string&gt;
+
+def update_reference(name, id):
+    references[name] = id
+
+def read_reference(name):
+    return references[name]
+
+def load_reference(name_or_id):
+    if name_or_id in references:
+        return load(references[name_or_id])
+    else:
+        return load(name_or_id)</pre></div>
+<p>历史为什么必须不可变？讲师是这么解释的（<span class="ts">24:08</span>）。后面的提交靠<strong>内容的哈希</strong>指向前面的提交。改了中间某个提交，它的哈希就变了。后面所有指向它的东西都对不上。所以对象库只能追加，可变的部分全放在引用里。开发新功能时，你新建提交指向旧提交。再把 master 挪到新提交上。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>rebase 或 amend 之后，提交哈希全变了。如果已经 push 过，同事手里还是旧哈希。两边的历史就分叉了。所以已经分享出去的历史，别改写。</p></div>
+<h3 id="s7b">提交了密钥先作废它，撤销提交用 revert <span class="ts">26:30</span></h3>
+<p class="lead">“改写历史”并不是真的改。Git 是照着你要的改动，重建那个提交。它之后的提交也全部重建。</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充，身份和时间按练习页固定）</div><pre><span class="p">$ </span><span class="cmd">git revert --no-edit HEAD</span>   <span class="cm"># 不碰旧提交，追加一个反向改动</span>
+<span class="o">[anish 5fe8159] Revert "add hotel"
+ Date: Fri Jan 16 10:00:00 2026 +0000
+ 1 file changed, 1 deletion(-)</span>
+<span class="p">$ </span><span class="cmd">git log --oneline</span>           <span class="cm"># 旧提交还在，只是多了一个</span>
+<span class="o">5fe8159 Revert "add hotel"
+856e17c add hotel
+13341bc initial commit</span></pre></div>
+<p class="like"><b>打个比方</b>revert 像在账本末尾记一笔冲账。前面记错的那笔不涂改，只是后面再记一笔抵消它。</p>
+<ul class="keys">
+<li><strong>已经分享出去了</strong>：先去对应服务作废这个 key。再生成一个新的。作废之后，它留在历史里也没关系（<span class="ts">27:05</span>）。</li>
+<li><strong>还没分享</strong>：可以用 <code>git rebase</code> 这类命令改写历史（<span class="ts">27:39</span>）。它不是真的修改，而是重建那个提交和之后所有提交。练习 3 练的就是这个。</li>
+<li><strong>只想撤销某次提交的效果</strong>：用 <code>git revert</code>。它算出那次的改动，在最新处追加一个反向的新提交。历史一点不改（<span class="ts">28:15</span>）。</li>
+<li><strong>合并时 Git 怎么知道怎么合</strong>：靠一套启发式规则。两边改的是不同文件，就自动合并。同一文件里离得远的两处，也能自动合并。改的是同一处，比如同一个函数，Git 就放弃。它报<strong>合并冲突</strong>（merge conflict），在文件里留下冲突标记。由你来判断怎么改（<span class="ts">29:23</span>、<span class="ts">31:05</span>）。<code>git mergetool</code> 能帮忙，详见<a href="#s12">第 12 节</a>。</li>
+</ul>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>密钥推上去以后，很多人第一反应是改写历史。可别人的克隆和 fork 里可能早有了。所以第一步永远是作废密钥，改写历史只是第二步。撤销已分享的提交，用 revert 最安全。</p></div>
+<p>下面的演示看“改写历史”在提交图上是什么样。rebase 把一串提交的改动，重放到新的基础上。得到的是全新的提交，然后再挪动分支名。</p>
+<div data-vz="ch05-rebase"></div>
+
+<!-- ============================================================ -->
+<h2 id="s8" data-nav="HEAD 与仓库" data-t="31:42">HEAD 记着你在哪，仓库就是对象加引用 <span class="ts">31:42</span></h2>
+<p class="lead">新建提交时，Git 得知道 parent 是谁。所以它用一个特殊引用 HEAD，记着“你现在在哪”。</p>
+<div class="code"><div class="cap">讲义例子（注释是笔记加的）</div><pre>git checkout master; git reset --hard 5d83f9e
+<span class="cm"># 前一半：HEAD 附着到 master 上</span>
+<span class="cm"># 后一半：master 挪到 5d83f9e，工作区也跟着变过去</span>
+<span class="cm"># 合起来：丢掉未提交的修改，让 master 指向 5d83f9e</span></pre></div>
+<p class="like"><b>打个比方</b>仓库像一本只能往后续写的书。对象是写好的页，引用是贴在页边的便利贴。HEAD 是你手里的书签，标着你正在读哪一页。</p>
+<p>HEAD 可以粗略理解成“你现在正在看的那个东西”。于是可以给 Git 仓库下定义了：仓库就是<strong>对象</strong>加<strong>引用</strong>。磁盘上 Git 存的就这两样。</p>
+<p>所有 git 命令，都是在提交图上做两件事。一是添加对象，二是添加或移动引用（讲义）。反过来，你想对提交图做某种改动。多半有一条命令能做到。比如“丢掉未提交的修改，让 master 指向 5d83f9e”。这就是上面那两条命令。</p>
+<div class="callout tip"><div class="ct">学生提问：GitHub 是什么？（视频 32:59）</div>
+<p>Git 是免费开源的分布式版本控制工具。GitHub 是托管 Git 仓库的商业服务，现在属于微软。开源项目常把仓库放在那里协作。</p>
+<p>比如教授把实验放在 Git 仓库里，你克隆下来做。教授更新了实验，你用 Git 就能干净地合进来。哪怕你已经改过自己的副本。不用再下 zip、手工搬改动。GitHub 也不是唯一的托管服务，讲义还提到了 GitLab 和 Bitbucket。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>很多人以为 HEAD 就是“最新的提交”。其实它只是“你现在在哪”。切到旧提交时，HEAD 就指着旧提交，见<a href="#s15">第 15 节</a>。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s9" data-nav="暂存区" data-t="34:46">git add 拷的是此刻的内容，之后再改不算 <span class="ts">34:46</span></h2>
+<p class="lead">暂存区决定下一次提交里有什么。<code>git add</code> 把文件此刻的内容放进暂存区。<code>git commit</code> 再把暂存区做成提交。</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习页 ex01-d，节选）</div><pre><span class="p">$ </span><span class="cmd">echo hotel &gt;&gt; nato.txt; git status --short</span>   <span class="cm"># 右列 M：工作区改了，还没暂存</span>
+<span class="o"> M nato.txt</span>
+<span class="p">$ </span><span class="cmd">git add nato.txt; git status --short</span>         <span class="cm"># 左列 M：改动进了暂存区</span>
+<span class="o">M  nato.txt</span>
+<span class="p">$ </span><span class="cmd">echo india &gt;&gt; nato.txt; git status --short</span>   <span class="cm"># 暂存后又改：两列都是 M</span>
+<span class="o">MM nato.txt</span></pre></div>
+<p class="like"><b>打个比方</b>git add 像把作业复印一份交到讲台上。之后你在原稿上接着改，讲台上那份不会变。commit 收走的是讲台上那份。</p>
+<p>有的 VCS 只有一个“拍快照”命令。它把目录当前的样子整个存下来。Git 不这样，因为我们想要<strong>干净</strong>的快照。暂存区不属于数据模型。它是“怎么做出一个提交”的操作界面。</p>
+<ul>
+<li>你写了两个独立的功能，想拆成两次提交。每次只含一个功能。</li>
+<li>你修了一个 bug，又到处加了调试用的 print。你只想提交修复，丢掉 print（讲义）。</li>
+</ul>
+<p>Git 的办法是<strong>暂存区</strong>（staging area，也叫 index）。你用它挑出下一次提交要包含的修改。</p>
+<p>status 输出有两列字母。左列比较暂存区和 HEAD，右列比较工作区和暂存区。下面的演示把这三个位置画了出来：</p>
+<div data-vz="ch05-staging"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>status 显示 MM 时直接 commit，只会提交左边那个 M。暂存之后的新改动不会进去。很多人提交完发现少了东西，就是这个原因。想全带上，先再 add 一次，或者用 <code>git commit -a</code>。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s10" data-nav="基本命令" data-t="37:33">所有功能都是 git 的子命令，不会就 git help <span class="ts">37:33</span></h2>
+<p class="lead"><code>git init</code> 建出一个 <code>.git</code> 目录，里面就是对象库和引用。之后的 add、commit、log，都是在读写它。</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充，Git 2.55）</div><pre><span class="p">$ </span><span class="cmd">git init -q nato &amp;&amp; cd nato</span>
+<span class="p">$ </span><span class="cmd">git status</span>                   <span class="cm"># 在 master 上，但一个提交都没有</span>
+<span class="o">On branch master
+
+No commits yet
+
+nothing to commit (create/copy files and use "git add" to track)</span>
+<span class="p">$ </span><span class="cmd">cat .git/HEAD</span>                <span class="cm"># HEAD 已经说好要跟着 master</span>
+<span class="o">ref: refs/heads/master</span>
+<span class="p">$ </span><span class="cmd">ls .git/refs/heads | wc -l</span>   <span class="cm"># 可 master 这个文件还不存在</span>
+<span class="o">0</span></pre></div>
+<p class="like"><b>打个比方</b>git init 像开了一个空账本。户头名 master 写好了，但一笔账都还没记。</p>
+<p>讲师现场问大家想听哪部分。基础、远程和高级功能，举手的人差不多。于是尽量都讲。所有功能都是 <code>git</code> 的子命令。<code>git help 子命令</code> 会打开对应的 man 页，比上网搜快（<span class="ts">38:05</span>）。第 1 讲讲过 man。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>命令（讲义）</th><th>作用</th></tr>
+<tr><td><code>git init</code></td><td>新建仓库，数据存在 <code>.git</code> 目录里。里面的 <code>objects</code> 和 <code>refs</code> 就是对象库和引用</td></tr>
+<tr><td><code>git status</code></td><td>告诉你现在的状况。在哪个分支，有没有提交。哪些修改已暂存、未暂存或未跟踪</td></tr>
+<tr><td><code>git add &lt;文件&gt;</code></td><td>把文件放进暂存区</td></tr>
+<tr><td><code>git commit</code></td><td>新建一个提交，会打开编辑器写说明。<code>-m</code> 直接给说明。<code>-a</code> 把已跟踪文件的修改一起暂存</td></tr>
+<tr><td><code>git log</code></td><td>把历史拉平成一列显示。<code>git log --all --graph --decorate</code> 画成 DAG</td></tr>
+<tr><td><code>git diff &lt;文件&gt;</code></td><td>看相对暂存区的改动。<code>git diff &lt;版本&gt; &lt;文件&gt;</code> 比较两个快照里的这个文件</td></tr>
+<tr><td><code>git checkout &lt;版本&gt;</code></td><td>移动 HEAD。检出的是分支时，也切换当前分支</td></tr>
+<tr><td><code>git cat-file -t / -p</code></td><td>看对象的类型或内容。日常很少用，但能直接看到数据模型（<span class="ts">43:15</span>）</td></tr>
+</table></div>
+<p>讲师的演示从 <span class="ts">38:37</span> 到 <span class="ts">45:00</span>。在空目录里 <code>git init</code>，<code>ls .git</code> 能看到 objects 和 refs。<code>git status</code> 显示 On branch master 和 No commits yet。这时 master 只是一个名字，还不指向任何提交。上面的本机实测也能看出来。</p>
+<p>接着写一个 nato.txt，内容是北约音标字母 bravo、charlie 等。status 显示它是 untracked。<code>git add</code> 之后，它变成 Changes to be committed。<code>git commit</code> 时写下说明 initial commit。</p>
+<p>最后用 <code>git cat-file -t master</code> 看出它是 commit。再用 <code>-p</code> 依次打开 commit、tree、blob。最后看到的内容，和工作区里的 nato.txt 一样。</p>
+<div class="callout tip"><div class="ct">写好提交说明</div><p>为了省时间，讲师故意把提交说明写得越来越敷衍。但他强调，好的提交说明非常重要。讲义推荐了两篇文章。一篇是 <a href="https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html" target="_blank" rel="noopener">A Note About Git Commit Messages</a>，另一篇是 <a href="https://chris.beams.io/posts/git-commit/" target="_blank" rel="noopener">How to Write a Git Commit Message</a>。第 8 讲还会讲。</p></div>
+<div class="callout extra"><div class="ct">学生提问：一个目录只能有一个仓库吗？（视频 39:47）</div>
+<p>基本是这样，因为目录名 .git 是固定的。想要多个仓库，就用多个目录。很多人有一个 src 目录，下面每个子目录各是一个仓库。Git 还有子模块这类更花哨的机制，这里不展开。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p><code>git commit -a</code> 只暂存<strong>已跟踪</strong>文件的修改。新建的文件不会被带上，得先 <code>git add</code>。很多人以为 -a 是“全部”。提交完才发现，新文件没进去。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s11" data-nav="分支" data-t="45:00">分支只是一个指向提交的指针 <span class="ts">45:00</span></h2>
+<p class="lead">分支是一种特殊的引用。HEAD 附着在它上面时，每次提交它都跟着往前挪。别的分支原地不动。</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充，身份和时间按练习页固定）</div><pre><span class="p">$ </span><span class="cmd">git branch anish</span>                 <span class="cm"># 建分支不新增任何对象</span>
+<span class="p">$ </span><span class="cmd">cat .git/refs/heads/anish</span>        <span class="cm"># 分支就是一个文件，里面只有一个哈希</span>
+<span class="o">13341bc1a326fe29015968de880508bce2fa2b8b</span>
+<span class="p">$ </span><span class="cmd">wc -c &lt; .git/refs/heads/anish</span>    <span class="cm"># 40 个十六进制字符，加一个换行</span>
+<span class="o">41</span>
+<span class="p">$ </span><span class="cmd">git switch -q anish; echo hotel &gt;&gt; nato.txt; git commit -q -am "add hotel"</span>
+<span class="p">$ </span><span class="cmd">git log --all --oneline --decorate</span>   <span class="cm"># 只有 anish 前进了，master 留在原地</span>
+<span class="o">856e17c (HEAD -&gt; anish) add hotel
+13341bc (master) initial commit</span></pre></div>
+<p class="like"><b>打个比方</b>分支像一枚书签。你拿着哪枚书签往后写，它就跟着挪到新的一页。别的书签留在原处。</p>
+<p><code>git status</code> 说 On branch master，意思是 HEAD 附着在 master 上（<span class="ts">45:00</span>）。<code>git commit</code> 一条命令做了两件事。先在图里加一个节点，再把 master 挪过去。</p>
+<ul class="keys">
+<li><strong>分支不是“一串提交”</strong>：直觉上分支像一整条血统。但在 Git 里，它<strong>只是一个指向提交的指针</strong>。想挪到哪就挪到哪。血统由提交里的 parent 记着（<span class="ts">46:42</span>）。</li>
+<li><strong>master 不会自动指向最新提交</strong>。只有你所在的分支，才会随提交前进。<code>git branch anish</code> 在当前位置建新分支，<code>git switch anish</code> 切过去。再提交，前进的是 anish，master 留在原地（<span class="ts">48:03</span>）。</li>
+<li><strong>switch 也改工作区</strong>：切回 master 后，nato.txt 变回 master 那个快照的内容。刚加的 hotel 不见了（<span class="ts">49:20</span>）。</li>
+<li><code>git log</code> 默认只显示从当前分支走得到的历史。加 <code>--all</code>，才显示从所有分支走得到的（<span class="ts">49:55</span>）。</li>
+</ul>
+<div class="code term"><div class="cap">bash · 本机实测（练习页 ex01-e，复刻视频的操作）</div><pre><span class="p">$ </span><span class="cmd">git log --all --graph --oneline</span>   <span class="cm"># 两个分支各走了一步，图分叉了</span>
+<span class="o">* c560925 add hotel
+| * 352b132 add alpha
+|/
+* 6f7b00b initial commit</span></pre></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>分支命令（讲义）</th><th>作用</th></tr>
+<tr><td><code>git branch</code></td><td>列出分支，当前分支前面有 *</td></tr>
+<tr><td><code>git branch &lt;名字&gt;</code></td><td>在当前位置新建分支。也可以写 <code>git branch &lt;名字&gt; &lt;提交&gt;</code> 指定位置</td></tr>
+<tr><td><code>git switch &lt;名字&gt;</code></td><td>切换到这个分支</td></tr>
+<tr><td><code>git checkout -b &lt;名字&gt;</code></td><td>新建并切换。等于 <code>git branch</code> 加 <code>git switch</code></td></tr>
+</table></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>在 anish 上提交了 hotel，切回 master 一看，hotel 不见了。别慌，它好好地待在 anish 的提交里。switch 只是把工作区换成了 master 的快照。</p></div>
+<p>下面的演示一步步建分支、切分支、提交。看清每一步是哪个名字在动。</p>
+<div data-vz="ch05-branch"></div>
+
+<!-- ============================================================ -->
+<h2 id="s12" data-nav="合并" data-t="50:28">合并生成有两个 parent 的提交，改了同一处才冲突 <span class="ts">50:28</span></h2>
+<p class="lead">两个提交谁也不是谁的祖先，历史就分叉了。git merge 新建一个合并提交，把两边的改动合在一起。</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习页 ex01-e）</div><pre><span class="p">$ </span><span class="cmd">git merge --no-edit anish</span>   <span class="cm"># 两边改的地方离得远，自动合并</span>
+<span class="o">Auto-merging nato.txt
+Merge made by the 'ort' strategy.
+ nato.txt | 1 +
+ 1 file changed, 1 insertion(+)</span>
+<span class="p">$ </span><span class="cmd">git log --graph --oneline</span>   <span class="cm"># 合并提交把两条线收拢</span>
+<span class="o">*   30baa2b Merge branch 'anish'
+|\
+| * c560925 add hotel
+* | 352b132 add alpha
+|/
+* 6f7b00b initial commit</span>
+<span class="p">$ </span><span class="cmd">git branch -d anish</span>         <span class="cm"># 只删名字，图一点没变</span>
+<span class="o">Deleted branch anish (was c560925).</span></pre></div>
+<p class="like"><b>打个比方</b>合并像两个人各改了同一份文档的不同段落。一个改开头，一个改结尾，拼起来就行。两人改了同一句话，就得有人拍板。</p>
+<p>切回 master，运行 <code>git merge anish</code>。Git 新建一个合并提交，会打开编辑器让你写说明。它提示 Auto-merging nato.txt。一边在开头加了 alpha，一边在末尾加了 hotel，中间相同。差异合并算法自动合在一起，没有冲突（<span class="ts">51:10</span>）。</p>
+<ul>
+<li>合并之后，anish 的提交都能从 master 走到。这个名字就用不着了，可以 <code>git branch -d anish</code>。图一点没变，删的只是名字。<strong>分支和血统记录是两回事</strong>（<span class="ts">52:19</span>）。</li>
+<li>反过来，把 master 合进 anish 也完全可以。master 并不特殊（<span class="ts">52:54</span>）。</li>
+<li>当前检出的分支不能删。可以先 <code>git branch main; git switch main</code>，再 <code>git branch -d master</code>（<span class="ts">53:39</span>）。</li>
+<li><code>git mergetool</code> 能用更顺手的工具解决冲突（讲义）。</li>
+</ul>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>合并相关（讲义）</th><th>作用</th></tr>
+<tr><td><code>git merge &lt;版本&gt;</code></td><td>合并到当前分支</td></tr>
+<tr><td><code>git mergetool</code></td><td>用图形或终端工具帮你解决冲突</td></tr>
+<tr><td><code>git rebase</code></td><td>把一组补丁变基到新的基础上。演示见<a href="#s7b">第 7 节</a></td></tr>
+</table></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>删已合并的分支，提交不会丢，它们还能从 master 走到。删没合并的分支，<code>-d</code> 会拒绝。本机实测报的是 <code>error: the branch 'anish' is not fully merged</code>。换成 <code>-D</code> 强删后，就没有引用指着那些提交了。只能去 reflog 里找，见下一节。</p></div>
+<p>下面的演示分两幕。第 1 幕是这次自动合并。第 2 幕是讲义练习 8 的冲突。两边改了同一行，Git 停下来等你解决。全部是本机实测。</p>
+<div data-vz="ch05-merge"></div>
+
+<!-- ============================================================ -->
+<h2 id="s13" data-nav="reflog 与回收" data-t="54:09">删错分支别慌，reflog 记着引用去过哪 <span class="ts">54:09</span></h2>
+<p class="lead">引用是会变的，所以 Git 记下了每个引用的历史，叫 reflog。分支挪错了、删错了，都能从这里找回原来的位置。</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充，身份和时间按练习页固定）</div><pre><span class="p">$ </span><span class="cmd">git branch -D anish</span>        <span class="cm"># 没合并的分支，用 -D 强删</span>
+<span class="o">Deleted branch anish (was 856e17c).</span>
+<span class="p">$ </span><span class="cmd">git reflog -3</span>              <span class="cm"># HEAD@{1} 就是被删分支最后指的提交</span>
+<span class="o">13341bc HEAD@{0}: checkout: moving from anish to master
+856e17c HEAD@{1}: commit: add hotel
+13341bc HEAD@{2}: checkout: moving from master to anish</span>
+<span class="p">$ </span><span class="cmd">git branch anish 856e17c</span>   <span class="cm"># 照着哈希重建，分支回来了</span>
+<span class="p">$ </span><span class="cmd">git log --all --oneline --decorate</span>
+<span class="o">856e17c (anish) add hotel
+13341bc (HEAD -&gt; master) initial commit</span></pre></div>
+<p class="like"><b>打个比方</b>reflog 像浏览器的历史记录。书签删了，历史记录里还有你去过的网址。照着网址再建一个书签就行。不过历史记录也会定期清理。</p>
+<p>学生问，删了分支还能找回来吗？讲师说这是相当高级的内容。操作得当，就永远用不上。Git 还维护了一些额外状态。其中就有<strong>引用的历史</strong>，命令是 <code>git reflog</code>。引用是可变的，所以记下它曾经指向哪里很有用。</p>
+<p>Git 怎么决定留哪些对象？从任何引用出发能走到的提交，都算“活着”。哪个引用都走不到的，就成了孤儿对象。Git 会自动对它们做<strong>垃圾回收</strong>。所以刚删的分支，提交还在对象库里，reflog 也找得到。一年后才后悔，可能就没了（<span class="ts">54:40</span>）。</p>
+<div class="callout tip"><div class="ct">学生提问：新建分支时怎么指定它指向哪里？（视频 55:50）</div>
+<p>不带参数时，它指向当前位置，也就是 HEAD。也可以给一个引用或哈希。<code>git branch old &lt;哈希&gt;</code> 就在那个提交上，建了一个叫 old 的分支。上面找回 anish 用的就是这招。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑（补充，非视频内容）</div>
+<p>reflog 只存在你本地的仓库里，push 不会带上它。换台电脑，就没有这份记录了。reflog 条目也会过期。过期后再 gc，孤儿对象就真的没了。所以别把它当备份。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s14" data-nav="分支工作流" data-t="56:34">main 放稳定代码，每个功能开一个分支 <span class="ts">56:34</span></h2>
+<p class="lead">常见做法是让 main 放最新的稳定代码。开发功能时开一个功能分支，改完再合回 main。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>git switch -c fix-login      <span class="cm"># 从 main 开一个功能分支</span>
+git commit -am "fix login"   <span class="cm"># 在分支上随便提交，main 不受影响</span>
+git switch main              <span class="cm"># 改完回到 main</span>
+git merge fix-login          <span class="cm"># 合回来，再删掉分支名</span></pre></div>
+<p class="like"><b>打个比方</b>main 像正式出版的书。功能分支像你的草稿本。草稿写好了，再誊进正式版。</p>
+<p>这个分支以前默认叫 master。现在 GitHub 默认叫 main。更复杂的工作流也有。比如网站的生产版本在 main，预发布的测试版在 staging。功能和修复分支先合进 staging 测试。没问题了，再合进 main（<span class="ts">57:08</span>）。</p>
+<p>名字只是约定，叫 anish 也行。讲义列了几种流行的工作流，比如 <a href="https://nvie.com/posts/a-successful-git-branching-model/" target="_blank" rel="noopener">git-flow</a>，也有对它的<a href="https://www.endoflineblog.com/gitflow-considered-harmful" target="_blank" rel="noopener">批评</a>。</p>
+<div class="callout extra"><div class="ct">补充：本机 Git 的默认分支名（本机实测）</div>
+<p>本机是 Git 2.55。没配 <code>init.defaultBranch</code> 时，它仍用 master。但 <code>git init</code> 会打印一句提示：<code>This default branch name will change to "main" in Git 3.0</code>。提示里还教你用 <code>git config --global init.defaultBranch &lt;name&gt;</code> 来设定。练习页的实验都显式设成了 master，和讲义一致。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>一直在 main 上直接改。改到一半来了紧急 bug，半成品就和修复混在一起了。养成习惯，一件事开一个分支。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s15" data-nav="游离 HEAD" data-t="57:45">切到旧提交会游离 HEAD，这时的提交没人跟 <span class="ts">57:45</span></h2>
+<p class="lead"><code>git checkout</code> 一个提交哈希，HEAD 就直接指着提交。它不附着在任何分支上。这时提交，没有分支跟着前进。</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习页 ex01-f，节选）</div><pre><span class="p">$ </span><span class="cmd">git checkout -q HEAD~1; git status | head -1</span>   <span class="cm"># 切到上一个提交</span>
+<span class="o">HEAD detached at 6f7b00b</span>
+<span class="p">$ </span><span class="cmd">echo zulu &gt;&gt; nato.txt &amp;&amp; git commit -q -am "orphan"; git switch master</span>
+<span class="e">Warning: you are leaving 1 commit behind, not connected to
+any of your branches:
+
+  d6fefb2 orphan</span>
+<span class="p">$ </span><span class="cmd">git branch rescue HEAD@{1}</span>   <span class="cm"># 趁 reflog 还在，给它起个名字</span></pre></div>
+<p class="like"><b>打个比方</b>游离 HEAD 像在旧版本上写散页。写的东西没装订进任何一本册子。你一走开，散页就没人管，迟早被清理。</p>
+<p>想把工作区变回某个旧状态，有两种办法。一是 <code>git switch old</code>，切到指向旧提交的分支。二是直接 <code>git checkout &lt;提交哈希&gt;</code>，哈希写出足够唯一的前缀就行。</p>
+<p>第二种情况下，<code>git log</code> 里那个全大写的 <strong>HEAD</strong> 直接指着提交。<code>git status</code> 会说你处于 <strong>detached HEAD</strong>（游离 HEAD）状态。这时没有活动分支（<span class="ts">58:54</span>）。</p>
+<p>游离状态下也能提交，但没有分支跟着前进。切回 main 时，Git 会警告你。说你留下了 1 个提交，没连到任何分支上。这个提交暂时还在对象库里。可没有分支指向它，也没有分支指向它的后代。它最终会被回收（<span class="ts">59:59</span>）。补救办法见 <span class="ts">1:08:58</span> 的问答：用它的哈希建一个分支。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>为了看旧代码，checkout 了一个哈希。顺手改了几行，还提交了。切回 main 时 Git 警告了，很多人没看就关了。那几个提交就成了孤儿。补救是趁 reflog 还在，用 <code>git branch</code> 给它起个名字。上面实测的 rescue 就是这么救的。</p></div>
+<div data-vz="ch05-detached"></div>
+
+<!-- ============================================================ -->
+<h2 id="s16" data-nav="远程仓库" data-t="59:25">remote 只是另一个仓库，fetch 取数据不动本地分支 <span class="ts">59:25</span></h2>
+<p class="lead">Git 是分布式的。你手里就是一份完整的仓库。它可以连任意多个别的仓库，叫 remote。push 送出对象和引用，fetch 取回来但不改你的本地分支。</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习页 ex01-h：用本地裸仓库代替 GitHub）</div><pre><span class="p">$ </span><span class="cmd">git status -sb | head -1</span>                    <span class="cm"># bob 刚 push 过，alice 这边却显示一致</span>
+<span class="o">## master...origin/master</span>
+<span class="p">$ </span><span class="cmd">git fetch -q &amp;&amp; git status -sb | head -1</span>    <span class="cm"># fetch 之后，才知道落后 1 个</span>
+<span class="o">## master...origin/master [behind 1]</span>
+<span class="p">$ </span><span class="cmd">git pull -q --ff-only &amp;&amp; git log --oneline</span>  <span class="cm"># pull 才真正挪动本地 master</span>
+<span class="o">fdf7920 bob: second
+4d59c41 alice: first</span></pre></div>
+<p class="like"><b>打个比方</b>origin/master 像你上次看天气预报时记下的数。天变了，你不重新看预报，记下的数就不会变。fetch 是重新看一眼。pull 是看完再照着换衣服。</p>
+<p>GitHub 上的仓库并不特殊。在上面建一个空仓库。这相当于别人做了一次 <code>git init</code>（<span class="ts">1:00:34</span>）。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>命令（讲义）</th><th>作用</th></tr>
+<tr><td><code>git remote</code></td><td>列出 remote</td></tr>
+<tr><td><code>git remote add &lt;名字&gt; &lt;url&gt;</code></td><td>添加 remote，惯例叫 origin</td></tr>
+<tr><td><code>git push &lt;remote&gt; &lt;本地分支&gt;:&lt;远程分支&gt;</code></td><td>把对象送到远程，再更新远程的引用</td></tr>
+<tr><td><code>git branch --set-upstream-to=&lt;remote&gt;/&lt;远程分支&gt;</code></td><td>让本地分支对应一个远程分支。<code>git push -u</code> 也会设置</td></tr>
+<tr><td><code>git fetch</code></td><td>从远程取回对象和引用，<strong>不改</strong>你的本地分支</td></tr>
+<tr><td><code>git pull</code></td><td>等于 <code>git fetch</code> 再 <code>git merge</code></td></tr>
+<tr><td><code>git clone</code></td><td>把远程仓库整个下载下来</td></tr>
+</table></div>
+<p>视频里的流程在 <span class="ts">1:01:43</span> 到 <span class="ts">1:04:40</span>：</p>
+<ol>
+<li>在 GitHub 上建一个空仓库。</li>
+<li><code>git remote add origin …</code>。认证细节见 GitHub 文档。</li>
+<li><code>git push -u origin main</code>。远程没有 main，就新建它。<code>-u</code> 让本地 main 跟踪 origin/main。以后直接 <code>git push</code> 就行。</li>
+<li>扮演“另一个人”，在桌面上 <code>git clone</code>，提交，再 push。</li>
+<li>回到原来的目录，<code>git status</code> 看不到变化。因为还没从远程拉。</li>
+<li><code>git fetch</code> 只取数据。<code>git pull</code> 才更新本地引用，这里是一次 fast-forward。</li>
+</ol>
+<div class="callout tip"><div class="ct">学生提问：push 只发送那一个提交吗？（视频 1:05:46）</div>
+<p>不是。它会发送通往那个提交的<strong>整段历史</strong>。只发对方没有的部分。也有只取一部分历史的高级命令。比如讲义里的 <code>git clone --depth=1</code>，叫浅克隆。但一般用不上，很多 git 命令都要用完整历史。</p>
+<p>GitHub 网页也能把提交历史画出来。课程网站本身就是 GitHub 上的开源仓库（<span class="ts">1:05:12</span>）。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>git status 说 up to date with origin/master，同事却刚 push 过。这不矛盾。origin/master 只是上次联网时远程的样子，Git 不会自己联网。先 <code>git fetch</code>，它才会更新。</p></div>
+<div data-vz="ch05-remote"></div>
+
+<!-- ============================================================ -->
+<h2 id="s17" data-nav="diff 与快照" data-t="1:06:23">Git 存的是快照，diff 是现算出来的 <span class="ts">1:06:23</span></h2>
+<p class="lead">每个提交对应一个完整的快照。它不记“这次改了什么”。Git 不存增量。要看改动，就用 <code>git diff</code> 拿两个快照现算。</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充，接第 7 节 revert 的例子）</div><pre><span class="p">$ </span><span class="cmd">git diff HEAD~1 --stat</span>   <span class="cm"># 和上一个快照比：少了 hotel 这一行</span>
+<span class="o"> nato.txt | 1 -
+ 1 file changed, 1 deletion(-)</span>
+<span class="p">$ </span><span class="cmd">git diff HEAD~2 --stat</span>   <span class="cm"># 和两步前比：什么都不输出</span>
+<span class="p">$ </span><span class="cmd">git rev-parse HEAD^{tree} HEAD~2^{tree}</span>   <span class="cm"># 原因：两个快照的 tree 哈希一样</span>
+<span class="o">b32d974f6ffb790006046a5147487d17bc41ba1d
+b32d974f6ffb790006046a5147487d17bc41ba1d</span></pre></div>
+<p class="like"><b>打个比方</b>Git 像每天给房间拍一张全景照。想知道今天比昨天多了什么，就把两张照片摆在一起比。照片上从来不写“今天多了一把椅子”。</p>
+<ul>
+<li><code>git diff HEAD~</code> 和上一个提交比。也可以比两个名字，或只看一个文件（<span class="ts">1:07:32</span>）。</li>
+<li><code>git log -p</code> 给每个提交附上改动。可以一路往下翻（<span class="ts">1:07:32</span>）。</li>
+<li>Git 面向用户的高层命令叫 <strong>porcelain</strong>，意思是“瓷器”。它们都建在这一讲的数据模型之上。两小时讲不完它们。但基础懂了，进阶内容很好学（<span class="ts">1:08:07</span>）。</li>
+</ul>
+<div class="callout extra"><div class="ct">补充（非视频内容）：那磁盘不会爆吗</div>
+<p>逻辑上存快照，不等于物理上每次复制整个目录。没变的文件是同一个 blob，直接共享。<a href="#s6">第 6 节</a>演示第 2 幕里，改一个文件只新增 4 个对象。</p>
+<p>另外，<code>git gc</code> 会把对象打包成 packfile。包里会对相似的对象做增量压缩。但这只是存储优化，数据模型仍然是快照。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>有人以为 revert 会把那次提交从历史里删掉。其实它追加了一个新提交。新快照恰好和两步前一样。上面 <code>git diff HEAD~2</code> 为空，就是这个原因。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s18" data-nav="撤销与配置" data-t="1:08:07">撤销有四招，分享过的历史只用 revert <span class="ts">1:08:07</span></h2>
+<p class="lead">每种撤销都能对应回数据模型。要么新建提交再挪引用。要么拿一处的内容，覆盖另一处。</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充，身份和时间按练习页固定，节选）</div><pre><span class="p">$ </span><span class="cmd">git log --oneline -1</span>                      <span class="cm"># amend 之前</span>
+<span class="o">13341bc initial commit</span>
+<span class="p">$ </span><span class="cmd">git commit -q --amend -m "first commit"</span>   <span class="cm"># 新建一个提交顶替它</span>
+<span class="p">$ </span><span class="cmd">git log --oneline -1</span>                      <span class="cm"># 哈希变了，旧的还在 reflog 里</span>
+<span class="o">5ad3af1 first commit</span>
+<span class="p">$ </span><span class="cmd">echo india &gt;&gt; nato.txt; git add nato.txt; git status --short</span>
+<span class="o">M  nato.txt</span>
+<span class="p">$ </span><span class="cmd">git reset -q nato.txt; git status --short</span>   <span class="cm"># 移出暂存区，工作区的改动还在</span>
+<span class="o"> M nato.txt</span></pre></div>
+<p class="like"><b>打个比方</b>amend 像重新打印最后一页，把旧的那页换掉。revert 像在本子末尾写一行“作废上一条”。前者换掉了一页，后者只往后加。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>撤销（讲义）</th><th>作用</th><th>对数据模型做了什么（补充）</th></tr>
+<tr><td><code>git commit --amend</code></td><td>修改上一个提交的内容或说明</td><td>新建一个提交替换它，分支指向新提交。旧提交仍在 reflog 里</td></tr>
+<tr><td><code>git reset &lt;文件&gt;</code></td><td>把文件移出暂存区</td><td>用 HEAD 的版本覆盖暂存区里这一项</td></tr>
+<tr><td><code>git restore</code></td><td>丢弃工作区的修改</td><td>用暂存区或指定来源覆盖工作区文件</td></tr>
+<tr><td><code>git revert &lt;提交&gt;</code></td><td>新增一个提交，抵消某个旧提交</td><td>只追加，不改写。适合已经分享的历史</td></tr>
+</table></div>
+<ul>
+<li><code>git config</code>：Git <a href="https://git-scm.com/docs/git-config" target="_blank" rel="noopener">高度可配置</a>。全局配置在 <code>~/.gitconfig</code>，练习 5 建别名，练习 6 设全局 gitignore。</li>
+<li><code>.gitignore</code>：<a href="https://git-scm.com/docs/gitignore" target="_blank" rel="noopener">指定</a>故意不跟踪的文件。比如构建产物和编辑器临时文件。</li>
+</ul>
+<div class="callout warn"><div class="ct">本机实测提示</div><p>本笔记放在 U 盘上，文件系统是 FAT32。直接在上面操作仓库，Git 会报 detected dubious ownership。因为这种文件系统不记录文件属主。所以练习页的实验都放在系统临时目录里做。你在类似的盘上用 Git，可以按提示把目录加进 <code>safe.directory</code>。这条是补充，是本机遇到的情况。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑（补充，非视频内容）</div>
+<p><code>git restore</code> 和 <code>git reset --hard</code> 都会丢掉工作区的修改。没 add 过的修改，从没进过对象库。reflog 也救不回来。动手前先 <code>git stash</code>，或者先提交一次。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s19" data-nav="进阶命令" data-t="1:08:07">bisect 二分查找历史，几步就揪出坏提交 <span class="ts">1:08:07</span></h2>
+<p class="lead">进阶命令很多，最值得先学的是 <code>git bisect</code>。它在历史里二分查找，每一步跑一次测试。很快就能定位到引入 bug 的提交。</p>
+<div class="code term"><div class="cap">bash · 本机实测（练习页 ex01-i，节选）</div><pre><span class="p">$ </span><span class="cmd">git bisect start HEAD HEAD~15</span>     <span class="cm"># 先说好坏：HEAD 坏，HEAD~15 好</span>
+<span class="o">Bisecting: 7 revisions left to test after this (roughly 3 steps)
+[6b417f4f142162f71857d8ac44f1a9729ca015e4] v8: feature 8</span>
+<span class="p">$ </span><span class="cmd">git bisect run bash test_add.sh</span>   <span class="cm"># 自动跑测试：退出码 0 算好，1 算坏</span>
+<span class="o">running 'bash' 'test_add.sh'</span>
+<span class="cm"># ……中间又测了 3 次，这里省略</span>
+<span class="o">78824cac241795729e846fa53e1abbb36f5eef32 is the first 'bad' commit</span></pre></div>
+<p class="like"><b>打个比方</b>bisect 像猜数字游戏。1 到 16 之间猜一个数，每次只问“大了还是小了”。4 次就能猜中。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>命令（讲义）</th><th>作用</th></tr>
+<tr><td><code>git clone --depth=1</code></td><td>浅克隆，不下载完整历史</td></tr>
+<tr><td><code>git add -p</code></td><td>交互式暂存，一块一块挑要提交的修改。这才是暂存区真正的威力</td></tr>
+<tr><td><code>git rebase -i</code></td><td>交互式变基。合并、改写、重排还没分享的提交</td></tr>
+<tr><td><code>git blame</code></td><td>每一行最后是谁、在哪次提交改的。见练习 2</td></tr>
+<tr><td><code>git stash</code></td><td>把工作区的修改临时收起来。见练习 4</td></tr>
+<tr><td><code>git bisect</code></td><td>在历史里二分查找，比如找回归 bug</td></tr>
+<tr><td><code>git worktree</code></td><td>同时把多个分支检出到不同目录</td></tr>
+</table></div>
+<div class="callout tool"><div class="ct">讲义：杂项</div>
+<ul>
+<li><strong>图形界面</strong>：有很多 <a href="https://git-scm.com/downloads/guis" target="_blank" rel="noopener">GUI 客户端</a>。讲师们自己都用命令行。</li>
+<li><strong>shell 集成</strong>：在提示符里显示 Git 状态非常方便。有 <a href="https://github.com/olivierverdier/zsh-git-prompt" target="_blank" rel="noopener">zsh</a> 版和 <a href="https://github.com/magicmonty/bash-git-prompt" target="_blank" rel="noopener">bash</a> 版。Oh My Zsh 这类框架通常自带。</li>
+<li><strong>编辑器集成</strong>：Vim 的标准插件是 <a href="https://github.com/tpope/vim-fugitive" target="_blank" rel="noopener">fugitive.vim</a>。</li>
+<li><strong>Git 不是 GitHub</strong>：GitHub 用 <a href="https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests" target="_blank" rel="noopener">pull request</a> 给别的项目贡献代码。见练习 7。</li>
+</ul></div>
+<div class="callout tool"><div class="ct">讲义推荐资源</div>
+<p><a href="https://git-scm.com/book/en/v2" target="_blank" rel="noopener">Pro Git</a> 强烈推荐，读完 1 到 5 章就够熟练了。<a href="https://ohshitgit.com/" target="_blank" rel="noopener">Oh Shit, Git!?!</a> 讲常见错误怎么救。还有 <a href="https://eagain.net/articles/git-for-computer-scientists/" target="_blank" rel="noopener">Git for Computer Scientists</a> 和 <a href="https://jwiegley.github.io/git-from-the-bottom-up/" target="_blank" rel="noopener">Git from the Bottom Up</a>。<a href="https://learngitbranching.js.org/" target="_blank" rel="noopener">Learn Git Branching</a> 是浏览器里的闯关游戏。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>测试脚本的退出码要守规矩。0 表示好，125 表示跳过。1 到 127 里的其他值都算坏。脚本因为缺环境而失败，bisect 也会当成坏。结果就指错了提交。</p></div>
+<p>开头提到的“自动二分查找”，就是 <code>git bisect</code>。下面的演示在 16 个提交的历史上，真跑了 <code>git bisect run</code>：</p>
+<div data-vz="ch05-bisect"></div>
+
+<!-- ============================================================ -->
+<h2 id="s20" data-nav="一页带走" data-t="1:08:58">一页带走：仓库就是对象加引用 <span class="ts">1:08:58</span></h2>
+<p class="lead">把本讲浓缩成几行命令。每行的注释就是结论和考点。</p>
+<div class="code"><div class="cap">bash · 本讲速查（注释即考点）</div><pre>git cat-file -p HEAD     <span class="cm"># commit 里只有 tree、parent、作者和说明，不存 diff</span>
+git hash-object f.txt    <span class="cm"># 内容一样，blob 哈希就一样，和文件名无关</span>
+git commit               <span class="cm"># 两台电脑提交同一份文件：blob 相同，commit 不同（时间和作者不同）</span>
+git status --short       <span class="cm"># MM：只有左边那个 M 会进这次提交</span>
+git branch -d anish      <span class="cm"># 只删名字，已合并的提交还能从 master 走到</span>
+git merge sweet          <span class="cm"># 两边改了同一行才冲突，合并提交有两个 parent</span>
+git rebase master        <span class="cm"># 重放出新提交：parent 变了，后面每个哈希都跟着变</span>
+git checkout 6f7b00b     <span class="cm"># 游离 HEAD：这时的提交没有分支跟着</span>
+git reflog               <span class="cm"># 引用去过哪都记着，删错分支从这里找回</span>
+git fetch                <span class="cm"># 只更新 origin/master，本地分支不动</span>
+git revert HEAD          <span class="cm"># 已分享的历史别改写，追加一个反向提交</span></pre></div>
+<ul class="keys">
+<li>blob 是文件，tree 是目录，commit 是快照加 parent 加元数据。</li>
+<li>三者都是对象，按内容的 SHA-1 寻址，互相用哈希指向。</li>
+<li>对象不可变，只能追加。引用是可变的名字，比如分支和 HEAD。仓库就是对象加引用。</li>
+<li>暂存区决定下一次提交里有什么。</li>
+<li>提交时，只有 HEAD 附着的分支前进。merge 生成有两个 parent 的提交。</li>
+<li>游离 HEAD 下的提交没有分支跟着。reflog 记着引用的历史，走不到的对象最终被回收。</li>
+<li>remote 就是另一个仓库。push 送出，fetch 取回不动本地，pull 等于 fetch 加 merge。</li>
+<li>改写历史就是新建提交再挪引用。已分享的历史别改写，用 revert。</li>
+</ul>
+<div class="callout key"><div class="ct">下一步</div>
+<p>从现在起，你写的每个练习都可以放进 Git 仓库。第 6 讲是打包与交付代码，会用到版本号和发布。第 8 讲讲提交说明、代码评审和开源贡献。第 9 讲的 CI 也是由 git push 触发的。现在去做<a href="labs/lab05.html">本讲练习的可视化笔记</a>。</p></div>
+
+</article></main>
+<script src="assets/vz.js"></script>
+<script src="assets/viz/ch05-objects.js"></script>
+<script src="assets/viz/ch05-branches.js"></script>
+<script src="assets/viz/ch05-history.js"></script>
+</body>
+</html>

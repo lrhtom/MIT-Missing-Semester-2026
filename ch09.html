@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>09 · 代码质量 · Missing Semester 2026 中文笔记</title>
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/vz.css">
+<script>window.PAGE = { key: 'ch09', type: 'ch', vzCount: 11 };</script>
+<script src="assets/course.js"></script>
+<script src="assets/dg.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<div class="callout key"><div class="ct">本讲结论</div>
+<p>代码好不好，别靠人盯，交给工具链自动把关。<strong>格式化器</strong>统一写法，<strong>linter</strong> 找反模式。<strong>测试</strong>加<strong>覆盖率</strong>验证行为。<strong>pre-commit 钩子</strong>在本地拦，<strong>CI</strong> 在服务器上拦。<strong>命令运行器</strong>把长命令变短。<strong>正则表达式</strong>是贯穿这些工具的小语言。编辑器的搜索替换也靠它。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s1" data-nav="本讲地图与 Minilib" data-t="0:00">检查交给工具链，在多个关口各跑一遍 <span class="ts">0:00</span></h2>
+<p class="lead">本讲讲一条质量流水线。同一套检查，在编辑器、提交前和服务器上各跑一遍。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>ruff format --check src   <span class="cm"># 格式化器：只报告写法问题，不改文件</span>
+ruff check src            <span class="cm"># linter：不运行代码，找反模式</span>
+python -m pytest          <span class="cm"># 测试：真跑代码，看结果对不对</span>
+git commit                <span class="cm"># 钩子：提交前自动把上面几步跑一遍</span></pre></div>
+<p class="like"><b>打个比方</b>像机场安检。值机、安检口、登机口各查一次。离飞机越近，越没法绕过去。</p>
+<p>本讲先讲格式化器、linter 和测试。再讲 pre-commit 钩子、持续集成和命令运行器。最后讲正则表达式。</p>
+<p>很多工具只认一门语言。它们得懂这门语言的语义（<span class="ts">0:37</span>）。但概念是通用的，每门语言都找得到对应的工具。比如 Python 的 <a href="https://docs.astral.sh/ruff/" target="_blank" rel="noopener">Ruff</a> 能格式化，也能 lint。<a href="https://prettier.io/" target="_blank" rel="noopener">Prettier</a> 则能跨好几门语言。</p>
+<figure class="fig"><script>
+DG('flow', { nodeH: 52, cols: [
+  [ { id: 'e', l: '编辑器', s: '保存时格式化 · EditorConfig', tone: 'neutral' } ],
+  [ { id: 'f', l: '格式化 + lint', s: 'ruff format / ruff check', tone: 'info' } ],
+  [ { id: 't', l: '测试 + 覆盖率', s: 'pytest · coverage', tone: 'data' } ],
+  [ { id: 'h', l: 'pre-commit 钩子', s: '每次 git commit 前', tone: 'warn' } ],
+  [ { id: 'c', l: 'CI / CD', s: '每次 push / PR / 定时', tone: 'ok' } ]
+], edges: [ ['e', 'f', '', 'data'], ['f', 't', '', 'data'], ['t', 'h', '', 'data'], ['h', 'c', '', 'data'] ] });
+</script><figcaption>同一套检查，在离代码越来越远的地方各跑一次。命令运行器让每一步只敲一个短命令，比如 just、npm scripts、hatch</figcaption></figure>
+<p>讲师全程用一个叫 <strong>Minilib</strong> 的 Python 小库演示。它只有一个文件，用 Hatch 管理（<span class="ts">1:08</span>、<span class="ts">3:35</span>）。里面是些没啥用、正好拿来演示的函数，比如 fizzbuzz 和 left_pad。</p>
+<p>视频没有完整展示源码。所以笔记照视频的描述，<strong>重建了一份 Minilib</strong>。它放在<a href="labs/lab09.html">本讲练习页</a>的 <code>minilib/</code> 目录里。视频提到的格式问题、lint 问题和两个 bug，都故意留着。本页的“本机实测”大多跑在它上面。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>检查只在自己电脑上跑，换个人就忘了。你今天记得跑格式化，同事明天直接提交。所以检查要写进钩子和 CI，让机器替人记着。</p></div>
+<div class="callout warn"><div class="ct">本机环境</div>
+<p>本机有 Python 3.13.5、pytest 9.1.1、coverage 7.14.3 和 git。还有 Vim、GNU sed 4.9 和 GNU grep 3.0，grep 支持 <code>-P</code>。</p>
+<p>本机没有全局安装 ruff、pre-commit、semgrep、hatch、just、make 和 shellcheck。练习要用的 ruff、pre-commit 和 semgrep，每次运行时临时装进沙箱 venv。用完就删，不碰全局环境。所以视频里的 <code>hatch fmt</code>、<code>hatch test</code>，本页直接换成调用 <code>ruff</code> 和 <code>pytest</code>。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s2" data-nav="格式化器" data-t="1:08">格式化器只改写法，不改程序的意思 <span class="ts">1:08</span></h2>
+<p class="lead">格式化器只动表面写法：引号、空格、import 顺序、行长。改完以后，程序的语法树和原来一模一样。</p>
+<div class="code"><div class="cap">python · 最小例子（取自下面的实测 diff）</div><pre>def hypot(a,b):                  <span class="cm"># 格式化前：逗号后、* 两边都没空格</span>
+    return sqrt(a*a + b*b)
+def hypot(a, b):                 <span class="cm"># 格式化后：只补了空格</span>
+    return sqrt(a * a + b * b)   <span class="cm"># 语法树没变，程序的意思也没变</span></pre></div>
+<p class="like"><b>打个比方</b>格式化器像报社的排版员。他只调字距和换行，一个字都不改。所以稿子交给他，你不用再校对一遍。</p>
+<p>格式化器英文叫 auto-formatter。有了它，人不用再操心这些细节。脑力可以花在更难的问题上。更大的好处是<strong>整个团队的代码风格统一</strong>（讲义）。</p>
+<ul class="keys">
+<li><strong>两种模式</strong>（<span class="ts">2:25</span>）。检查模式加 <code>--check</code>，只报告，退出码非 0，适合放进 CI。修复模式直接改写文件。</li>
+<li><strong>可配置的程度不同</strong>。Prettier 能配很多选项，配置文件要提交进仓库。Black 和 gofmt 几乎不让你配。这是为了躲开<a href="https://en.wikipedia.org/wiki/Law_of_triviality" target="_blank" rel="noopener">“自行车棚效应”</a>。引号用单的还是双的，不值得花时间争（<span class="ts">2:59</span>）。</li>
+<li><strong>编辑器集成</strong>：可以设成保存时自动格式化。讲师没演示这一步。</li>
+<li>代码<strong>得先能被解析</strong>，格式化器才能干活（<span class="ts">4:07</span>）。</li>
+</ul>
+<div class="code term"><div class="cap">bash · 本机实测（重建的 Minilib）</div><pre><span class="p">$ </span><span class="cmd">ruff format --check --diff src</span>   <span class="cm"># 只看要改什么，不动文件</span>
+<span class="o">--- src\minilib\utils.py
++++ src\minilib\utils.py
+@@ -1,4 +1,5 @@
+ """A few small utility functions (reconstructed Minilib, with deliberate issues)."""
++
+ import subprocess
+…
+-        return 'fizz'
++        return "fizz"
+…
+-def hypot(a,b):
+-    return sqrt(a*a + b*b)
++def hypot(a, b):
++    return sqrt(a * a + b * b)
+…
+1 file would be reformatted, 1 file already formatted</span>
+<span class="p">$ </span><span class="cmd">ruff format src</span>                  <span class="cm"># 去掉 --check，才真正写回文件</span>
+<span class="o">1 file reformatted, 1 file left unchanged</span></pre></div>
+<p>视频里讲师敲的是 <code>hatch fmt -f --check</code>，底下也是 Ruff。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>CI 里忘了加 <code>--check</code>，格式化器就直接改文件。它改完照样返回 0，CI 永远是绿的。另一个坑在语法错误。代码解析不了，格式化器只会报错。所以先修语法错误，再谈格式。</p></div>
+<h3 id="s2b">EditorConfig 让各家编辑器守同一套规矩 <span class="ts">5:16</span></h3>
+<p class="lead">在项目根目录放一个 <code>.editorconfig</code>。不管用 Vim、VS Code 还是 Cursor，缩进和换行都一样。</p>
+<p><a href="https://editorconfig.org/" target="_blank" rel="noopener">EditorConfig</a> 是一种文件格式，加上一类编辑器插件。讲师演示了一下：保存时，行尾空格自动消失。Missing Semester 的仓库也用它。</p>
+<div class="code"><div class="cap">minilib/.editorconfig 节选（注释是笔记加的）</div><pre>root = true                       <span class="cm"># 编辑器往上找配置，找到这里就停</span>
+
+[*]                               <span class="cm"># 对所有文件</span>
+end_of_line = lf                  <span class="cm"># 换行符用 LF</span>
+insert_final_newline = true       <span class="cm"># 文件末尾留一个换行</span>
+trim_trailing_whitespace = true   <span class="cm"># 保存时删掉行尾空格</span>
+charset = utf-8
+
+[*.py]
+indent_style = space              <span class="cm"># Python 用空格缩进，一层 4 个</span>
+indent_size = 4</pre></div>
+<p>下面的演示逐处看格式化器改了哪些字符。最后比对语法树，说明它为什么能放心自动跑。</p>
+<div data-vz="ch09-format"></div>
+
+<!-- ============================================================ -->
+<h2 id="s3" data-nav="Linter" data-t="7:06">linter 不运行代码，靠读代码找反模式 <span class="ts">7:06</span></h2>
+<p class="lead">linter 做<strong>静态分析</strong>。它不运行代码，光读代码就能找出反模式。它比格式化器深一层，看的是语义（<span class="ts">7:41</span>）。</p>
+<div class="code"><div class="cap">python · 最小例子（节选自重建的 Minilib）</div><pre>import subprocess                         <span class="cm"># I001：os 应该排在 subprocess 前面</span>
+import os                                 <span class="cm"># F401：导入了没用，能安全地自动删掉</span>
+
+def divide(a, b):
+    if b == 0:
+        raise ValueError("divide by zero")   <span class="cm"># EM101：字符串直接写进异常，要人工改</span></pre></div>
+<p class="like"><b>打个比方</b>linter 像带你的老同事扫一眼代码。他不用跑程序，光看就知道哪里迟早出事。</p>
+<ul class="keys">
+<li><strong>规则</strong>：每个 linter 带一组规则和预设，可以按项目配置。Ruff 大约有 800 条规则（<span class="ts">15:56</span>）。</li>
+<li><strong>误报</strong>：有些规则会误报。所以都能按文件或按行关掉，Python 里写 <code># noqa: 规则编号</code>。</li>
+<li><strong>文档</strong>：好的 linter 会讲清每条规则。查什么，为什么不好，该怎么写。讲义举的例子是 <a href="https://docs.astral.sh/ruff/rules/collapsible-if/" target="_blank" rel="noopener">SIM102</a>，也就是可以合并的嵌套 if。</li>
+<li><strong>自动修复</strong>：有些问题能自动修。讲师强调要分清两种（<span class="ts">8:48</span>）。<strong>安全修复</strong>保证不改变语义。<strong>不安全修复</strong>要加 <code>--unsafe-fixes</code>，讲师打趣说“如果你觉得刺激”。很难写出安全变换的问题，只能由人来改。</li>
+</ul>
+<div class="code term"><div class="cap">bash · 本机实测（重建版报 6 个问题）</div><pre><span class="p">$ </span><span class="cmd">ruff check --output-format=concise src</span>   <span class="cm"># 一行一个问题，带 [*] 的能安全自动修</span>
+<span class="o">src\minilib\__init__.py:1:1: F403 `from minilib.utils import *` used; unable to detect undefined names
+src\minilib\utils.py:2:1: I001 [*] Import block is un-sorted or un-formatted
+src\minilib\utils.py:3:8: F401 [*] `os` imported but unused
+src\minilib\utils.py:10:5: RET505 [*] Unnecessary `elif` after `return` statement
+src\minilib\utils.py:24:26: EM101 Exception must not use a string literal, assign to variable first
+src\minilib\utils.py:33:12: S602 `subprocess` call with `shell=True` identified, security issue
+Found 6 errors.
+[*] 3 fixable with `--fix` (1 unsafe fix available with `--fix --unsafe-fixes`).</span></pre></div>
+<p>视频里报了 7 个错误，3 个能自动修。本机重建版是 6 个，也是 3 个能修。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>规则</th><th>查的是什么</th><th>视频里怎么处理</th></tr>
+<tr><td>F403</td><td><code>import *</code> 让别的静态分析不知道定义了哪些名字</td><td>讲师有意保留，好写 <code>from minilib import 某函数</code>。于是加了 <code># noqa: F403</code>（<span class="ts">11:46</span>）</td></tr>
+<tr><td>I001 / F401</td><td>import 没排序。导入了却没用</td><td>能安全地自动修，带 [*] 号</td></tr>
+<tr><td>RET505</td><td>if 分支已经 return，后面的 elif 和 else 就多余</td><td>自动修成普通 if（<span class="ts">10:36</span>）</td></tr>
+<tr><td>EM101</td><td>异常里直接写字符串字面量，回溯里会出现两遍</td><td>照规则文档改。先赋给变量，再 raise（<span class="ts">12:23</span> 到 <span class="ts">14:06</span>）</td></tr>
+<tr><td>S602</td><td><code>shell=True</code> 让 shell 解析命令字符串。文件名里的 <code>;</code> 这类字符，会被当成代码执行</td><td>讲师先加 <code># noqa: S602</code>，好引出下一个工具。实际应该修掉（<span class="ts">15:14</span>）</td></tr>
+</table></div>
+<div class="callout tool"><div class="ct">规则文档就是老师</div><p>讲师用搜索引擎查 EM101。Ruff 也能直接在终端里查，命令是 <code>ruff rule EM101</code>。本机实测见 <a href="labs/lab09.html#ex01">练习 1</a>。它会给出 What it does、Why is this bad 和 Example 三段。照它的说明，把 <code>raise ValueError("divide by zero")</code> 拆成两步。先写 <code>msg = "divide by zero"</code>，再写 <code>raise ValueError(msg)</code>。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>看到报错就加 <code># noqa</code>，等于剪断警报器的线。S602 这类安全问题尤其不能压。讲师加 noqa 只是为了引出下一个工具。还有一个坑是随手开 <code>--unsafe-fixes</code>。它可能改掉程序的行为，改完一定要看 diff。</p></div>
+<p>下面的演示从 6 个问题走到 All checks passed。看哪些交给 <code>--fix</code>，哪些照文档手改，哪些有意豁免。</p>
+<div data-vz="ch09-lint"></div>
+
+<!-- ============================================================ -->
+<h2 id="s4" data-nav="semgrep" data-t="16:29">semgrep 在语法树上匹配，正则换个写法就漏 <span class="ts">16:29</span></h2>
+<p class="lead">grep 一个字符一个字符地比，代码换个写法就找不到。semgrep 先把代码解析成语法树，再按结构匹配。</p>
+<div class="code"><div class="cap">python · 最小例子（取自练习 4 的样本）</div><pre>subprocess.Popen(cmd, shell=True)    <span class="cm"># 1 号：grep 和 semgrep 都能找到</span>
+subprocess.Popen(
+    cmd,
+    shell=True,
+)                                    <span class="cm"># 3 号：拆成多行，grep 一次只看一行，漏了</span>
+P(cmd, shell=True)                   <span class="cm"># 5 号：Popen 的别名，字符级搜索认不出</span>
+# subprocess.Popen(cmd, shell=True)  <span class="cm"># 8 号：只是注释，grep 第一版却报了</span></pre></div>
+<p class="like"><b>打个比方</b>grep 像按字形查字典。同一个词换行写，它就不认识了。semgrep 像懂语法的语文老师。句子怎么断行、换什么代称，主谓宾它都认得。</p>
+<p>通用 linter 的规则适合起步。可项目常有自己的规矩。比如“别用 pickle，有安全隐患”，又比如“别用 exec”。<a href="https://github.com/semgrep/semgrep" target="_blank" rel="noopener">semgrep</a> 全名是 semantic grep，用起来像 grep。不同在于，它先把代码<strong>解析成语法树</strong>，在树上匹配。它支持多种语言。</p>
+<p>讲师先用正则搜 <code>subprocess.check_output(.*, shell=True</code>。他用的工具是 ag，一个 grep 的替代品。一开始能找到。可代码稍微一改，正则就匹配不上了。比如多加一个关键字参数，或者把调用拆成多行。他只能不停地补正则，像打地鼠（<span class="ts">17:37</span> 到 <span class="ts">18:44</span>）。换成 semgrep 是这样写：</p>
+<div class="code term"><div class="cap">讲义原文</div><pre><span class="p">$ </span><span class="cmd">semgrep -l python -e "subprocess.Popen(..., shell=True, ...)"</span></pre></div>
+<p>模式里的 <code>...</code> 表示任意参数。讲师演示了一下。拆成多行、多了参数，semgrep 都找得到（<span class="ts">19:18</span>）。</p>
+<p><a href="labs/lab09.html#ex04">练习 4</a> 在本机沙箱里装了 semgrep 1.182.1。它拿 9 种写法逐个测了一遍，结果画在下面的演示里。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>拿 grep 做代码规范检查，会两头出错。调用拆成多行，它就漏报。注释和字符串里出现这串字，它又误报。练习 4 实测过 6 处真调用。grep 最多找到 3 处，semgrep 找到 5 处。semgrep 也有盲区。<code>shell=True</code> 藏进字典再用 <code>**kw</code> 传进去，它就看不出来。</p></div>
+<div data-vz="ch09-semgrep"></div>
+
+<!-- ============================================================ -->
+<h2 id="s5" data-nav="测试" data-t="20:30">测试就是再写一段代码，去检查原来的代码 <span class="ts">20:30</span></h2>
+<p class="lead">测试是一段会自己跑的代码。它调用被测函数，结果不符合预期就报错。代码一直在改，测试就一直跑。它确认你没弄坏东西（<span class="ts">21:09</span>）。</p>
+<div class="code"><div class="cap">tests/test_fizzbuzz.py（内容同视频，注释是笔记加的）</div><pre>from minilib import fizzbuzz            <span class="cm"># 忘了这行，报的是 NameError，不是断言失败</span>
+
+
+def test_fizzbuzz_3():                  <span class="cm"># 名字以 test_ 开头，pytest 才会找到它</span>
+    assert fizzbuzz(3) == "fizz"
+
+
+def test_fizzbuzz_30():
+    assert fizzbuzz(30) == "fizzbuzz"   <span class="cm"># 30 同时是 3 和 5 的倍数</span></pre></div>
+<p class="like"><b>打个比方</b>测试像给代码配一把尺子。每次改完，拿尺子量一遍。长短不对，马上就知道。</p>
+<p>测试是让人相信“代码是对的”的标准手段。这是个很深的话题，这里只讲高层概念。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>概念</th><th>含义</th></tr>
+<tr><td>单元测试 unit test</td><td>测单个函数。比如 fizzbuzz 该返回什么，left_pad 该返回什么</td></tr>
+<tr><td>集成测试 integration test</td><td>测模块之间、服务之间怎么配合</td></tr>
+<tr><td>功能测试 functional test</td><td>端到端地测，看软件是否满足用户需求</td></tr>
+<tr><td>测试驱动开发 TDD</td><td>先把规格写成测试，哪怕只是一部分。再写实现，最后跑测试确认实现达标（<span class="ts">21:41</span>）</td></tr>
+<tr><td>回归测试 regression test</td><td>修完 bug 就写一个测试，保证它以后不会悄悄回来（讲义）</td></tr>
+<tr><td>性质测试 property-based test</td><td>见<a href="#s7">本讲第 7 节</a></td></tr>
+<tr><td>mock</td><td>用假的实现替代数据库、Web API 这类外部依赖。出自讲义，视频问答也讲了（<span class="ts">1:11:42</span>）。见<a href="#s16">本讲第 16 节</a></td></tr>
+</table></div>
+<p>在 pytest 里，测试就是普通函数。它放在约定的位置，名字以 <code>test_</code> 开头。它不带参数、不返回值，里面写 <code>assert</code>。pytest 会自己找到并运行它们（<span class="ts">24:04</span>）。</p>
+<p>测试怎么组织，要看语言和框架。做自己的项目时，查一下这门语言用什么测试框架就行。</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">python -m pytest -q</span>   <span class="cm"># 点是通过，F 是失败</span>
+<span class="o">.F                                                                       [100%]
+================================== FAILURES ===================================
+______________________________ test_fizzbuzz_30 _______________________________
+
+    def test_fizzbuzz_30():
+&gt;       assert fizzbuzz(30) == "fizzbuzz"
+E       AssertionError: assert 'fizz' == 'fizzbuzz'
+…
+1 failed, 1 passed in 0.96s</span></pre></div>
+<p>讲师的过程是这样的。第一个测试一跑就报 NameError。原来他忘了 import，测试本身也会有 bug（<span class="ts">25:09</span>）。补上以后就通过了。第二个测试 fizzbuzz(30) 失败了。具体的输入和输出，让他很快找到原因。判断 15 的分支应该放在最前面（<span class="ts">25:42</span> 到 <span class="ts">26:17</span>）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>测试一红，先别急着改被测代码。看清报的是什么错。<code>AssertionError</code> 说明被测代码结果不对。NameError 这类别的异常，多半是测试自己写错了。</p>
+<p>更隐蔽的坑是函数名没以 <code>test_</code> 开头。pytest 根本不会跑它。本机实测：</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充，非视频内容）</div><pre><span class="p">$ </span><span class="cmd">printf 'def check_fizz():\n    assert 1 == 2\n\n\ndef test_ok():\n    assert True\n' &gt; test_a.py</span>
+<span class="p">$ </span><span class="cmd">python -m pytest -q -p no:cacheprovider test_a.py</span>   <span class="cm"># check_fizz 必挂，却没人跑它</span>
+<span class="o">.                                                                        [100%]
+1 passed in 1.30s</span></pre></div>
+<p>只跑了 <code>test_ok</code> 一个。必挂的 <code>check_fizz</code> 被悄悄跳过，结果还是全绿。</p></div>
+<div data-vz="ch09-test"></div>
+
+<!-- ============================================================ -->
+<h2 id="s6" data-nav="代码覆盖率" data-t="26:17">覆盖率只看哪行跑过，不管结果对不对 <span class="ts">26:17</span></h2>
+<p class="lead">跑测试时，覆盖率工具记下哪些代码行被执行过。它只看测到了哪里，不看测得对不对。</p>
+<div class="code"><div class="cap">手推 · 最小例子（数字来自下面的实测和视频）</div><pre><span class="cm"># Cover = (Stmts - Miss) / Stmts，也就是跑到的语句占多少</span>
+(22 - 11) / 22    <span class="cm"># 本机 TOTAL：50%</span>
+(18 - 9) / 18     <span class="cm"># 视频：utils.py 有 18 条语句，漏了 9 条，也是 50%</span>
+(18 - 7) / 18     <span class="cm"># 讲师补了 fizzbuzz(95) 的测试，多覆盖 2 条，约 61%（视频 28:28）</span></pre></div>
+<p class="like"><b>打个比方</b>覆盖率像检查学生有没有把课本每一页都翻过。翻过不代表看懂了。</p>
+<p>测试写得好不好，程序很难回答。写测试要创造力，是一门越练越好的手艺。不过有工具帮忙，就是<strong>代码覆盖率</strong>（<span class="ts">26:51</span>）。工具能逐行显示覆盖情况。Codecov 这类服务还能跟踪覆盖率的历史变化（讲义）。</p>
+<div class="code term"><div class="cap">bash · 本机实测（视频里用 hatch test -c）</div><pre><span class="p">$ </span><span class="cmd">python -m coverage run -m pytest -q --tb=no</span>   <span class="cm"># 在覆盖率统计下跑测试</span>
+<span class="p">$ </span><span class="cmd">python -m coverage report -m</span>                  <span class="cm"># -m 列出没跑到的行号</span>
+<span class="o">Name                      Stmts   Miss  Cover   Missing
+-------------------------------------------------------
+src\minilib\__init__.py       1      0   100%
+src\minilib\utils.py         21     11    48%   10-15, 19, 23-25, 29, 33
+-------------------------------------------------------
+TOTAL                        22     11    50%</span></pre></div>
+<div class="grid2">
+  <div class="mini"><h4>Missing 列怎么读</h4><p>这一列是没执行到的行号。10-15 是 fizzbuzz 的后几支。注意第 13 行 <code>return "fizzbuzz"</code>。明明测了 fizzbuzz(30)，它还是没跑到。说明这行永远走不到，bug 就在这里。</p></div>
+  <div class="mini"><h4>HTML 报告</h4><p><code>coverage html</code> 生成网页报告。它用颜色逐行标出哪些执行过。看一眼就知道下一步该测什么（<span class="ts">27:23</span>）。讲师说，这也是评估开源项目质量的好指标（<span class="ts">29:08</span>）。</p></div>
+</div>
+<div class="callout ai"><div class="ct">问答：能用 AI 提高覆盖率吗？（<span class="ts">29:41</span>）</div>
+<p>完全可以，这也是本讲的练习之一。先搭一个闭环。让 AI 智能体能自己跑测试，自己生成覆盖率报告。XML 格式更紧凑，更适合给 LLM 看。然后告诉它：把覆盖率提到 100%。</p>
+<p>智能体写测试相当不错。但覆盖率不是完美指标，AI 写的测试也不完美。讲师见过一个前端项目，覆盖率 100%。可那些测试几乎没用（<span class="ts">31:05</span>）。所以要审查它的输出。必要时多给点指引，比如“去测功能”。讲义也说，别过度追求覆盖率，专心写高质量的测试。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>把覆盖率当 KPI，就会有人写不带 assert 的测试。每行都跑过，覆盖率 100%，bug 一个没抓到。练习 2 实测过这种测试，left_pad 的截断 bug 一直都在。</p></div>
+<p>下面的演示逐条语句算覆盖率。最后看一个真实例子：覆盖率 100%，bug 还在。</p>
+<div data-vz="ch09-coverage"></div>
+
+<!-- ============================================================ -->
+<h2 id="s7" data-nav="性质测试" data-t="31:38">性质测试不写具体答案，只写结果该守的规律 <span class="ts">31:38</span></h2>
+<p class="lead">普通测试写的是“这个输入得到这个输出”。性质测试只写函数该满足的性质。输入由测试库成批生成。</p>
+<div class="code"><div class="cap">python · 视频里的两条性质（按视频描述整理，示意）</div><pre>@given(st.text(max_size=20), st.integers(0, 50))   <span class="cm"># 字符串最长 20，整数取 0 到 50</span>
+def test_left_pad_1(s, i):
+    assert len(left_pad(s, i)) &gt;= i      <span class="cm"># 性质 1：结果长度至少为 i</span>
+
+@given(st.text(max_size=20), st.integers(0, 50))
+def test_left_pad_2(s, i):
+    assert s in left_pad(s, i)           <span class="cm"># 性质 2：原字符串要完整留在结果里</span></pre></div>
+<p class="like"><b>打个比方</b>像验收一台榨汁机。你不必算出每个橙子该出多少汁。只查两条：汁不比橙子多，杯里没有橙子皮。然后扔一千个随机橙子进去试。</p>
+<p>left_pad 的规格是给字符串左边补空格。补完的长度至少为 i。讲师写了一个“巧妙”的实现，里面藏着 bug。他借这个例子介绍<strong>性质测试</strong>，英文是 property-based testing。上面两条性质，整理自视频 <span class="ts">34:36</span> 到 <span class="ts">36:13</span>。</p>
+<p>它更接近形式化规格，但通常只是<strong>部分规格</strong>（<span class="ts">32:14</span>）。这种方法由 Haskell 的 <a href="https://hackage.haskell.org/package/QuickCheck" target="_blank" rel="noopener">QuickCheck</a> 发明并推广。Python 里对应的库是 <a href="https://hypothesis.readthedocs.io/" target="_blank" rel="noopener">Hypothesis</a>。</p>
+<ul class="keys">
+<li>Hypothesis 不做数学证明。它随机生成输入，看性质成不成立。人要给一点提示。比如字符串最长 20，整数取 0 到 50（<span class="ts">35:43</span>）。</li>
+<li>讲师故意写了几个错误实现，第一条性质照样成立。可见性质只是部分规格（<span class="ts">37:23</span>）。</li>
+<li>现场还踩了个坑：忘了写 <code>assert</code>。表达式算出 True 或 False，转手就被丢掉。测试永远“通过”（<span class="ts">38:19</span>）。</li>
+<li>第二条性质找到了具体反例：<code>s = '00'</code>，<code>i = 1</code>（<span class="ts">39:26</span>）。拿着它就能去调试。</li>
+</ul>
+<div class="callout extra"><div class="ct">补充（非视频内容）：不装 Hypothesis 也能体会它的思路</div>
+<p>本机没装 Hypothesis。练习不要求，按规范也不额外安装。笔记用 30 行标准库代码，模仿它的两件事。一是随机生成输入，二是把反例“缩小”到最简。在重建的 left_pad 上真跑，源码在下面演示的代码面板里：</p>
+<div class="code term"><div class="cap">bash · 本机实测（prop.py 是笔记作者写的）</div><pre><span class="p">$ </span><span class="cmd">python prop.py</span>
+<span class="o">len(left_pad(s, i)) &gt;= i   -&gt; holds for 500 random inputs
+s in left_pad(s, i)        -&gt; fails: ('ab0a0baab0abbbba', 5), shrunk to ('00', 1)</span></pre></div>
+<p>缩小后的反例，和视频里 Hypothesis 给的一模一样。<code>left_pad('00', 1)</code> 先补成 <code>' 00'</code>，再取最后 1 个字符，得到 <code>'0'</code>。字符串比 i 长时，就被截断了。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>写测试最容易漏的就是 <code>assert</code>。表达式单独一行，Python 算完就扔，测试永远是绿的。本机实测：</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充，非视频内容）</div><pre><span class="p">$ </span><span class="cmd">printf 'def test_no_assert():\n    1 + 1 == 3\n' &gt; test_b.py</span>   <span class="cm"># 忘了写 assert</span>
+<span class="p">$ </span><span class="cmd">python -m pytest -q -p no:cacheprovider test_b.py</span>          <span class="cm"># 1 + 1 == 3 明明是错的</span>
+<span class="o">.                                                                        [100%]
+1 passed in 0.63s</span></pre></div>
+<p>另一个坑是只测“短字符串补齐”。没人去试比 i 长的字符串，截断 bug 就一直藏着。</p></div>
+<div data-vz="ch09-property"></div>
+
+<!-- ============================================================ -->
+<h2 id="s8" data-nav="pre-commit 钩子" data-t="39:58">pre-commit 钩子不通过，git 就拒绝提交 <span class="ts">39:58</span></h2>
+<p class="lead">每次提交前，git 先跑一遍钩子。任何一个钩子返回非 0，这次提交就不会生成。</p>
+<div class="code"><div class="cap">bash · 最小例子（示意）</div><pre>pre-commit install              <span class="cm"># 每个克隆做一次，写入 .git/hooks/pre-commit</span>
+git commit -m 'Add double()'    <span class="cm"># 先跑钩子：格式不对，这次提交被拒</span>
+ruff format src &amp;&amp; git add -A   <span class="cm"># 修好格式，重新暂存</span>
+git commit -m 'Add double()'    <span class="cm"># 钩子全过，提交才生成</span>
+git commit --no-verify          <span class="cm"># 应急时跳过钩子，所以服务器上还要 CI</span></pre></div>
+<p class="like"><b>打个比方</b>钩子像小区门口的门禁。刷不过卡就进不了门。可门边还有个侧门，叫 --no-verify。</p>
+<p>Git 的<a href="https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks" target="_blank" rel="noopener">钩子</a>（hook）会在某些操作前后，运行你指定的脚本。<strong>pre-commit 钩子</strong>在每次提交之前运行。</p>
+<p><a href="https://pre-commit.com/" target="_blank" rel="noopener">pre-commit</a> 框架让配置更省事。在 <code>.pre-commit-config.yaml</code> 里列出要跑的检查。每个开发者只需执行一次 <code>pre-commit install</code>（<span class="ts">40:32</span>）。</p>
+<div class="code"><div class="cap">minilib/.pre-commit-config.yaml（练习 1，注释是笔记加的）</div><pre>repos:
+  - repo: local                    <span class="cm"># 钩子就是本机已有的命令，不用去 GitHub 下载</span>
+    hooks:
+      - id: ruff-format
+        name: ruff format --check
+        entry: ruff format --check <span class="cm"># 只检查，不修改</span>
+        language: system           <span class="cm"># 直接在 PATH 里找 ruff</span>
+        types: [python]            <span class="cm"># 只把暂存的 .py 文件交给它</span>
+      - id: ruff-check
+        name: ruff check
+        entry: ruff check
+        language: system
+        types: [python]</pre></div>
+<p>讲师的配置跑的是 <code>hatch fmt --check</code>。这里换成直接调用 ruff。</p>
+<div class="code term"><div class="cap">bash · 本机实测（新加的 double() 里写了 x*2）</div><pre><span class="p">$ </span><span class="cmd">git commit -m 'Add double()'</span>   <span class="cm"># 钩子先跑，格式检查没过</span>
+<span class="o">ruff format --check......................................................Failed
+- hook id: ruff-format
+- exit code: 1
+
+unformatted: File would be reformatted
+  --&gt; src\minilib\utils.py:37:13
+   |
+36 | def double(x):
+   -     return x*2
+37 +     return x * 2
+   |
+
+1 file would be reformatted
+
+ruff check...............................................................Passed</span></pre></div>
+<p>钩子返回非 0 的退出码，git 就拒绝提交。修好之前，提交进不去。这样就能在所有开发者身上，强制同一套质量标准。不然人很容易忘了先跑格式化（<span class="ts">41:05</span>）。</p>
+<p>学生的总结很到位。pre-commit 钩子就是仓库里的一组检查。每次提交前，它们必须全部通过。确实需要时，可以加一个参数跳过，就是 <code>git commit --no-verify</code>（<span class="ts">41:45</span>）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>第一，钩子不随克隆带走。配置文件在仓库里，真正的钩子却装在 <code>.git/hooks/</code> 下。新同事没跑 <code>pre-commit install</code>，钩子就不存在。第二，<code>--no-verify</code> 一加就绕过去了。本机实测，带着两个 lint 错误也提交成功。所以服务器上还得有 CI 再查一遍。</p></div>
+<p>下面的演示走一遍完整流程。提交被拦，修好格式，再提交成功。最后看 <code>--no-verify</code> 怎么绕过。</p>
+<div data-vz="ch09-hook"></div>
+
+<!-- ============================================================ -->
+<h2 id="s9" data-nav="持续集成（CI）" data-t="41:45">CI 在服务器上重跑同一套检查，谁也绕不过 <span class="ts">41:45</span></h2>
+<p class="lead">前面的检查都在本机跑。持续集成服务在远程服务器上跑同样的脚本。每次 push、每个 PR，甚至按时间表，它都会跑一遍。</p>
+<div class="code"><div class="cap">yaml · 最小例子（示意，省掉了检出代码和装 ruff）</div><pre>on: [push, pull_request]      <span class="cm"># 每次 push、每个 PR 都触发</span>
+jobs:
+  lint:
+    runs-on: ubuntu-latest    <span class="cm"># 每个作业一台全新的虚拟机</span>
+    steps:
+      - run: ruff check .     <span class="cm"># 退出码非 0，这个作业就变红</span></pre></div>
+<p class="like"><b>打个比方</b>钩子是自家门口的门禁，CI 是机场安检。自家门禁可以不装，也能绕开。机场安检谁都得过。</p>
+<p><strong>持续集成</strong>服务通常和代码托管平台搭配，比如 <a href="https://github.com/features/actions" target="_blank" rel="noopener">GitHub Actions</a>。它在特定事件发生时运行你的脚本。时间表可以细到每周一上午 9 点（<span class="ts">42:22</span>）。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>触发</th><th>能抓住什么（讲义）</th></tr>
+<tr><td>每次 push</td><td>引入主线的错误</td></tr>
+<tr><td>每个 pull request</td><td>贡献者带进来的问题。很多人连格式化器都不跑。结果直接显示在 PR 页面上（<span class="ts">46:57</span>）</td></tr>
+<tr><td>定时</td><td>外部依赖的问题。比如依赖悄悄发了破坏性改动。版本号却按语义化版本标成兼容（第 6 讲）</td></tr>
+</table></div>
+<ul class="keys">
+<li><strong>能跑什么</strong>：格式检查、lint 和测试。编译型语言确认能编译，静态类型语言跑类型检查。讲师的演示里，类型检查作业失败了（<span class="ts">46:26</span>）。</li>
+<li><strong>矩阵</strong>：远程机器不在乎跑得久。可以在多个系统和多个语言版本的组合上，并行跑测试。比如 Windows、Linux、macOS 各配几个版本。讲师管这叫“笛卡尔积”（<span class="ts">42:56</span>）。</li>
+<li><strong>只检查不修改</strong>：CI 里的工具通常用 check 模式。格式不对就报错，不替你改（讲义）。</li>
+<li><strong>状态徽章</strong>：README 里常放 CI 状态和覆盖率的徽章（讲义）。</li>
+<li><strong>组成</strong>：工作流是 <code>.github/workflows/</code> 下的 YAML 文件。结构是触发事件、若干作业 jobs、每个作业的步骤 steps。可以复用别人写好的 action，比如检出代码、安装 Python。最后一步通常是一条 shell 命令。任何一步退出码非 0，就算失败（<span class="ts">45:55</span>）。</li>
+</ul>
+<div class="callout ai"><div class="ct">讲师建议（<span class="ts">43:31</span>）</div><p>讲师自己也不背 GitHub Actions 的写法。需要时查文档，或者从相似的仓库里找个例子改改。也可以让编码智能体来写，它们很擅长这个。</p>
+<p>讲义也建议，找和你项目相似的高质量开源项目。研究它们的 <code>pyproject.toml</code>、<code>.github/workflows/</code> 和 <code>DEVELOPMENT.md</code>。</p></div>
+<div class="callout extra"><div class="ct">本机的替代做法</div><p>本页没有把代码推到 GitHub。那是对外动作，要用你本人的账号。<a href="labs/lab09.html#ex03">练习 3</a> 写好了完整的 <code>ci.yml</code>。还写了一个 <code>ci_local.sh</code>，在本机依次执行同样的检查命令。下面演示里的控制台输出，就是它真跑的结果。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>CI 只能抓你写了检查的东西。练习 3 里，left_pad 的截断 bug 一直在，CI 却是绿的。因为没有一条测试去测它。还有一个常见的坑：本地能过，CI 不过。CI 每次都用全新的机器。你本地顺手装过的包，它那里没有。</p></div>
+<div data-vz="ch09-ci"></div>
+
+<!-- ============================================================ -->
+<h2 id="s10" data-nav="持续部署（CD）" data-t="47:33">同一套 CI 设施，还能用来自动部署 <span class="ts">47:33</span></h2>
+<p class="lead">CI 的基础设施不只能跑测试。很多项目还用它自动发布和部署。这就是持续部署，简称 CD。</p>
+<div class="code"><div class="cap">yaml · 最小例子（写法示意）</div><pre>on:
+  push:
+    branches: [main]                    <span class="cm"># 只有推到主分支才部署</span>
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./build.sh &amp;&amp; ./publish.sh  <span class="cm"># 构建失败，就不会发布</span></pre></div>
+<p class="like"><b>打个比方</b>CI 是质检员，CD 是质检完直接装车发货的传送带。质检不过，货就不上车。</p>
+<p>比如为每个操作系统编译二进制并自动发布。也可以把应用部署到 Web 服务，或者构建 Docker 镜像（讲义）。第 6 讲讲过这些构件。</p>
+<p>Missing Semester 自己就是这样。讲义仓库每次 <code>git push</code>，网站就自动构建。构建好的网站发布到 GitHub Pages（<span class="ts">48:04</span>）。CI 里还能跑覆盖率，再上传到 Codecov 这类服务。在网页上就能长期跟踪（<span class="ts">48:37</span>）。</p>
+<div class="callout tip"><div class="ct">讲义里的真实例子</div><p>Missing Semester 仓库有一个链接检查工作流。它基于讲师自己写的 proof-html action。这个工作流经常失败，多半是第三方网站的问题。但它确实帮他们抓到、修好了很多失效链接。有的是拼写错误。更多是别的网站挪了内容，却没加重定向。还有的是整个网站没了。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>依赖外部网站的检查天生不稳定。链接检查常常变红，多半不是你的错。可也别因此把它关掉，它确实抓到过很多真问题。部署也一样，要挂在测试后面。测试一红就不发布，坏版本才不会上线。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s11" data-nav="命令运行器" data-t="49:08">命令运行器把长命令收成一个短名字 <span class="ts">49:08</span></h2>
+<p class="lead">长命令记不住，也容易敲错。命令运行器给它们起个短名字。本地和 CI 敲的就是同一条命令。</p>
+<div class="code"><div class="cap">justfile（示意，未实测，注释是笔记加的）</div><pre><span class="cm"># 以后敲 just lint 就行</span>
+lint:
+    uv run ruff check --fix
+
+format:
+    uv run ruff format
+
+<span class="cm"># 最长的那条命令，也只用敲 just typecheck</span>
+typecheck:
+    uv run mypy --strict --install-types --non-interactive src tests</pre></div>
+<p class="like"><b>打个比方</b>像手机里的快捷指令。一长串操作存成一个按钮，按一下全做完。</p>
+<p>讲师一直在敲 <code>hatch fmt</code> 和 <code>hatch test</code>。Hatch 是 Python 的项目管理器。它读 <code>pyproject.toml</code>，内置了这些命令。<code>hatch fmt</code> 底下用的是 Ruff。</p>
+<p>没有这类工具时，你可能得手敲很长的命令（<span class="ts">49:42</span>）。比如 <code>mypy --strict --install-types --non-interactive src tests</code>。<strong>命令运行器</strong>把它们变成短别名。写好上面的 justfile，敲 <code>just lint</code>、<code>just format</code>、<code>just typecheck</code> 就行（<span class="ts">50:13</span>）。讲义的例子是把 <code>uv run ruff check --fix</code> 换成 <code>just lint</code>。</p>
+<p>很多语言的项目工具自带这个功能，不一定要装 just。比如 npm 在 <code>package.json</code> 里写 <code>scripts</code>，Hatch 有 <code>tool.hatch.envs.*.scripts</code>（讲义）。just 本机没装，上面的 justfile 没有实测。本机装了 Node.js，所以用 npm scripts 真跑了一次：</p>
+<div class="code term"><div class="cap">bash · 本机实测（check 就是先 lint 再 test）</div><pre><span class="p">$ </span><span class="cmd">npm run check</span>   <span class="cm"># 一个短名字，背后是 lint 和 test 两步</span>
+<span class="o">&gt; minilib-tasks@0.1.0 check
+&gt; npm run lint &amp;&amp; npm test
+
+&gt; minilib-tasks@0.1.0 lint
+&gt; ruff check --output-format=concise src
+
+All checks passed!
+
+&gt; minilib-tasks@0.1.0 test
+&gt; python -m pytest -q
+
+..                                                                       [100%]
+2 passed in 0.64s</span></pre></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）</div><p>实测时把 <code>npm_config_cache</code> 和 <code>npm_config_logs_dir</code> 指到了临时目录。这样不会在你的家目录留下 npm 的缓存和日志。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>本地敲一套命令，CI 里又手写一套。时间一长两边对不上，就会出现“本地能过、CI 挂了”。CI 配置里也只写 <code>just lint</code>，两边跑的就保证是同一条命令。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s12" data-nav="正则：是什么、用在哪" data-t="50:49">正则表达式是描述一组字符串的小语言 <span class="ts">50:49</span></h2>
+<p class="lead">一个正则表达式描述一个字符串集合。某个字符串在这个集合里，就叫匹配上了。</p>
+<div class="code term"><div class="cap">bash · 本机实测（用 grep -E 代替 ag）</div><pre><span class="p">$ </span><span class="cmd">printf 'import numpy as np\nimport os\nfrom x import y as z\n' &gt; imp.py</span>   <span class="cm"># 造 3 行</span>
+<span class="p">$ </span><span class="cmd">grep -nE 'import .* as .*' imp.py</span>   <span class="cm"># 找出所有重命名过的 import</span>
+<span class="o">1:import numpy as np
+3:from x import y as z</span></pre></div>
+<p class="like"><b>打个比方</b>正则像一张招聘启事。“三年经验，会 Python”。它不点名要谁，只描述一类人。符合条件的都算匹配。</p>
+<p>这是加讲的话题。它原本排在第 3 讲，因为时间不够挪到了这里。正则表达式英文叫 regular expression，简称 regex。它是描述<strong>字符串集合</strong>的语言。也可以说，它描述的是字符串模式（<span class="ts">51:22</span>）。它横跨很多领域：</p>
+<ul class="keys">
+<li><strong>命令行工具的参数</strong>：前面用 ag 搜代码就是一例。测试成千上万时，可以只跑名字匹配某个模式的那些。讲义举的是 <code>go test -run [regexp]</code>，视频里是 <code>hatch test</code> 的参数（<span class="ts">52:03</span>）。</li>
+<li><strong>编辑器的搜索与替换</strong>：讲师在 Vim 里搜 <code>\d\+</code>。所有数字都高亮出来，还能整体替换（<span class="ts">52:37</span>）。</li>
+<li><strong>程序里</strong>：几乎每门语言都有正则库。能做模式匹配、校验和轻量解析（讲义）。讲义的例子是 <code>ag "import .* as .*"</code>，找出所有重命名过的 Python import。</li>
+</ul>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p><code>.*</code> 很宽。<code>import .* as .*</code> 连注释和字符串里的这句话都会匹配。正则只认字符，不懂代码结构。这正是<a href="#s4">本讲第 4 节</a>里 grep 输给 semgrep 的原因。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s13" data-nav="正则语法" data-t="53:13">正则只检查字符的形状，不检查意思 <span class="ts">53:13</span></h2>
+<p class="lead">正则一个字符一个字符地比形状。<code>\d{4}-\d{2}-\d{2}</code> 认得出日期的样子，却认不出 99 日根本不存在。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Python 3.13 re、GNU grep 3.0）</div><pre><span class="p">$ </span><span class="cmd">python -c 'import re; print([bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", s)) for s in ["2026-01-14", "2026-01-99", "26-1-14"]])'</span>   <span class="cm"># 1 月 99 日也算匹配</span>
+<span class="o">[True, True, False]</span>
+<span class="p">$ </span><span class="cmd">python -c 'import re; print([bool(re.fullmatch(r".+@.+", s)) for s in ["alyssa@mit.edu", "nonsense@@@email", "@mit.edu"]])'</span>   <span class="cm"># 三个 @ 也能过</span>
+<span class="o">[True, True, False]</span>
+<span class="p">$ </span><span class="cmd">grep -nE 'hello [^abc]' h.txt</span>      <span class="cm"># h.txt：hello a / hello b / hello d / hello ab / hello f</span>
+<span class="o">3:hello d
+5:hello f</span>
+<span class="p">$ </span><span class="cmd">grep -nE '\bdef\b' d.py</span>            <span class="cm"># d.py 第 2 行是字符串 "hello, blah blah define"</span>
+<span class="o">1:def foo():</span></pre></div>
+<p class="like"><b>打个比方</b>正则像只看轮廓的门卫。身高体型对得上就放行，从不查身份证。</p>
+<p>正则本来是计算机理论里的概念。各种语言和工具都有自己的实现。于是有了很多<strong>方言</strong>，英文叫 flavor。核心概念相同，表面语法略有差别。</p>
+<p>比如 Vim 里要写 <code>\d\+</code>，加号前面也要反斜杠。ag 里写 <code>\d+</code> 就行（<span class="ts">53:44</span>）。这些小差别要么记住，要么用到时再查。本讲用 <a href="https://docs.python.org/3/library/re.html" target="_blank" rel="noopener">Python 的正则语法</a>。</p>
+<div class="callout tool"><div class="ct">讲义推荐 · regex101</div><p><a href="https://regex101.com/" target="_blank" rel="noopener">regex101.com</a> 这类网站像一个“正则调试器”。写几条测试字符串和一个正则，它就标出哪些匹配上了。它还逐项解释正则的含义。不同语言的方言，也能一键切换（<span class="ts">54:50</span>）。</p></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>写法</th><th>匹配</th><th>例子（讲义和视频）</th></tr>
+<tr><td><code>abc</code></td><td>字面字符串，字符没有特殊含义时</td><td>abc</td></tr>
+<tr><td><code>.</code></td><td>任意一个字符</td><td></td></tr>
+<tr><td><code>[abc]</code></td><td>方括号里的任意一个字符</td><td><code>hello[abc]</code> 匹配 helloa、hellob。不匹配 hellod</td></tr>
+<tr><td><code>[^abc]</code></td><td>除了这几个以外的任意一个字符</td><td>d</td></tr>
+<tr><td><code>[a-f]</code></td><td>范围内的任意一个字符</td><td>c 可以，q 不行</td></tr>
+<tr><td><code>a|b</code></td><td>左边或右边</td><td><code>missing|semester</code>、<code>hello|world</code></td></tr>
+<tr><td><code>\d</code> <code>\w</code></td><td>数字、单词字符</td><td>3、x</td></tr>
+<tr><td><code>\b</code></td><td>单词边界。它是一个位置，不是字符</td><td>“missing semester” 里有 4 处：m 前、g 后、s 前、r 后</td></tr>
+<tr><td><code>(...)</code></td><td>分组，也会捕获。见<a href="#s14">本讲第 14 节</a></td><td><code>(hello|world)</code></td></tr>
+<tr><td><code>...?</code> <code>...*</code> <code>...+</code></td><td>0 或 1 次，任意次，1 次及以上</td><td><code>words?</code>、<code>.*</code>、<code>\d+</code></td></tr>
+<tr><td><code>...{N}</code></td><td>恰好 N 次</td><td><code>\d{4}</code></td></tr>
+<tr><td><code>\.</code> <code>\\</code></td><td>字面的点、字面的反斜杠</td><td></td></tr>
+<tr><td><code>^</code> <code>$</code></td><td>行首、行尾</td><td><code>^world$</code> 匹配 world。不匹配 hello world hi（<span class="ts">1:00:05</span>）</td></tr>
+</table></div>
+<p>讲义给了四个直观例子。<code>abc</code> 和 <code>missing|semester</code> 最简单。<code>\d{4}-\d{2}-\d{2}</code> 匹配 YYYY-MM-DD 形式的日期。但它只查形状，<strong>2026-01-99 也能匹配</strong>。<code>.+@.+</code> 匹配邮箱，只做最基本的检查，nonsense@@@email 也能过。完全不误判的邮箱正则<a href="https://pdw.ex-parrot.com/Mail-RFC822-Address.html" target="_blank" rel="noopener">确实存在</a>，但没法实用。</p>
+<p>学生问了一个好问题：<code>hello [^abc]</code> 会匹配 hello ab 吗？答案是不会（<span class="ts">56:59</span>）。手推一遍：</p>
+<div class="code"><div class="cap">手推（注释是推理步骤）</div><pre>hello ab    <span class="cm"># 模式是 hello [^abc]，从第 1 个字符开始比</span>
+^^^^^^      <span class="cm"># 前 6 个字符是 hello 加空格，逐个对上</span>
+      ^     <span class="cm"># 第 7 个字符是 a，可 [^abc] 偏偏不收 a，这里失败</span>
+            <span class="cm"># 换个起点重试，后面再也凑不出 hello 加空格，整行不匹配</span>
+hello d     <span class="cm"># 第 7 个字符是 d，不在 a、b、c 里，匹配</span></pre></div>
+<p><code>\b</code> 的经典用途是找 Python 的函数定义 <code>def</code>。字符串里 define 开头的那个 def 不能算（<span class="ts">58:55</span>）。再手推一遍：</p>
+<div class="code"><div class="cap">手推（注释是推理步骤）</div><pre>def foo():                  <span class="cm"># d 前面是行首，f 后面是空格</span>
+                            <span class="cm"># 两头都是单词边界，\bdef\b 匹配</span>
+"hello, blah blah define"   <span class="cm"># define 的 d 前面是空格，算边界</span>
+                            <span class="cm"># 可 f 后面紧跟 i，两个单词字符之间没有边界，不匹配</span></pre></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>拿正则校验日期，以为过了就合法。1 月 99 日能过，13 月也能过。本机实测：</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充，非视频内容）</div><pre><span class="p">$ </span><span class="cmd">python -c 'import re; print([bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", s)) for s in ["2026-01-14", "2026-13-01"]])'</span>   <span class="cm"># 13 月也能过</span>
+<span class="o">[True, True]</span></pre></div>
+<p>真要校验日期，得交给日期解析函数。第二个坑是方言。Vim 里的 <code>\d\+</code> 原样拿到 Python 里，意思就变了。<code>\+</code> 在 Python 里是字面的加号。</p></div>
+<p>下面第一个演示比字符类、否定和 <code>\b</code>。一个字符一个字符地比。</p>
+<div data-vz="ch09-regex-class"></div>
+<p>第二个演示看量词怎么“吃”字符。还有贪婪的 <code>.+</code> 怎么回溯。</p>
+<div data-vz="ch09-regex-quant"></div>
+<div class="callout extra"><div class="ct">补充（非视频内容）：贪婪与非贪婪</div><p><code>*</code>、<code>+</code>、<code>?</code>、<code>{m,n}</code> 默认是<strong>贪婪</strong>的。它们先尽量多吃，后面匹配不上，再一点点退回。在后面加一个 <code>?</code>，写成 <code>*?</code> 或 <code>+?</code>。这就变成<strong>非贪婪</strong>的，尽量少吃。练习 6 的提示，正是让你读 Python 文档里这一段。</p>
+<p>手推 <code>(.+)@(.+)</code> 匹配 nonsense@@@email 的过程：</p>
+<div class="code"><div class="cap">手推 + 本机实测</div><pre><span class="cm"># 第 1 步：第 1 组 .+ 很贪，一口吃到末尾</span>
+<span class="cm"># 第 2 步：后面要一个 @，可已经没字符了，失败</span>
+<span class="cm"># 第 3 步：往回吐一个字符 l。下一个字符是 l 不是 @，接着吐</span>
+<span class="cm"># 第 4 步：一直吐到剩下 @email，下一个正好是 @，对上了</span>
+<span class="cm"># 第 5 步：第 2 组 .+ 吃掉 email，匹配成功</span>
+re.match(r"(.+)@(.+)", "nonsense@@@email")    <span class="cm"># groups() 是 ('nonsense@@', 'email')，span(1) 是 (0, 10)</span>
+re.match(r"(.+?)@(.+)", "nonsense@@@email")   <span class="cm"># 非贪婪：groups() 是 ('nonsense', '@@email')，span(1) 是 (0, 8)</span></pre></div></div>
+
+<!-- ============================================================ -->
+<h2 id="s14" data-nav="捕获组与替换" data-t="1:00:36">括号会记下匹配到的那一段，替换时能引用 <span class="ts">1:00:36</span></h2>
+<p class="lead">括号除了分组，还会<strong>捕获</strong>。它记下这一段匹配到了什么。之后能在程序里取出来，也能在替换里引用。</p>
+<div class="code term"><div class="cap">讲义原例 + 本机实测（注释是笔记加的）</div><pre><span class="p">&gt;&gt;&gt; </span><span class="cmd">import re</span>
+<span class="p">&gt;&gt;&gt; </span><span class="cmd">re.match(r"\d{4}-(\d{2})-\d{2}", "2026-01-14").group(1)</span>   <span class="cm"># 只有月份套了括号</span>
+<span class="o">'01'</span>
+<span class="p">&gt;&gt;&gt; </span><span class="cmd">re.match(r"(\d{4})-(\d{2})-(\d{2})", "2026-01-23").groups()</span>   <span class="cm"># 三段都套上，一次全取</span>
+<span class="o">('2026', '01', '23')</span></pre></div>
+<p class="like"><b>打个比方</b>捕获组像拿荧光笔画重点。画过的几段，回头能单独抄出来，也能原样贴到别处。</p>
+<p>regex101 上会把它标成 Capture group。</p>
+<p><strong>程序里取子串</strong>：从一堆 YYYY-MM-DD 的日期里，取出年份或月份。上面就是讲义的例子（<span class="ts">1:03:21</span>）。<code>r"…"</code> 是 Python 的原始字符串，能少写很多转义用的反斜杠。</p>
+<p><strong>编辑器里的替换</strong>：讲师在 Vim 里演示过。他把每个数字换成重复两遍的自己。15 变成 1515，0 变成 00（<span class="ts">1:01:08</span> 到 <span class="ts">1:02:15</span>）。命令拆开看：</p>
+<div class="code"><div class="cap">Vim · 命令拆解（注释是笔记加的）</div><pre>:%s/\(\d\+\)/\1\1/g
+<span class="cm"># %s      对每一行做替换</span>
+<span class="cm"># \( \)   Vim 方言里，分组括号要加反斜杠</span>
+<span class="cm"># \d\+    一个或多个数字，+ 也要加反斜杠</span>
+<span class="cm"># \1\1    第 1 个捕获组，连写两遍</span>
+<span class="cm"># g       一行里所有匹配都换，不只换第一个</span></pre></div>
+<p>VS Code 里用 <code>$1</code>、<code>$2</code> 引用捕获组（讲义）。</p>
+<div class="code term"><div class="cap">bash · 本机实测（n.txt 三行：x = 15 / y = 0 / z = x + 7）</div><pre><span class="p">$ </span><span class="cmd">vim -u NONE -Es -c '%s/\(\d\+\)/\1\1/g' -c 'wq' n.txt; cat n.txt</span>   <span class="cm"># Vim 无界面模式跑同一条替换</span>
+<span class="o">x = 1515
+y = 00
+z = x + 77</span>
+<span class="p">$ </span><span class="cmd">sed -E 's/([0-9]+)/\1\1/g' n_orig.txt</span>   <span class="cm"># sed -E 方言：括号和 + 都不加反斜杠</span>
+<span class="o">x = 1515
+y = 00
+z = x + 77</span></pre></div>
+<p>讲师说，同样的办法能从 Web 服务器日志里抽出访客 IP。写一个带捕获组的正则就行。可以在程序里调正则库，也可以交给 grep（<span class="ts">1:03:58</span>）。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>各家的引用写法不一样。sed 和 Vim 用 <code>\1</code>，VS Code 用 <code>$1</code>。Python 的 <code>re.sub</code> 也用 <code>\1</code>，但替换串要写成原始字符串。不然 <code>"\1"</code> 会先被 Python 转成一个控制字符：</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充，非视频内容）</div><pre><span class="p">$ </span><span class="cmd">python -c 'import re; print(repr(re.sub(r"(\d+)", "&lt;\1&gt;", "x = 15")))'</span>    <span class="cm"># 替换串没加 r</span>
+<span class="o">'x = &lt;\x01&gt;'</span>
+<span class="p">$ </span><span class="cmd">python -c 'import re; print(repr(re.sub(r"(\d+)", r"&lt;\1&gt;", "x = 15")))'</span>   <span class="cm"># 加了 r，\1 才是捕获组</span>
+<span class="o">'x = &lt;15&gt;'</span></pre></div></div>
+<div data-vz="ch09-regex-group"></div>
+
+<!-- ============================================================ -->
+<h2 id="s15" data-nav="正则的局限与学法" data-t="1:04:46">正则数不了数，解析 HTML 要用真正的解析器 <span class="ts">1:04:46</span></h2>
+<p class="lead">正则没有计数器。“n 个 a 后面跟 n 个 b”，它就表达不了。层层嵌套的 HTML 更不行。</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充，非视频内容）</div><pre><span class="p">$ </span><span class="cmd">printf '&lt;b&gt;a&lt;b&gt;b&lt;/b&gt;c&lt;/b&gt;\n' &gt; h.html</span>   <span class="cm"># 两层嵌套的 b 标签</span>
+<span class="p">$ </span><span class="cmd">grep -oE '&lt;b&gt;.*&lt;/b&gt;' h.html</span>    <span class="cm"># 贪婪：一口吞到最后一个 &lt;/b&gt;</span>
+<span class="o">&lt;b&gt;a&lt;b&gt;b&lt;/b&gt;c&lt;/b&gt;</span>
+<span class="p">$ </span><span class="cmd">grep -oP '&lt;b&gt;.*?&lt;/b&gt;' h.html</span>   <span class="cm"># 非贪婪：停在第一个 &lt;/b&gt;，外层的开头配上了内层的结尾</span>
+<span class="o">&lt;b&gt;a&lt;b&gt;b&lt;/b&gt;</span></pre></div>
+<p class="like"><b>打个比方</b>正则像只会看眼前一步的人。数括号得记住前面开了几层，它没这个记性。</p>
+<p>正则是描述字符串集合的紧凑语言，但能力有限。讲义说，有些集合不属于<a href="https://en.wikipedia.org/wiki/Regular_language" target="_blank" rel="noopener">正则语言</a>，正则写不出来。比如“若干个 a 后面跟<strong>同样多</strong>个 b”。写成集合是 {aⁿbⁿ | n ≥ 0}。这一点可以用<a href="https://en.wikipedia.org/wiki/Pumping_lemma_for_regular_languages" target="_blank" rel="noopener">泵引理</a>证明。</p>
+<p>更实际的例子是 HTML，它也不是正则语言。拿正则去“解析” HTML，做不对（<span class="ts">1:04:46</span>）。上面的实测就是一个小例子。</p>
+<p>现代正则引擎有前瞻（lookahead）和反向引用（backreference）这些扩展。能力超出了理论上的正则语言，很实用。但表达力仍然有限。更复杂的语言要用真正的解析器，比如 <a href="https://github.com/pyparsing/pyparsing" target="_blank" rel="noopener">pyparsing</a>。它是一种 <a href="https://en.wikipedia.org/wiki/Parsing_expression_grammar" target="_blank" rel="noopener">PEG</a> 解析器。</p>
+<div class="callout extra"><div class="ct">补充（非视频内容）：为什么正则数不了数</div>
+<p>理论上的正则，都能换成一台有限状态机。机器只有有限个状态，比如 k 个。下面用鸽笼原理手推一遍：</p>
+<div class="code"><div class="cap">手推（注释是推理步骤）</div><pre><span class="cm"># 假设有台 k 个状态的机器，恰好认得 {aⁿbⁿ}</span>
+<span class="cm"># 依次喂它 1 个 a、2 个 a……直到 k+1 个 a，记下每次停在哪个状态</span>
+<span class="cm"># k+1 次读数，只有 k 个状态，必有两次停在同一个状态</span>
+<span class="cm"># 设这两次分别读了 i 个和 j 个 a，i 不等于 j</span>
+<span class="cm"># 接下来都喂 i 个 b。两边从同一状态出发，走法一模一样</span>
+<span class="cm"># 所以 a^i b^i 和 a^j b^i 要么都接受，要么都拒绝</span>
+<span class="cm"># 可前者该接受，后者该拒绝。矛盾，这样的机器不存在</span></pre></div>
+<p>说白了，机器记不住任意大的 n。HTML 能一层层无限嵌套，道理一样。</p></div>
+<div class="callout tip"><div class="ct">怎么学（讲义）</div><p>先掌握本讲这些基础。其余的用到时再查，不必背下整门语言。</p></div>
+<div class="callout ai"><div class="ct">讲义：让 LLM 帮你写正则</div><p>对话式 AI 很擅长生成正则。讲义给了一句提示词，大意如下。</p>
+<p>“写一个 Python 风格的正则。从 Nginx 日志行里，匹配出请求的路径。”</p>
+<p>后面再附上一行示例日志：<code>169.254.1.1 - - [09/Jan/2026:21:28:51 +0000] "GET /feed.xml HTTP/2.0" 200 2995 "-" "python-requests/2.32.3"</code>。</p>
+<p>不管谁写的正则，都要拿真实数据测一测。下面是笔记作者自己写的一版，没问 LLM。在本机对这行日志真跑：</p>
+<div class="code term"><div class="cap">bash · 本机实测（补充）</div><pre><span class="p">$ </span><span class="cmd">python -c 'import re; print(re.search(r"\"[A-Z]+ (\S+) HTTP/[\d.]+\"", open("access.log").read()).group(1))'</span>   <span class="cm"># 第 1 组就是请求路径</span>
+<span class="o">/feed.xml</span></pre></div></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>LLM 写的正则看着很专业，可它没见过你的真实日志。格式和它设想的稍有不同，它就悄悄配错。也可能什么都配不上。所以一定拿几行真日志测过再用。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s16" data-nav="问答" data-t="1:05:24">问答：测外部 API 就用 mock 顶替 <span class="ts">1:05:24</span></h2>
+<p class="lead">课后问答里最实用的一条是 mock。代码里调了外部 API，测试时就拿假的顶替。</p>
+<div class="code"><div class="cap">python · 最小例子（写法示意）</div><pre>class FakeClient:                         <span class="cm"># 接口和真客户端一样，背后是自己写的</span>
+    def get(self, url):
+        raise TimeoutError("simulated")   <span class="cm"># 想测出错分支，就让它直接报错</span>
+
+def test_timeout():
+    assert fetch_title(FakeClient(), "/x") is None   <span class="cm"># 注入假客户端，离线也能跑</span></pre></div>
+<p class="like"><b>打个比方</b>mock 像消防演习用的假人。外形和真人一样，想让它怎么倒就怎么倒。也不怕伤到谁。</p>
+<ul class="keys">
+<li><strong>代码里能用正则吗？</strong>当然能，前面在 Python REPL 里演示的就是。Python 的正则库叫 <code>re</code>。有的语言标准库里没有正则。比如 Rust，用的是流行的第三方库。搜索工具也常常借用现成的正则库（<span class="ts">1:05:24</span>）。笔记补充：ripgrep 用的是 Rust 的 regex 库。ag 是 C 写的，用的是 PCRE。</li>
+<li><strong>现场演示 AI 补测试</strong>（<span class="ts">1:07:19</span>）。AI 一开始给的测试很有用。可你让它生成得越多，它越会生成没用的。除非你好好引导它。人和 AI 一起协作，能达到很好的效果。这次讲师只给了几句提示。让 AI 一边写测试一边修 bug，直到不再变化。最后覆盖率到了 100%（<span class="ts">1:09:03</span>）。测试覆盖了 3、5、15 的倍数，还有异常分支。提示词不需要特殊格式，LLM 很能理解英文指令。技巧只影响最后那几个百分点（<span class="ts">1:08:32</span>）。</li>
+<li><strong>测试和代码放同一个文件？</strong>Rust 习惯把小的单元测试写在同一个文件里。复杂的集成测试另外放。Python 也有 doctest。编译型语言把测试写进源文件，有个代价。改测试也得重编译（<span class="ts">1:10:08</span> 到 <span class="ts">1:11:11</span>）。</li>
+<li><strong>代码里有大量 API 调用，怎么测？</strong>（<span class="ts">1:11:42</span>）用 <strong>mock</strong>。实现一个和真实 API 接口相同的版本。背后的逻辑是你自己写的，很简单。比如假的 OpenAI 或 YouTube 客户端。测试时把它注入进去。你能让它返回错误，也能离线跑。另一种做法是对真实 API 跑一次，把网络通信全部<strong>录下来</strong>。以后测试时直接回放。Python 里有 pytest 的 VCR 插件。也可以直接测真实 API。几种做法各有利弊（<span class="ts">1:12:58</span>）。</li>
+<li><strong>哪里找好的提示词？</strong>没有现成的提示词仓库。OpenAI、Anthropic 这些公司都写了不错的提示词指南。示例提示词多半和具体代码库绑定。录屏的智能体编程过程，可能更值得看（<span class="ts">1:13:31</span>）。</li>
+</ul>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>测试直接打真实 API，又慢又花钱。网络一抖，测试还会随机失败。CI 一会儿红一会儿绿。没人分得清是代码坏了，还是网络坏了。用 mock 或者录制回放，测试才稳定。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s17" data-nav="一页带走" data-t="1:14:42">一页带走：本讲结论都在这几行里 <span class="ts">1:14:42</span></h2>
+<p class="lead">把本讲浓缩成几行命令。每行的注释就是结论和考点。</p>
+<div class="code"><div class="cap">本讲速查（注释即考点）</div><pre>ruff format --check src     <span class="cm"># 只改表面写法，语法树不变，所以能放心自动跑</span>
+ruff check --fix src        <span class="cm"># 只自动修安全的问题。语义问题写不出安全变换，要人看过再改</span>
+semgrep -l python -e "subprocess.Popen(..., shell=True, ...)"   <span class="cm"># 按语法树匹配，拆行和别名都认得</span>
+coverage report -m          <span class="cm"># return "fizzbuzz" 那行一直没覆盖：它是死代码，bug 就在这</span>
+pre-commit install          <span class="cm"># 每人各装一次，没装的人不受约束</span>
+git commit --no-verify      <span class="cm"># 钩子还能被绕过，所以要 CI 在服务器上统一查</span>
+re.fullmatch(r"\d{4}-\d{2}-\d{2}", "2026-01-99")   <span class="cm"># 能匹配：正则只看形状，校验日期要用日期解析</span>
+re.match(r"(.+)@(.+)", "nonsense@@@email")        <span class="cm"># 贪婪：第 1 组吃到 nonsense@@，停在最后一个 @ 前</span>
+sed -E 's/([0-9]+)/\1\1/g'  <span class="cm"># \1 引用第 1 个捕获组，15 变成 1515</span></pre></div>
+<ul class="keys">
+<li>格式化器只改表面语法，语法树不变。它统一团队风格，分检查和修复两种模式。EditorConfig 统一编辑器设置。</li>
+<li>linter 做静态分析。规则能配置，也能按行写 <code># noqa</code>。安全修复交给工具，其余看文档人工改。semgrep 在语法树上匹配，适合写项目自己的规则。</li>
+<li>测试分单元、集成、功能三类。TDD、回归测试、性质测试、mock 是常用方法。pytest 自动发现 <code>test_</code> 开头的函数。</li>
+<li>覆盖率 = (语句数 − 未执行) / 语句数。它能指出没测到、甚至永远执行不到的代码。但 100% 覆盖不等于正确。</li>
+<li>pre-commit 钩子在本地查，CI 在服务器上查，查的是同一套。CI 支持 push、PR、定时触发和矩阵。CD 用同一套设施自动部署。命令运行器把长命令变短。</li>
+<li>正则描述字符串集合。基础是字面量、字符类、量词和锚点 <code>^ $</code>。再加上 <code>\d \w \b</code>、分组捕获和替换里的 <code>\1</code>。各工具方言略有不同。正则表达力有限，复杂语言要用解析器。</li>
+</ul>
+<div class="callout key"><div class="ct">在整门课里的位置 · 下一步</div>
+<p>这是本课的最后一讲。前面各讲的工具，在这里汇成一条自动化的质量流水线。第 1 讲的 shell、grep、sed，第 5 讲的 Git。还有第 6 讲的发布与依赖，第 7 讲的智能体。流水线从编辑器到钩子，再到 CI 和部署。正则表达式则会陪你用几乎所有工具。</p>
+<p>现在去做<a href="labs/lab09.html">本讲练习的可视化笔记</a>。在沙箱里给 Minilib 配上格式化器、linter 和 pre-commit。再补测试、量覆盖率、跑本地 CI。正则题用 grep、sed、Vim 和 Python 全部真跑。</p></div>
+
+</article></main>
+<script src="assets/vz.js"></script>
+<script src="assets/viz/ch09-quality.js"></script>
+<script src="assets/viz/ch09-regex.js"></script>
+</body>
+</html>

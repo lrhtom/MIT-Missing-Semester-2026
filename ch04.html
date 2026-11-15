@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04 · 调试与性能分析 · Missing Semester 2026 中文笔记</title>
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/vz.css">
+<script>window.PAGE = { key: 'ch04', type: 'ch', vzCount: 9 };</script>
+<script src="assets/course.js"></script>
+<script src="assets/dg.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<div class="callout key"><div class="ct">本讲结论</div>
+<p>程序只做你<strong>写</strong>的事，不做你<strong>以为</strong>的事。调试就是找出两者在哪一步分岔。先用打印和日志看，再上调试器、系统调用追踪和 sanitizer。调试器能设断点、观察点，还能倒着执行。性能分析先<strong>测量</strong>，再优化。测量靠 time、基准测试、profiler 和火焰图。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s1" data-nav="代码只做你说的事" data-t="0:00">代码只做你写的事，不做你想的事 <span class="ts">0:00</span></h2>
+<p class="lead">计算机严格按字面执行，不猜你的心思。你想的和它做的，总会在某一步分岔。调试就是找到这一步。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Python 3.13.5）</div><pre><span class="p">$ </span><span class="cmd">python -c 'x = [3, 1, 2]; y = x.sort(); print(y, x)'</span>   <span class="cm"># 以为 y 是排好的新列表</span>
+<span class="o">None [1, 2, 3]</span>   <span class="cm"># sort 原地改了 x，返回值是 None</span></pre></div>
+<p class="like"><b>打个比方</b>计算机像一个死抠字面的跑腿。你说“把这摞单子排好给我”，他在原地排好了。递到你手里的，却是一张空收条。</p>
+<p>这是讲义开头的“黄金法则”。代码不会做你<em>期望</em>的事，只会做你<em>告诉</em>它的事。计算机几乎什么都能做，但它只认字面。</p>
+<p>调试（debugging）处理的是结果不对。性能分析（profiling）处理另一类问题。结果是对的，但太慢或太占内存。</p>
+<figure class="fig"><script>
+DG('flow', { nodeH: 50, cols: [
+  [ { id: 'bug', l: '现象：结果不对 / 太慢', tone: 'bad' } ],
+  [ { id: 'see', l: '让程序“可见”', s: 'print · 日志 · 调试器 · 追踪', tone: 'info' } ],
+  [ { id: 'hyp', l: '形成猜想', s: '哪一步和预期不符？', tone: 'warn', shape: 'diamond', w: 160 } ],
+  [ { id: 'fix', l: '修复并验证', s: '测试、基准再跑一遍', tone: 'ok' } ]
+], edges: [ ['bug', 'see'], ['see', 'hyp'], ['hyp', 'fix', '找到了', 'ok'] ] });
+</script><figcaption>本讲的工具都服务于中间两步。先把内部状态摆到眼前，再验证猜想</figcaption></figure>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>代码看着对，跑了一个例子也对，就以为没问题。练习页的归并排序就是这样。bug 只在下标 i 和 j 不相等时才出现。前两次合并时 i 和 j 都是 0，结果碰巧是对的。所以别只信一个例子，多造几组随机数据去对拍。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s2" data-nav="printf 调试与日志" data-t="0:37">print 调试每次从零开始，日志能一直留着 <span class="ts">0:37</span></h2>
+<p class="lead">print 调试就是在怀疑的地方打印信息。修好 bug 以后，把这些 print 改成带级别的日志留下来。下次出事，信息已经在了。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Python 3.13.5）</div><pre><span class="p">$ </span><span class="cmd">python -c 'import logging; logging.info("hello"); logging.warning("slow query")'</span>
+<span class="o">WARNING:root:slow query</span>   <span class="cm"># info 那条没了：默认阈值是 WARNING</span></pre></div>
+<p class="like"><b>打个比方</b>日志级别像小区门禁。阈值设成 WARNING，就只放警告以上的人进门。DEBUG 和 INFO 在门口就被拦下，连个记录都不留。</p>
+<p>讲师引用了 C 语言作者之一 Brian Kernighan 的话。最有效的调试工具，仍然是<strong>仔细思考</strong>。再加上<strong>放对位置的打印语句</strong>。讲师说，他自己的调试大多也还是 print 调试。</p>
+<p>print 调试最大的问题是<strong>每次都从零开始</strong>（<span class="ts">1:15</span>）。程序跑完，你得重新去缩小范围。于是有了<strong>日志</strong>（logging）。它是更讲究的 print，会一直留在代码里：</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>日志框架提供的</th><th>说明（讲义，视频 2:30–3:41）</th></tr>
+<tr><td>级别（level）</td><td>TRACE、DEBUG、INFO、WARN、ERROR、CRITICAL。可以设阈值，只输出够重要的记录。生产环境常关掉 TRACE 和 DEBUG，调试时再打开</td></tr>
+<tr><td>按模块设置</td><td>比如“这一块要 trace 级别，其余只要 warning”。只深挖你关心的部分</td></tr>
+<tr><td>输出去向</td><td>全部或部分日志，可以导到不同的地方。比如文件、终端、日志服务</td></tr>
+<tr><td>结构化日志</td><td>不是一句话，而是带字段的记录，比如指标或 JSON。事后程序能直接提取</td></tr>
+</table></div>
+<div class="code"><div class="cap">logdemo.py（笔记作者编写，用来演示级别过滤）</div><pre>import logging, sys
+logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+                    format="%(levelname)-7s %(name)s: %(message)s")
+db, web = logging.getLogger("app.db"), logging.getLogger("app.web")
+
+def handle_request():
+    web.debug("parsing headers")
+    web.info("GET /index.html")
+    db.debug("SELECT * FROM users WHERE id = 42")
+    db.warning("slow query took 1200 ms")
+    web.error("template not found: index.html")
+<span class="cm"># 跑三次：先用 INFO，再把 root 调成 WARNING。最后 root 回到 INFO，单独把 app.db 调成 DEBUG</span></pre></div>
+<div class="code term"><div class="cap">python · 本机实测（Python 3.13）</div><pre><span class="o">== root level = INFO
+INFO    app.web: GET /index.html
+WARNING app.db: slow query took 1200 ms
+ERROR   app.web: template not found: index.html
+== root level = WARNING
+WARNING app.db: slow query took 1200 ms
+ERROR   app.web: template not found: index.html
+== root INFO, but app.db = DEBUG
+INFO    app.web: GET /index.html
+DEBUG   app.db: SELECT * FROM users WHERE id = 42
+WARNING app.db: slow query took 1200 ms
+ERROR   app.web: template not found: index.html
+== structured (JSON) logging
+{"ts": 1793293095, "level": "WARNING", "logger": "app.db", "msg": "slow query", "ms": 1200, "table": "users"}</span></pre></div>
+<div class="callout tip"><div class="ct">把 print 变成日志（视频 4:17）</div>
+<p>调试时加了一堆 print。问题修好以后，别急着删。把它们改成合适级别的日志，留在代码里。下次出类似问题，需要的信息早就打在日志里了。不用再改代码、重编译、重跑。日志要是半结构化的，还能直接用第 1 讲的 grep 和 awk 提取。</p></div>
+<h3 id="s2b">第三方程序：先加 -v，再翻系统日志 <span class="ts">4:51</span></h3>
+<p class="lead">别人写的程序，你改不了代码。但它们大多自带日志开关。</p>
+<ul>
+<li>很多命令行工具支持 <code>-v</code> 或 <code>--verbose</code>，打印更多信息。常常还能叠加，写成 <code>-v -v</code> 或 <code>-vv</code>。</li>
+<li>系统服务也有日志。比如数据库、Web 服务器、SSH 守护进程。Linux 上常在 <code>/var/log/</code> 下。systemd 管的服务用 <code>journalctl -u &lt;服务名&gt;</code> 查看。第 1 讲的 SSH 日志就是这么来的。</li>
+<li>第三方库也可以查查（讲义）。看它能不能用环境变量或配置打开调试日志。</li>
+</ul>
+<p>下面的演示用本机实测的输出，画出两件事。每条记录都带级别，过滤器按阈值放行：</p>
+<div data-vz="ch04-logging"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑（补充，非视频内容）</div>
+<p>Python 的 logging 默认阈值是 WARNING。没配置就写 <code>logging.info</code>，什么都不会打印。上面的实测就是这样。更隐蔽的是下面这条：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">python -c 'import logging; logging.warning("a"); logging.basicConfig(level=logging.DEBUG); logging.debug("b")'</span>
+<span class="o">WARNING:root:a</span>   <span class="cm"># debug 那条没出来：basicConfig 被悄悄忽略了</span></pre></div>
+<p>模块级的 <code>logging.warning</code> 会顺手做一次默认配置。之后再调 <code>basicConfig</code>，就不生效了。所以配置日志的代码，要放在程序最开头。真要重新配置，就加 <code>force=True</code>。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s3" data-nav="调试器" data-t="5:24">调试器让程序停在现场，你随时翻看变量 <span class="ts">5:24</span></h2>
+<p class="lead">print 要你提前猜好打印什么。调试器让程序停下来，你想看哪个变量就看哪个。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Python 3.13.5，节选。pdb 不回显命令，这里补在提示符后。路径前缀已省略）</div><pre><span class="cm"># avg.py 里 avg([]) 会算 total / len(xs)，除以 0</span>
+<span class="p">$ </span><span class="cmd">printf 'p xs, total\nq\n' | python -m pdb -c c avg.py</span>   <span class="cm"># -c c：直接跑，崩了就停在现场</span>
+<span class="o">…（Traceback 省略）
+ZeroDivisionError: division by zero
+Uncaught exception. Entering post mortem debugging
+…
+&gt; avg.py(3)avg()
+-&gt; return total / len(xs)
+(Pdb) p xs, total</span>   <span class="cm"># 现场还在：xs 是空列表</span>
+<span class="o">([], 0)</span></pre></div>
+<p class="like"><b>打个比方</b>print 调试像在路口装几个摄像头，只看得到装了的地方。调试器像让车直接停在路边。你走过去，车里什么都能翻。</p>
+<p>print 调试适合这种情况：你知道该打印什么。改代码重跑也方便。下面几种情况，就该上<strong>调试器</strong>（debugger）了。你不确定需要什么信息。bug 只在难以复现的条件下出现。重启程序代价很大，比如启动慢、状态难重建。调试器让你在程序运行中和它交互。</p>
+<div class="grid2">
+  <div class="mini"><h4>能做什么（讲义）</h4><p>执行到某一行时暂停。一次执行一步。崩溃后查看变量。满足条件时才停。还有很多高级功能。</p></div>
+  <div class="mini"><h4>两类调试器</h4><p>通用的 <strong>gdb</strong>（GNU）和 <strong>lldb</strong>（LLVM）能调任何本地二进制。C、C++、Rust 都行。语言专用的有 Python 的 <strong>pdb</strong>、Java 的 jdb。它们和运行时结合得更紧。</p></div>
+</div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>gdb 命令（讲义）</th><th>作用</th><th>pdb 里对应</th></tr>
+<tr><td><code>run</code></td><td>启动程序</td><td><code>run</code> / <code>restart</code></td></tr>
+<tr><td><code>b 函数</code>、<code>b 文件:行</code></td><td>设断点，可以加条件</td><td><code>b 行号, 条件</code></td></tr>
+<tr><td><code>c</code></td><td>继续运行到下一个断点</td><td><code>c</code></td></tr>
+<tr><td><code>step</code> / <code>next</code> / <code>finish</code></td><td>单步进入、单步越过、运行到当前函数返回</td><td><code>s</code> / <code>n</code> / <code>r</code></td></tr>
+<tr><td><code>p 表达式</code></td><td>打印变量或表达式的值</td><td><code>p</code></td></tr>
+<tr><td><code>bt</code></td><td>backtrace，打印调用栈</td><td><code>w</code>（where）</td></tr>
+<tr><td><code>watch 表达式</code></td><td>观察点：值一变就停</td><td>pdb 没有，要用条件断点模拟</td></tr>
+</table></div>
+<div class="callout tip"><div class="ct">讲义提示：gdb 的 TUI 模式</div><p><code>gdb -tui</code>，或者在 gdb 里按 <kbd>Ctrl</kbd>-<kbd>x</kbd> <kbd>a</kbd>。屏幕分成上下两半。上面是源代码，下面是命令行。</p></div>
+<p>讲义调试练习 1 的归并排序有 bug。用 pdb 的<strong>条件断点</strong>，停在两边各 2 个元素的那次合并。单步几下就能看到问题：</p>
+<div class="code term"><div class="cap">bash · 本机实测（Python 3.13 pdb，节选。pdb 不回显命令，这里把 step.pdb 里的命令补在提示符后。路径前缀已省略）</div><pre><span class="p">$ </span><span class="cmd">python -m pdb msort.py &lt; step.pdb</span>
+<span class="o">(Pdb) b merge, len(left) == 2 and len(right) == 2
+Breakpoint 1 at msort.py:11
+(Pdb) c
+&gt; msort.py(11)merge()
+(Pdb) p left, right
+([1, 3], [1, 4])
+…（n 单步若干次）
+&gt; msort.py(18)merge()
+-&gt; result.append(right[i])
+(Pdb) p i, j, right[i], right[j]
+(1, 0, 4, 1)</span></pre></div>
+<p>应该取 <code>right[j]</code>，也就是 1。代码却用了左边的下标 <code>i</code>，取到了 4。完整过程见练习页<a href="labs/lab04.html#d1">调试 1</a>。</p>
+<p>下面的演示分两幕。第 1 幕画出这次单步。第 2 幕是 gdb 的<strong>观察点</strong>（watchpoint）。它盯住讲义调试练习 2 里的 <code>students[1].id</code>，值一被改写程序就停。练习页<a href="labs/lab04.html#d2">调试 2</a> 有本机真跑的结果。</p>
+<div data-vz="ch04-debugger"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>两个坑最常见。第一，编译 C 程序时没加 <code>-g</code>。调试器只看得到地址，看不到变量名和源码行。第二，把 gdb 的条件写法搬进 pdb。gdb 写 <code>b 18 if i != j</code>，pdb 要写 <code>b 18, i != j</code>。写错了，断点根本没设上，程序直接跑完。练习页调试 1 实测过这个坑。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s4" data-nav="反向调试 rr" data-t="7:07">跑过头才发现出错？rr 能倒着执行 <span class="ts">7:07</span></h2>
+<p class="lead">rr 先把一次运行完整录下来。回放时既能往前走，也能倒着走。发现值已经坏了，就从这里往回倒。一直倒到它刚被改坏的那一刻。</p>
+<div class="code"><div class="cap">rr · 写法示意（本机没有 Linux，未实测）</div><pre>rr record ./corruption        <span class="cm"># 录一次完整运行</span>
+rr replay                     <span class="cm"># 回放，界面就是 gdb</span>
+(rr) watch accounts[0].id     <span class="cm"># 盯住那个被改坏的字段</span>
+(rr) reverse-continue         <span class="cm"># 倒着跑，停在最后一次改它的地方</span></pre></div>
+<p class="like"><b>打个比方</b>rr 像行车记录仪。普通调试器只能从现在往前开。rr 能把录像往回拖，拖到撞车前一秒。看清是谁先变的道。</p>
+<p>普通调试器只能让程序<strong>往前</strong>跑：停下，再继续。麻烦在于，你常常跑过了头才发现出错。这时真正的 bug 早就执行过去了。你真正想问的是：“这个数怎么变成 4 而不是 5 的？”（<span class="ts">7:45</span>）</p>
+<p><strong>记录-回放调试</strong>（record-replay debugging）解决的就是这个问题。Linux 上的 <a href="https://rr-project.org/" target="_blank" rel="noopener">rr</a> 把一次运行里所有不确定的东西都录下来。之后可以<strong>确定性地</strong>重放任意多次，还能<strong>倒着执行</strong>。它的界面就是 gdb，命令完全一样。</p>
+<div class="code"><div class="cap">bash · 讲义原文（注释译成中文）</div><pre>rr record ./my_program     <span class="cm"># 录制一次执行</span>
+rr replay                  <span class="cm"># 回放（打开 gdb 界面）</span></pre></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>反向命令（讲义）</th><th>作用</th></tr>
+<tr><td><code>reverse-continue</code>（<code>rc</code>）</td><td>倒着运行，直到碰到断点或观察点</td></tr>
+<tr><td><code>reverse-step</code>（<code>rs</code>）</td><td>倒退一行</td></tr>
+<tr><td><code>reverse-next</code>（<code>rn</code>）</td><td>倒退一行，跳过函数调用</td></tr>
+<tr><td><code>reverse-finish</code></td><td>倒着运行到进入当前函数的地方</td></tr>
+</table></div>
+<h3 id="s4b">视频演示：倒放一次就抓到越界的 strcpy <span class="ts">11:29</span></h3>
+<p class="lead">账户 0 改名后，id 变成了怪数。rr 倒着执行，直接停在写坏它的 strcpy 上。</p>
+<ol>
+<li><code>gcc -g corruption.c -o corruption</code>。<code>-g</code> 让编译器保留变量名和函数名。还会记下每段机器码对应哪行源码。没有它，调试器只看得到地址（<span class="ts">12:38</span>）。</li>
+<li>程序跑完，账户 0 的名字正确改成了 “Alexandria”。id 却变成了一个怪数。</li>
+<li>先 <code>rr record ./corruption</code>，再 <code>rr replay</code>。然后 <code>break 52</code>、<code>continue</code>，停在检测异常的 if 上。此时 <code>p accounts[0].id</code> 已经坏了（<span class="ts">16:05</span>）。</li>
+<li>普通 gdb 到这里只能把断点往前挪，再从头重跑。一次次地二分。rr 可以先 <code>watch accounts[0].id</code>，再 <code>reverse-continue</code>。程序倒着执行，直到这个值发生变化（<span class="ts">18:25</span>）。</li>
+<li>命中硬件观察点。注意倒放时 Old 和 New 是反的，New value 是更早的值（<span class="ts">19:09</span>）。<code>bt</code> 显示改写它的是 C 库的 strcpy，调用者是 update_name（<span class="ts">19:51</span>）。</li>
+<li>原因是 name 字段只有 8 字节。“Alexandria” 加上结尾的 <code>\0</code> 有 11 字节。多出的部分写进了紧挨着的 id（<span class="ts">21:02</span>）。</li>
+</ol>
+<div class="callout warn"><div class="ct">rr 的限制（讲义，视频 21:37–22:48）</div>
+<ul>
+<li>只支持 Linux。它需要 CPU 的硬件性能计数器。很多虚拟机不提供，比如多数 AWS EC2 实例。也不支持 GPU。macOS 可以看看 Warpspeed。</li>
+<li>改了代码就得重新录。旧录像对应的是旧的二进制文件。</li>
+<li>用法技巧：第 1 讲有个“跑到失败为止”的循环。把里面的命令换成 <code>rr record</code>。偶发失败一出现，你就有了一份录像。它能反复前进后退。</li>
+</ul></div>
+<p><strong>Heisenbug</strong>（<span class="ts">9:33</span>）的名字来自测不准原理。你一观察，它就消失。最常见于 print 调试。打印让程序变慢。并发程序里，线程的先后顺序跟着变了。bug 也就不出现了。</p>
+<p>调试器同样会改变执行方式。rr 尤其如此，它用<strong>确定性调度</strong>按固定顺序跑所有线程。某些竞态在它下面可能根本不发生。讲义说，可能要录好几次才能抓到。所以选工具时，不光要看它能做什么。还要看问题在它下面还能不能复现。</p>
+<div class="callout extra"><div class="ct">学生提问：gdb 能不能方便地重来？（视频 23:33）</div>
+<p>可以。gdb 里再敲一次 <code>run</code>，会从头运行程序，<strong>所有断点都保留</strong>。再配合 <code>watch</code>，就能直接停在第一次改那个字段的地方。然后 continue 到下一次修改。没有 rr 时，这就是“二分”的做法。本机是 Windows，没有 rr。练习页<a href="labs/lab04.html#d2">调试 2</a> 用 gdb 观察点真跑出了结果：</p>
+<div class="code term"><div class="cap">bash · 本机实测（gdb 14.1 MinGW，节选）</div><pre><span class="p">$ </span><span class="cmd">gdb -q -batch -x watch.gdb ./corruption</span>
+<span class="o">Hardware watchpoint 2: students[1].id
+
+Thread 1 hit Hardware watchpoint 2: students[1].id
+
+Old value = 1002
+New value = 1007
+#0  curve_scores (student_idx=0, curve=5) at corruption.c:23
+#1  0x00007ff7631617fc in main () at corruption.c:34
+$1 = 3
+$2 = (int *) 0x7ff7631690b0 &lt;students+16&gt;
+$3 = (int *) 0x7ff7631690b0 &lt;students+16&gt;</span></pre></div></div>
+<p>下面的演示复述视频里的 rr 演示。先录制，再回放，和手工二分对比。最后倒着执行，找到写坏 id 的 strcpy。</p>
+<div data-vz="ch04-rr"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>加一行 print，bug 就不见了。删掉 print，bug 又回来了。这多半是 Heisenbug，打印改变了线程的先后顺序。这时别再往里加 print 了。把 <code>rr record</code> 放进“跑到失败为止”的循环，录住出错的那一次。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s5" data-nav="strace" data-t="24:55">strace 把程序找内核办的每件事都列出来 <span class="ts">24:55</span></h2>
+<p class="lead">程序开文件、分内存、建进程、上网，都要找内核。这些请求叫<strong>系统调用</strong>（system call）。strace 把每一次调用和参数都打印出来。</p>
+<div class="code"><div class="cap">bash · 写法示意（Linux，本机未实测）</div><pre>strace -e trace=%file ls -l       <span class="cm"># 只看和文件有关的调用</span>
+strace -f ./build.sh              <span class="cm"># 跟进子进程，不加就漏掉</span>
+strace ls 2&gt;&amp;1 | grep openat      <span class="cm"># strace 写的是 stderr，先 2&gt;&amp;1 才能 grep</span></pre></div>
+<p class="like"><b>打个比方</b>strace 像银行柜台的流水单。客户在家怎么盘算，你看不见。但他每次来柜台存钱、取钱、查账，都记得清清楚楚。</p>
+<p>有时 bug 不在你的代码里。或者你只想知道，一个程序在做什么、卡在哪。它可能还是别人写的。追踪系统调用，就能看到程序在“边界”上做的每件事。</p>
+<figure class="fig"><script>
+DG('seq', { actors: [ { l: 'ls -l', s: '用户态进程', tone: 'data' }, { l: '内核', s: 'Linux', tone: 'warn' } ], msgs: [
+  { f: 0, t: 1, l: 'execve / 加载动态库（启动进程本身）', tone: 'info' },
+  { f: 0, t: 1, l: 'openat(".", O_DIRECTORY)', mono: true, tone: 'data' },
+  { f: 0, t: 1, l: 'getdents64：读目录项', tone: 'data' },
+  { f: 0, t: 1, l: 'statx / listxattr：每个文件一次（因为 -l）', tone: 'teal' },
+  { f: 0, t: 1, l: 'openat 时区文件（显示修改时间要用）', tone: 'teal' },
+  { f: 0, t: 1, l: 'write(1, …)：输出到终端', tone: 'ok' }
+] });
+</script><figcaption>ls -l 和内核之间的大致过程。按视频 27:22–33:43 的讲解画成示意，不是真实输出</figcaption></figure>
+<div class="code"><div class="cap">bash · 讲义原文（注释译成中文）</div><pre>strace ./my_program                  <span class="cm"># 追踪全部系统调用</span>
+strace -e trace=file ./my_program    <span class="cm"># 只看与文件相关的</span>
+strace -f ./my_program               <span class="cm"># 跟随子进程（程序再启动别的程序时很重要）</span>
+strace -p &lt;PID&gt;                      <span class="cm"># 附着到正在运行的进程</span>
+strace -T ./my_program               <span class="cm"># 显示每次调用的耗时</span></pre></div>
+<ul class="keys">
+<li><strong>输出太多</strong>：开头一大段是在启动进程、加载共享库。这些通常不是你关心的（<span class="ts">27:22</span>）。用 <code>-e</code> 过滤。<code>%file</code> 表示所有和文件系统有关的调用。也可以只写一个调用名，比如 <code>statx</code>。man 页的 filtering 一节还有更多类别（<span class="ts">34:18</span>）。比如进程、网络和信号。讲师用 <code>2&gt;&amp;1 | less</code> 把全部输出送进分页器慢慢翻。</li>
+<li><strong>-f 跟随子进程</strong>。讲师那台机器上，ls 其实是 Nix 的包装程序。真正干活的 ls 是它启动的子进程。不加 <code>-f</code>，就什么都看不到（<span class="ts">30:28</span>）。</li>
+<li><strong>参数决定行为</strong>：加了 <code>-l</code>，ls 要对每个文件做 statx 和 listxattr。还要去读时区文件。追踪里一眼就能看出，ls -l 比 ls 干的活多（<span class="ts">33:10</span>）。</li>
+<li><strong>-p 附着上去却什么都不打印</strong>？说明那个进程卡在纯 CPU 计算里（<span class="ts">34:18</span>）。它根本没找内核。</li>
+<li>macOS 和 BSD 上用 <code>dtruss</code>，它基于 dtrace。想深入学，可以看 Julia Evans 的 <a href="https://jvns.ca/strace-zine-unfolded.pdf" target="_blank" rel="noopener">strace zine</a>（讲义）。</li>
+</ul>
+<div class="callout warn"><div class="ct">本机实测：Git Bash 自带的 strace 不是 Linux strace</div>
+<p>Windows 没有 Linux 的 ptrace，讲义的 strace 命令本机跑不了。Git Bash 的 <code>/usr/bin/strace</code> 是 Cygwin/MSYS 版。它记录的是 MSYS 运行时里的 POSIX 层调用。用 <code>-m syscall</code> 只看这一层。再用一个小 awk 脚本，把几百行原始输出压成时间线。同样能看出 <code>ls -l</code> 多做了什么：</p>
+<div class="code term"><div class="cap">bash · 本机实测（Git Bash 的 MSYS strace，TZ=UTC。目录 d 里只有 a.txt 和 b.txt）</div><pre><span class="p">$ </span><span class="cmd">strace -o plain.trace -m syscall ls d &gt; /dev/null</span>
+<span class="p">$ </span><span class="cmd">awk -f d4/calls.awk plain.trace</span>
+<span class="o">…（逐条调用的时间线，见练习页）
+-- total: lstat=0 stat=2 opendir=1 readdir=5 closedir=1 open=0 write=1</span>
+<span class="p">$ </span><span class="cmd">strace -o long.trace -m syscall ls -l d &gt; /dev/null</span>
+<span class="p">$ </span><span class="cmd">awk -f d4/calls.awk long.trace</span>
+<span class="o">…
+-- total: lstat=3 stat=1 opendir=1 readdir=5 closedir=1 open=7 write=1</span></pre></div>
+<p>多出的 3 次 lstat，是目录本身加两个文件。7 次 open 里有 1 次是时区文件 <code>/usr/share/zoneinfo/UTC</code>。这和视频里 Linux 上的现象一致。完整时间线见练习页<a href="labs/lab04.html#d4">调试 4</a>。</p></div>
+<p>下面的演示是 ls -l 的调用时序，按视频讲解画成示意。再分别看 <code>-e</code>、<code>-f</code>、<code>-p</code> 的作用：</p>
+<div data-vz="ch04-strace"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>想用 grep 筛 strace 的输出，屏幕上却照样刷满。因为 strace 把追踪写到 stderr，管道只接 stdout。要先写 <code>2&gt;&amp;1</code>，讲师就是这样接给 less 的。另一个坑是忘了 <code>-f</code>。程序一启动子进程，真正干活的那部分就全漏掉了。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s6" data-nav="eBPF 与 bpftrace" data-t="34:50">要统计不要流水账，就把小程序装进内核 <span class="ts">34:50</span></h2>
+<p class="lead">strace 只会逐条打印。eBPF 把一段小程序装进内核，在事件发生处就地计数。bpftrace 是它的高层写法，语法像 awk。</p>
+<div class="code"><div class="cap">bash · 写法示意（本机没有 Linux，未实测）</div><pre><span class="cm"># 每次有进程进入 openat 就触发，按进程名计数</span>
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_openat { @[comm] = count(); }'
+<span class="cm"># 不会逐条刷屏。按 Ctrl-C 时，才打印每个进程打开了几次文件</span></pre></div>
+<p class="like"><b>打个比方</b>strace 像在收银台逐张抄小票。bpftrace 像在收银机里装个计数器。它只记每种商品卖了几件，打烊时报个总数。</p>
+<p>想要<strong>统计</strong>怎么办？比如 read 调用的耗时分布。那就得把一段小程序<strong>装进内核</strong>。这就是 <a href="https://ebpf.io/" target="_blank" rel="noopener">eBPF</a>（extended Berkeley Packet Filter）。它是跑在 Linux 内核里的沙箱程序。它有内核的视野，表达能力很强。<a href="https://github.com/iovisor/bpftrace" target="_blank" rel="noopener">bpftrace</a> 提供了类似 awk 的高层语法（<span class="ts">36:06</span>）。</p>
+<div class="code"><div class="cap">bash · 讲义原文（注释译成中文）</div><pre><span class="cm"># 打印全系统每一次打开文件（立即输出）</span>
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_openat { printf("%s %s\n", comm, str(args-&gt;filename)); }'
+<span class="cm"># 按名字统计系统调用次数（Ctrl-C 时打印汇总）</span>
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_* { @[probe] = count(); }'
+<span class="cm"># 只看名叫 bash 的进程</span>
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_* /comm == "bash"/ { @[probe] = count(); }'
+<span class="cm"># 用 -c 启动一条命令，cpid 就是它的 PID</span>
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_* /pid == cpid/ { @[probe] = count(); }' -c 'ls -la'</pre></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>片段</th><th>含义（视频 37:17–41:29）</th></tr>
+<tr><td><code>tracepoint:syscalls:sys_enter_*</code></td><td>探针：进入任何系统调用时触发。<code>*</code> 是模式，也可以写具体名字，比如 <code>sys_enter_statx</code></td></tr>
+<tr><td><code>/条件/</code></td><td>过滤。<code>comm</code> 是进程名，<code>pid</code> 是进程号</td></tr>
+<tr><td><code>@[probe] = count()</code></td><td><code>@</code> 是一个 map。<code>probe</code> 是当前探针名。<code>count()</code> 每调用一次加 1</td></tr>
+<tr><td><code>-c 'ls -la'</code></td><td>由 bpftrace 启动这条命令，把它的 PID 放进特殊变量 <code>cpid</code>。命令结束时自动打印结果</td></tr>
+</table></div>
+<ul>
+<li>strace 胜在拿来就能用。想要<strong>更低开销</strong>，就用 bpftrace。追踪内核函数、做<strong>聚合</strong>，也用它（讲义）。代价是必须 root。而且它默认监视整个内核，不只是某个进程。视频 39:03 讲师因此碰到一大堆输出。</li>
+<li>现成工具：<a href="https://github.com/iovisor/bcc" target="_blank" rel="noopener">bcc</a> 用 C 写 eBPF 程序，附带很多工具（<span class="ts">42:34</span>）。比如 <code>biolatency</code>，它画磁盘请求耗时的直方图。视频里 2 次落在 4–8 μs，1 次落在 2–4 μs。还有 <code>opensnoop</code>，看谁打开了哪个文件。</li>
+</ul>
+<p>下面的演示是示意，本机没有 Linux。系统调用在内核里被就地计数，Ctrl-C 时才打印。再看过滤条件和 <code>-c</code>、<code>cpid</code> 怎样缩小范围。</p>
+<div data-vz="ch04-bpftrace"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>第一次跑 bpftrace，满屏都是别的进程。它默认看的是整个系统，不是你那个程序。要加 <code>/comm == "bash"/</code> 或 <code>/pid == cpid/</code> 这类过滤。另外它必须 root，忘了 sudo 就跑不起来。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s7" data-nav="tcpdump 与 Wireshark" data-t="43:45">网络问题看包：tcpdump 抓，Wireshark 拆 <span class="ts">43:45</span></h2>
+<p class="lead">tcpdump 把经过网卡的每个包都打印出来。Wireshark 能看懂 IP 之上的协议。HTTPS 加了密，要靠 mitmproxy 或浏览器开发者工具。</p>
+<div class="code"><div class="cap">bash · 讲义原文（注释译成中文）</div><pre>sudo tcpdump -i any port 80             <span class="cm"># 抓 80 端口的包</span>
+sudo tcpdump -i any -w capture.pcap     <span class="cm"># 存成文件，交给 Wireshark 分析</span></pre></div>
+<p class="like"><b>打个比方</b>tcpdump 像邮局门口的监控。每个信封的寄件人、收件人和厚度，它都看得到。信要是 HTTPS 封死的，它就只能看信封。mitmproxy 相当于先拆开抄一份，再封好寄出去。</p>
+<ul>
+<li><a href="https://www.man7.org/linux/man-pages/man1/tcpdump.1.html" target="_blank" rel="noopener">tcpdump</a> 打印经过网卡的每个包。内容有源和目的 IP、端口、TCP 标志、窗口和长度。需要时连包的内容也能打。</li>
+<li>视频里讲师用 <code>curl http://neverssl.com</code> 制造流量（<span class="ts">44:49</span>）。一个简短的 HTTP 请求和响应，就产生了好几个包。</li>
+<li><code>-i</code> 选网卡，讲师的 Wi-Fi 叫 wlp2s0。<code>any</code> 表示所有网卡。</li>
+<li><a href="https://www.wireshark.org/" target="_blank" rel="noopener">Wireshark</a> 能理解 IP 之上的协议（<span class="ts">45:57</span>）。比如有插件专门解析 MySQL 流量。还能录下来，离线重放和测试。</li>
+<li>HTTPS 是加密的，tcpdump 只能看到密文。<a href="https://mitmproxy.org/" target="_blank" rel="noopener">mitmproxy</a> 冒充服务器做中间人，解密后再记录。</li>
+<li>调网页的 HTTPS 请求，往往用浏览器开发者工具最方便。看它的 Network 面板。解密后的请求、响应、头部和耗时都能看到（讲义）。</li>
+</ul>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>抓了半天，只看到一堆乱码。因为请求走的是 HTTPS，tcpdump 只能看到密文。调网页请求，先开浏览器开发者工具的 Network 面板。另外 tcpdump 要 sudo。<code>-i</code> 选错了网卡，就什么也抓不到。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s8" data-nav="sanitizer 与 Valgrind" data-t="46:31">内存 bug 不一定崩溃，要靠 sanitizer 揪出来 <span class="ts">46:31</span></h2>
+<p class="lead">越界写、释放后再用这类 bug，往往不会马上崩溃。它们悄悄写坏别处的内存，很久以后才出事。sanitizer 让编译器在每次内存访问前插一道检查。</p>
+<div class="code"><div class="cap">c · 最小例子（示意）</div><pre>char *p = malloc(32);
+free(p);
+p[0] = 'J';     <span class="cm">// 写已释放的内存。不开检查，程序通常照常运行</span>
+<span class="cm">// gcc -fsanitize=address -g uaf.c 重新编译，这一行当场报错</span></pre></div>
+<p class="like"><b>打个比方</b>ASan 像给每块内存配了个门卫。门卫手里有张名单，写着哪些格子能进。free 之后，这块就从名单上划掉。谁再来碰，当场拦下。</p>
+<p>缓冲区溢出、use-after-free 和内存泄漏，是最难查的一类 bug。视频里有个 heap overflow 的例子。程序往缓冲区里塞了超长数据，却照常结束（<span class="ts">47:51</span>）。看上去什么都没发生。那只是因为被覆盖的那块内存，恰好没人再用。</p>
+<p><strong>Sanitizer</strong> 是编译器的扩展。它让编译器在程序里插入额外的检查指令。最常用的是 <strong>AddressSanitizer（ASan）</strong>。它能查出栈、堆和全局缓冲区的溢出。还能查 use-after-free、use-after-return 和内存泄漏。</p>
+<div class="code"><div class="cap">bash · 讲义原文</div><pre>gcc -fsanitize=address -g program.c -o program
+./program</pre></div>
+<p>加上 <code>-fsanitize=address</code> 后，同一个 heap overflow 程序直接崩溃（<span class="ts">48:28</span>）。ASan 还给出一份报告。报告里有错误类型和地址，还有出错时的调用链。视频里那条链上是 memcpy。另外还写明这块内存在哪分配，哪些字节被覆盖了。</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>其他 sanitizer（讲义）</th><th>检测什么</th></tr>
+<tr><td>ThreadSanitizer（TSan，<code>-fsanitize=thread</code>）</td><td>多线程的数据竞争</td></tr>
+<tr><td>MemorySanitizer（MSan，<code>-fsanitize=memory</code>）</td><td>读未初始化的内存</td></tr>
+<tr><td>UndefinedBehaviorSanitizer（UBSan，<code>-fsanitize=undefined</code>）</td><td>未定义行为，比如整数溢出</td></tr>
+</table></div>
+<p>sanitizer 要重新编译，但跑得足够快。可以放进 CI 和日常开发（<span class="ts">49:46</span>）。Java、Python 这类有运行时的语言，很多检查由运行时完成。这些检查有时默认关着，因为太贵。ASan 在这些语言里用不上。但它们的 unsafe 操作，同样可能出这类问题。</p>
+<div class="callout warn"><div class="ct">本机实测：MinGW 没有 ASan 运行时，但编译器能提前警告</div>
+<p>讲义调试练习 3 的 uaf.c，本机不加检查直接运行。结果确实“看起来正常”。加 <code>-fsanitize=address</code> 就链接失败，因为 MinGW-w64 的 gcc 缺 libasan。不过 gcc 的 <code>-Wall</code> 在<strong>编译期</strong>就发现了问题：</p>
+<div class="code term"><div class="cap">bash · 本机实测（gcc 13.2 MinGW-w64）</div><pre><span class="p">$ </span><span class="cmd">gcc uaf.c -o uaf &amp;&amp; ./uaf</span>
+<span class="o">Hello, world!
+Jello, world!</span>
+<span class="p">$ </span><span class="cmd">gcc -fsanitize=address -g uaf.c -o uaf_asan</span>
+<span class="e">&lt;mingw64&gt;/…/ld.exe: cannot find -lasan: No such file or directory</span>
+<span class="p">$ </span><span class="cmd">gcc -Wall -g uaf.c -o uaf</span>
+<span class="e">uaf.c:12:17: warning: pointer 'greeting' used after 'free' [-Wuse-after-free]</span></pre></div>
+<p>编译期警告只能抓住编译器“看得出”的情况。ASan 在运行期检查每一次访问，能抓住复杂得多的场景。完整对照见练习页<a href="labs/lab04.html#d3">调试 3</a>。</p></div>
+<p>ASan 为什么能在运行时抓住这种 bug？下面的演示画出它的“影子内存”：</p>
+<div data-vz="ch04-asan"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>程序没崩，输出也对，就以为没有内存 bug。use-after-free 那一下写入，通常会“成功”。上面实测就打印出了 Jello。可它也许已经悄悄改坏了别处的数据。写 C 和 C++，平时就开着 <code>-Wall</code>，测试时再开 ASan。</p></div>
+<h3 id="s8b">不能重编译就用 Valgrind，代价是慢 <span class="ts">50:50</span></h3>
+<p class="lead">Valgrind 不改你的程序。它自己假装成 CPU，一条条解释执行。所以能检查每一次内存访问，但慢得多。</p>
+<p><a href="https://valgrind.org/" target="_blank" rel="noopener">Valgrind</a> 是一个可扩展的<strong>程序解释器</strong>。它逐条执行你程序的指令，在每条指令前后做额外检查。不用重新编译，就能查每一次内存访问。它能指出哪条指令写了不该写的内存。还能指出这块内存是哪条指令分配的。</p>
+<div class="code"><div class="cap">bash · 讲义原文</div><pre>valgrind --leak-check=full ./my_program</pre></div>
+<p>适用场景有这几种（讲义）。没有源码，或者没法重新编译，比如第三方库。或者你需要 sanitizer 没有的检查。Valgrind 也是强大的 profiler，见<a href="#s13">第 13 节</a>。</p>
+
+<!-- ============================================================ -->
+<h2 id="s9" data-nav="AI 辅助调试" data-t="52:07">LLM 擅长解释报错和定位，不擅长修 <span class="ts">52:07</span></h2>
+<p class="lead">看不懂的报错和几十层的调用栈，可以交给 LLM 翻成人话。它给的修法，一定要自己用调试工具验证。</p>
+<div class="code"><div class="cap">borrow.rs 的核心三行（注释是笔记加的。完整实测见练习页调试 5）</div><pre>let first = &amp;scores[0];            <span class="cm">// 不可变借用，一直活到最后一行</span>
+scores.push(100);                  <span class="cm">// 要可变借用，和上一行冲突，报 E0502</span>
+println!("first = {}", first);     <span class="cm">// 问 LLM 时，整段代码和完整报错一起贴</span></pre></div>
+<p class="like"><b>打个比方</b>LLM 像见过无数病例的老护士。你一说症状，她马上能猜出几种可能。但开不开刀，还得拍片子确认。</p>
+<div class="callout ai"><div class="ct">讲师与讲义的建议</div>
+<ul>
+<li><strong>解释难懂的报错</strong>（<span class="ts">52:44</span>）。C++ 模板错误和 Rust 借用检查器的报错，往往很晦涩。别人多半遇到过几乎一样的报错。可地址、程序名略有不同，很难搜到。LLM 很擅长把它翻成人话，还能给出绕过办法。</li>
+<li><strong>跨语言、跨抽象层</strong>（<span class="ts">53:18</span>）。比如 Python 程序链接了 Rust 库，Rust 又调用了 C 库。讲师的经验是，LLM 会自己写小的复现程序。它从 Python 一路追到 Rust，再追到 C。最后指出“C 代码这里看起来不对”。它不太擅长<strong>修</strong>这种 bug，但很擅长<strong>找</strong>。</li>
+<li><strong>由症状猜原因</strong>：比如“程序能跑，但内存多用了 10 倍”。LLM 能列出可能的原因，以及该查什么（讲义）。</li>
+<li><strong>读长长的调用栈</strong>（<span class="ts">54:27</span>）。崩溃栈动不动几十上百层。在陌生代码库里，重点尤其难找。</li>
+</ul>
+<p><strong>局限</strong>（讲义）：它可能编出听着合理、实际错误的解释。也可能给出掩盖 bug 而不是修复 bug 的改法。一定要用真正的调试工具验证。它是理解代码的补充，不是替代。</p></div>
+<div class="callout tip"><div class="ct">讲义提示：调试符号</div>
+<p>想得到有意义的调用栈，就要带调试符号。二进制文件和它链接的库都要带。也就是加 <code>-g</code>，通常是 DWARF 格式。编译时再加 <code>-fno-omit-frame-pointer</code> 保留帧指针，profiler 的调用栈会更可靠。否则调用栈里可能只有内存地址，或者残缺不全。C++、Rust 这类原生程序尤其要注意。</p></div>
+<p>练习页<a href="labs/lab04.html#d5">调试 5</a> 在本机生成了两条真实的难懂报错。一条是 Rust E0502，一条是 26 行的 C++ 模板错误。页面还给了向 LLM 提问的模板和核对方法。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>LLM 给的改法，常常只是让报错消失。比如 Rust 里到处加 <code>clone()</code>，C++ 里强制类型转换。编译是过了，程序的意思却变了。所以改完要重新编译、重新跑测试。再对照编译器自己的说明，比如 <code>rustc --explain E0502</code>。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s10" data-nav="性能分析：先测量" data-t="54:27">优化之前先测量，别凭感觉找热点 <span class="ts">54:27</span></h2>
+<p class="lead">算法课教大 O，却不教怎么找程序里的热点。凭感觉优化，很容易改错地方。先用工具测出时间花在哪，再动手。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>time ./slow                                     <span class="cm"># 第一步：总共花了多久，CPU 忙还是在等</span>
+python -m cProfile -s tottime slow.py | head    <span class="cm"># 第二步：时间花在哪个函数上</span>
+<span class="cm"># 最后才改代码。改完再测一遍，确认真的变快了</span></pre></div>
+<p class="like"><b>打个比方</b>看病先拍片，再开刀。不拍片就动刀，切掉的多半不是病灶。</p>
+<p>代码功能对了还不够，吃光 CPU 或内存也不行。“过早优化是万恶之源”（讲义）。先用 profiler 和监控工具，弄清时间和资源花在哪。再集中优化那一部分。讲师说，性能分析和调试密切相关。弄明白代码在做什么，通常也就明白它表现如何。</p>
+<h3 id="s10b">real 远大于 user 加 sys，说明程序在等 <span class="ts">55:00</span></h3>
+<p class="lead">time 报三个数。real 是墙上的钟走了多久。user 和 sys 是 CPU 真正干活的时间。差出来的那部分，程序在等网络、磁盘或别的东西。</p>
+<p>最简单的办法就是计时。<code>time</code> 几乎每个 shell 都有，放在任何命令前面就行：</p>
+<div class="code term"><div class="cap">bash · 讲义原文</div><pre><span class="p">$ </span><span class="cmd">time curl https://missing.csail.mit.edu &amp;&gt; /dev/null</span>
+<span class="o">real	0m0.272s
+user	0m0.079s
+sys	    0m0.028s</span></pre></div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th></th><th>含义</th><th>上例</th></tr>
+<tr><td><strong>real</strong></td><td>墙钟时间：从开始到结束，包括等待</td><td>0.272 s</td></tr>
+<tr><td><strong>user</strong></td><td>CPU 执行用户代码的时间</td><td>0.079 s</td></tr>
+<tr><td><strong>sys</strong></td><td>CPU 在内核里替这个程序干活的时间</td><td>0.028 s</td></tr>
+</table></div>
+<p>CPU 一共只用了 107 ms，剩下 165 ms 在等网络。反过来，<strong>多核程序的 user 可以大于 real</strong>（<span class="ts">56:10</span>）。10 个 CPU 各忙 1 秒，real 是 1 秒，CPU 时间却是 10 秒。另外，同一条命令多跑几次，耗时会变（<span class="ts">56:46</span>）。视频里是 124 ms、138 ms 这样跳。所以只跑一次 time 来比较两个程序，并不可靠。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Git Bash）</div><pre><span class="p">$ </span><span class="cmd">time bash -c 'i=0; while [ $i -lt 200000 ]; do i=$((i+1)); done'</span>
+<span class="o">real	0m3.130s
+user	0m2.406s
+sys	0m0.296s</span>
+<span class="p">$ </span><span class="cmd">time sleep 1</span>
+<span class="o">real	0m1.248s
+user	0m0.015s
+sys	0m0.046s</span></pre></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑：time 看不到原生程序的 CPU</div>
+<p>对 MSYS 自己的程序，比如 bash 和 sleep，Git Bash 的 time 是准的。原生 Windows 程序就不行了，比如 python 和 gcc 编出的 exe。它们的 user 和 sys 几乎总是 0.015 s：</p>
+<div class="code term"><div class="cap">bash · 本机实测</div><pre><span class="p">$ </span><span class="cmd">time python -c 'sum(range(3 * 10**7))'</span>
+<span class="o">real	0m0.735s
+user	0m0.015s
+sys	0m0.031s</span>
+<span class="p">$ </span><span class="cmd">python -c 'import time; t = time.process_time(); sum(range(3 * 10**7)); print("cpu seen by python itself:", round(time.process_time() - t, 2), "s")'</span>
+<span class="o">cpu seen by python itself: 0.47 s</span></pre></div>
+<p>在这台机器上只信 real。CPU 时间请在程序内部测，或者换 Linux。</p></div>
+<div data-vz="ch04-time"></div>
+
+<!-- ============================================================ -->
+<h2 id="s11" data-nav="基准测试 hyperfine" data-t="57:17">只跑一次不算数：多跑、预热、看波动 <span class="ts">57:17</span></h2>
+<p class="lead">同一条命令每次耗时都不一样。基准测试要预热，要跑很多次，再看均值和标准差。比较两个程序时，倍数也要带上误差。</p>
+<div class="code term"><div class="cap">bash · 本机实测（Git Bash，TIMEFORMAT=%R 只打印 real）</div><pre><span class="p">$ </span><span class="cmd">TIMEFORMAT=%R; for k in 1 2 3; do time ls -R /usr/share &gt; /dev/null; done</span>
+<span class="o">1.483</span>   <span class="cm"># 第一次最慢，多半是文件还没进磁盘缓存</span>
+<span class="o">0.261</span>
+<span class="o">0.181</span>   <span class="cm"># 同一条命令，后两次快了好几倍</span></pre></div>
+<p class="like"><b>打个比方</b>量体重别只称一次。刚吃完饭和早上空腹，差一两斤很正常。多称几次取平均，再看看上下浮动多大。</p>
+<p><a href="https://github.com/sharkdp/hyperfine" target="_blank" rel="noopener">hyperfine</a> 把每条命令跑很多次。它统计均值和标准差。最后给出“快几倍、误差多少”的结论：</p>
+<div class="code term"><div class="cap">bash · 讲义原文</div><pre><span class="p">$ </span><span class="cmd">hyperfine --warmup 3 'fd -e jpg' 'find . -iname "*.jpg"'</span>
+<span class="o">Benchmark #1: fd -e jpg
+  Time (mean ± σ):      51.4 ms ±   2.9 ms    [User: 121.0 ms, System: 160.5 ms]
+  Range (min … max):    44.2 ms …  60.1 ms    56 runs
+
+Benchmark #2: find . -iname "*.jpg"
+  Time (mean ± σ):      1.126 s ±  0.101 s    [User: 141.1 ms, System: 956.1 ms]
+  Range (min … max):    0.975 s …  1.287 s    10 runs
+
+Summary
+  'fd -e jpg' ran
+   21.89 ± 2.33 times faster than 'find . -iname "*.jpg"'</span></pre></div>
+<ul>
+<li><code>--warmup 3</code>：先跑 3 次不计时。让文件进入磁盘缓存，避免第一次冷启动拉高结果。</li>
+<li>视频里的现场结果正好相反（<span class="ts">57:54</span>）。find 比 fd 快了约 40 倍。讲师是在一个几乎空的目录里测的。那不是 fd 优化的场景。可见基准测试的结论，和<strong>测试条件</strong>绑在一起。</li>
+<li>网页开发：浏览器开发者工具自带很好的 profiler。见 Firefox Profiler 和 Chrome DevTools 的文档（讲义）。</li>
+</ul>
+<p>本机没有 hyperfine。练习页<a href="labs/lab04.html#p3">性能 3</a> 写了个不到 50 行的 Python 脚本。它按同样的方法，比较了 grep -r 和 git grep。还手推了“± 0.60”是怎么来的：</p>
+<div data-vz="ch04-bench"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>改完代码跑一次 time，快了 20%，就宣布优化成功。可同一条命令连跑三次，上面实测就差了好几倍。至少多跑几次，看均值和波动。两组数据的波动范围要是重叠，这 20% 可能只是噪声。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s12" data-nav="资源监控" data-t="58:33">程序慢，先看是哪种资源被吃满了 <span class="ts">58:33</span></h2>
+<p class="lead">先看大盘，再看细节。CPU 是全满，还是只满一个核？内存够不够？磁盘和网络在不在排队？</p>
+<div class="code"><div class="cap">bash · 写法示意（Linux）</div><pre>htop                       <span class="cm"># 每个核一根条，别只看总数</span>
+free -h                    <span class="cm"># 总内存和已用内存</span>
+ss -tlnp | grep :8080      <span class="cm"># 谁占着 8080 端口</span>
+lsof /var/log/app.log      <span class="cm"># 谁开着这个文件</span></pre></div>
+<p class="like"><b>打个比方</b>程序慢像高速堵车。先看是堵在收费站，还是堵在匝道。收费站是 CPU，匝道是磁盘和网络。找对地方，才知道该修哪儿。</p>
+<p>程序慢，先看它是不是<strong>资源受限</strong>。是用满了所有核，还是只用了一个核？还是磁盘太慢？</p>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>工具</th><th>看什么（讲义，视频 58:33–1:01:21）</th></tr>
+<tr><td><a href="https://htop.dev/" target="_blank" rel="noopener">htop</a></td><td>每个核的利用率、内存、负载和进程列表。<kbd>F6</kbd> 排序，<kbd>t</kbd> 树状显示，<kbd>H</kbd> 显示或隐藏线程。小写 <kbd>h</kbd> 是帮助，这条按 htop 手册写（补充）。还有 I/O 等标签页</td></tr>
+<tr><td><a href="https://github.com/aristocratos/btop" target="_blank" rel="noopener">btop</a></td><td>比 htop 监控的东西多得多，可以配置</td></tr>
+<tr><td><code>iotop</code></td><td>实时 I/O 使用</td></tr>
+<tr><td><code>free</code></td><td>总内存和已用内存</td></tr>
+<tr><td><code>lsof</code></td><td>进程打开了哪些文件。可以查谁占着某个文件</td></tr>
+<tr><td><code>ss</code></td><td>网络连接。常用 <code>ss -tlnp | grep :8080</code> 找出谁占着端口</td></tr>
+<tr><td><code>nethogs</code>、<code>iftop</code></td><td>每个进程的网络用量</td></tr>
+</table></div>
+<div class="callout extra"><div class="ct">负载（load average）是什么（视频 59:06）</div>
+<p>htop 右上角有三个数。它们是过去一段时间里，平均“需要多少个 CPU 核”。三个数对应越来越长的时间窗口。讲师建议你自己查一下确切含义。补充：Linux 上通常是 1、5、15 分钟的指数平均。等待磁盘 I/O 的进程也算在内，见 <code>man proc</code> 的 loadavg 一节。</p></div>
+<p>练习页<a href="labs/lab04.html#p4">性能 4</a> 在本机用 Windows 的 <code>start /affinity</code> 复现了 taskset 题。<a href="labs/lab04.html#p5">性能 5</a> 用 netstat 找出并结束了占端口的进程。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>看到某个进程 CPU 占用 100%，就以为它用满了机器。其实它可能只占满了一个核，其余的核都闲着。htop 里要看每个核的条，不能只看总数。反过来，CPU 很闲程序却很慢，就该去看磁盘和网络。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s13" data-nav="perf 与火焰图" data-t="1:01:21">perf 采样找热点，火焰图一眼看出时间去哪 <span class="ts">1:01:21</span></h2>
+<p class="lead">采样型 profiler 每隔约 1 毫秒拍一下调用栈。被拍到次数多的函数，就是热点。火焰图把这些栈画出来，越宽越热。</p>
+<div class="code"><div class="cap">bash · 写法示意（Linux，本机未实测）</div><pre>gcc -g -O2 slow.c -o slow -lm    <span class="cm"># -g 留下函数名，不然报告里全是地址</span>
+perf record -g ./slow            <span class="cm"># 采样，-g 连调用栈一起记</span>
+perf report                      <span class="cm"># Self 只算函数自身，Children 连带它调用的</span></pre></div>
+<p class="like"><b>打个比方</b>采样像老师隔几分钟抬头扫一眼教室。扫一百次，有八十次看到小明在玩手机。那他大部分时间都在玩。追踪型 profiler 像给每个人都装了计时器。数字准，但人人都被拖慢。</p>
+<p>真要让程序变快，就得知道程序<strong>内部</strong>哪里最热。CPU profiler 有两类（讲义）：</p>
+<div class="grid2">
+  <div class="mini"><h4>追踪型（tracing）</h4><p>记录程序的每一次函数调用。数字精确，但开销大。例子有 Valgrind 的 callgrind、Python 的 cProfile。</p></div>
+  <div class="mini"><h4>采样型（sampling）</h4><p>定期暂停程序，记下调用栈，常见是每毫秒一次。开销小，结果是统计近似。生产环境一般用它。例子有 perf、py-spy。</p></div>
+</div>
+<p><a href="https://www.man7.org/linux/man-pages/man1/perf.1.html" target="_blank" rel="noopener">perf</a> 是 Linux 的标准 profiler。不用重新编译，就能分析任何程序。<code>perf stat</code> 给出总览：</p>
+<div class="code term"><div class="cap">bash · 讲义原文</div><pre><span class="p">$ </span><span class="cmd">perf stat ./slow_program</span>
+<span class="o"> Performance counter stats for './slow_program':
+
+         3,210.45 msec task-clock                #    0.998 CPUs utilized
+               12      context-switches          #    3.738 /sec
+                0      cpu-migrations            #    0.000 /sec
+              156      page-faults               #   48.587 /sec
+   12,345,678,901      cycles                    #    3.845 GHz
+    9,876,543,210      instructions              #    0.80  insn per cycle
+    1,234,567,890      branches                  #  384.532 M/sec
+       12,345,678      branch-misses             #    1.00% of all branches</span></pre></div>
+<p>视频里，讲师对讲义的 slow.c 采样（<span class="ts">1:02:31</span>）。命令是 <code>perf record -g ./slow</code>，再 <code>perf report</code>。<strong>Children</strong> 列算的是这个函数，加上它调用的所有函数。所以 _start 是 100%。<strong>Self</strong> 列只算函数自身，cos 43.6%，sin 43.2%。在 report 里按 <kbd>h</kbd> 看帮助。还能把热点标到汇编和源码行上（<span class="ts">1:03:40</span>）。</p>
+<h3 id="s13b">火焰图：越宽越耗时，横轴不是时间顺序 <span class="ts">1:04:48</span></h3>
+<p class="lead">火焰图的纵轴是调用层级。底部是程序入口，越往上调用越深。横轴宽度正比于花在那里的时间。</p>
+<p>一大堆数字，人很难读。<a href="https://www.brendangregg.com/flamegraphs.html" target="_blank" rel="noopener">火焰图</a>（flame graph）把它变成了图。讲师用的是 flamegraph 的 Rust 移植版 inferno。在浏览器里打开 SVG，还能点击放大（<span class="ts">1:05:25</span>）。</p>
+<div class="code"><div class="cap">bash · 讲义原文</div><pre>perf record -g ./my_program
+perf script | stackcollapse-perf.pl | flamegraph.pl &gt; flamegraph.svg</pre></div>
+<div class="callout tool"><div class="ct">讲义推荐</div><p>交互式查看用 <a href="https://www.speedscope.app/" target="_blank" rel="noopener">Speedscope</a>。系统级分析用 <a href="https://perfetto.dev/" target="_blank" rel="noopener">Perfetto</a>。各语言也有专用工具。Python 有 <a href="https://docs.python.org/3/library/profile.html" target="_blank" rel="noopener">cProfile</a> 和 <a href="https://github.com/benfred/py-spy" target="_blank" rel="noopener">py-spy</a>，Go 有 <code>go tool pprof</code>。Rust 有 <a href="https://github.com/flamegraph-rs/flamegraph" target="_blank" rel="noopener">cargo-flamegraph</a>，其实对任何编译型程序都能用。</p></div>
+<h3 id="s13c">采样会漏，要精确计数就用 callgrind <span class="ts">1:06:35</span></h3>
+<p class="lead">采样只看得到被拍到的瞬间。频率调高更准，但暂停越多，程序被拖得越慢。要精确数据，就用 Valgrind 的 callgrind（讲师）。</p>
+<p>它解释执行每一条指令，所以能精确计数，但很慢。</p>
+<div class="code"><div class="cap">bash · 讲义原文（注释译成中文）</div><pre>valgrind --tool=callgrind ./my_program
+callgrind_annotate callgrind.out.&lt;pid&gt;     <span class="cm"># 文本报告</span>
+kcachegrind callgrind.out.&lt;pid&gt;           <span class="cm"># 图形界面</span></pre></div>
+<p>callgrind 给出精确的调用次数，还有谁调用了谁。加 <code>--cache-sim=yes</code> 还能模拟缓存行为（讲义）。</p>
+<div class="callout warn"><div class="ct">本机实测：没有 perf，用 Python 版对照两类 profiler</div>
+<p>slow.c 在本机编译运行，用了约 11–18 秒。几次运行差异较大。perf 跑不了，于是把它翻成 Python 版 slow.py。再分别用追踪型的 cProfile 和自己写的 40 行采样器分析：</p>
+<div class="code term"><div class="cap">bash · 本机实测（节选）</div><pre><span class="p">$ </span><span class="cmd">python -m cProfile -s tottime slow.py | head -12</span>
+<span class="o">         2000095 function calls in 0.736 seconds
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       10    0.399    0.040    0.735    0.073 slow.py:4(slow_computation)
+  1000000    0.170    0.000    0.170    0.000 {built-in method math.sin}
+  1000000    0.165    0.000    0.165    0.000 {built-in method math.cos}</span>
+<span class="p">$ </span><span class="cmd">python sampler.py slow.py</span>
+<span class="o">--- 130 samples, folded stacks (stack count share) ---
+&lt;module&gt;;main;slow_computation:8 129 99.2%
+&lt;module&gt;;main;slow_computation:7 1 0.8%</span></pre></div>
+<p>cProfile 让程序慢了 2.6 倍，从 0.40 s 变成 1.05 s。换来的是精确的调用次数。采样器几乎不拖慢程序。但它只看得到 Python 帧，分不出 sin 和 cos。详见练习页<a href="labs/lab04.html#p2">性能 2</a>。</p></div>
+<p>下面的演示分两幕。第 1 幕画出采样、合并计数、画火焰图的过程。数字按视频里的 perf report 折算。第 2 幕是上面这组本机实测的对照。</p>
+<div data-vz="ch04-profilers"></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>火焰图里某个块很宽，就以为它被调用了很多次。宽度只说明它占的时间多。可能是调用多，也可能是单次就很慢。要精确的次数，得用 callgrind 或 cProfile 这类追踪型工具。另外，没带 <code>-g</code> 或省掉了帧指针，调用栈就会残缺。火焰图上只剩一堆地址。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s14" data-nav="内存 profiler" data-t="1:06:35">内存只涨不跌，就用内存 profiler 看谁在涨 <span class="ts">1:06:35</span></h2>
+<p class="lead">内存 profiler 记录堆内存随时间的变化。泄漏和过度分配，都能从曲线里看出来。</p>
+<div class="code"><div class="cap">mem.py · 本机实测（补充，非视频内容。注释是后加的）</div><pre>import tracemalloc
+tracemalloc.start()                          <span class="cm"># 从这里开始给内存记账</span>
+a = [0] * 1_000_000                          <span class="cm"># 一百万个元素的列表</span>
+cur, peak = tracemalloc.get_traced_memory()  <span class="cm"># 当前用量和峰值，单位是字节</span>
+print(cur // 1024, "KiB")                    <span class="cm"># 本机输出 7812 KiB，每个元素存一个 8 字节指针</span></pre></div>
+<p class="like"><b>打个比方</b>内存 profiler 像记账本。每笔开销都记下是哪一行花的。月底一对比，就知道钱从哪儿漏出去了。</p>
+<p>视频只顺带提了一句（<span class="ts">1:07:12</span>）。Valgrind 有多种“工具模式”。比如检查内存用得对不对，或者统计指令次数。讲义补充了专门的内存 profiler：</p>
+<div class="code"><div class="cap">bash · 讲义原文</div><pre>valgrind --tool=massif ./my_program
+ms_print massif.out.&lt;pid&gt;</pre></div>
+<p>Massif 记录堆内存随时间的使用情况。它能帮你发现内存泄漏和过度分配。Python 可以用 <a href="https://pypi.org/project/memory-profiler/" target="_blank" rel="noopener">memory-profiler</a> 逐行查看内存用量。</p>
+<div class="callout extra"><div class="ct">补充（非视频内容）：Python 标准库的 tracemalloc</div>
+<p>不装第三方包也行。<code>tracemalloc.start()</code> 之后，用 <code>tracemalloc.take_snapshot().statistics('lineno')</code> 按源码行统计当前分配的内存。两次快照相减，还能看出哪一行在涨。见<a href="https://docs.python.org/3/library/tracemalloc.html" target="_blank" rel="noopener">官方文档</a>。上面的最小例子用的就是它。</p></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑（补充，非视频内容）</div>
+<p>内存涨了，不一定是泄漏。缓存、预分配、列表扩容，都会让内存先涨一截。要看的是曲线。跑得越久涨得越多，而且从不回落，才像泄漏。只看某一刻的总量，很容易冤枉好代码。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s15" data-nav="把性能数据画出来" data-t="1:07:12">性能数据要画成图，表格看不出规律 <span class="ts">1:07:12</span></h2>
+<p class="lead">性能分析不只是找哪里慢。还要看耗时怎样随输入变化。几千行的数字表看不出规律，一张图就看出来了。</p>
+<div class="code"><div class="cap">bash · 写法示意</div><pre>echo "$(date +%s),$ms" &gt;&gt; latency.csv   <span class="cm"># 打日志时就写成“时间戳,数值”</span>
+gnuplot -e "set datafile separator ','; plot 'latency.csv' using 1:2 with lines"   <span class="cm"># 一行出图</span></pre></div>
+<p class="like"><b>打个比方</b>体检报告上一排数字，很难看出趋势。把十年的体重画成一条线，哪年突然胖了，一眼就看到。</p>
+<p>讲师举了个例子。比如一个像 grep 的搜索程序。你想知道它的耗时怎样随输入变化。变量有输入大小、模式长度和模式复杂度。一张大表格记满了输入多大、模式多长、用了多少微秒。这种表没什么用，要<strong>画出来</strong>（<span class="ts">1:07:55</span>）。</p>
+<div class="code"><div class="cap">bash · 讲义原文（注释译成中文）</div><pre><span class="cm"># 画一个 “时间戳,数值” 的 CSV</span>
+gnuplot -e "set datafile separator ','; plot 'latency.csv' using 1:2 with lines"</pre></div>
+<ul>
+<li><strong>让数据好画</strong>（讲义）。打印或记日志时，就用 CSV 或 JSON 这种整洁格式。比如 <code>1705012345,42.5</code>。这比一句话好处理得多。</li>
+<li><strong><a href="http://www.gnuplot.info/" target="_blank" rel="noopener">gnuplot</a></strong> 为 shell 而生。它和 bpftrace 一样，用 <code>-e</code> 传一段小程序。适合快速出图（<span class="ts">1:08:33</span>）。</li>
+<li><strong>matplotlib 和 ggplot2</strong> 适合反复切分、变换数据，验证猜想。讲师最喜欢 ggplot2 的 <strong>facet</strong>，也就是分面（<span class="ts">1:09:47</span>）。它按某一列把数据拆成一组并排的小图。再用颜色、行列编码更多维度，一次看清五维数据。</li>
+</ul>
+<div class="callout tip"><div class="ct">讲义里的例子</div>
+<ul>
+<li>画出请求延迟随时间的曲线。百分位数看不出的周期性变慢，曲线上一目了然。比如垃圾回收、定时任务、流量模式。</li>
+<li>往一个不断增长的数据结构里插元素，画出耗时。底层数组<strong>容量翻倍</strong>时，会出现特征尖峰。</li>
+<li>按维度分面，比如请求类型、用户群、服务器。常常发现“全系统问题”其实只出在某一类上。</li>
+</ul></div>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>只看平均延迟，一切正常。可每隔一分钟就有一次尖峰，平均值把它抹平了。用户偏偏就撞上了那一下。所以别只盯一个汇总数，把原始数据按时间画出来看看。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s16" data-nav="提前想好记录什么" data-t="1:11:35">以后要分析的数，现在就记进日志 <span class="ts">1:11:35</span></h2>
+<p class="lead">讲师的结束语把首尾连了起来。以后想分析的数据，现在就用结构化的形式记进日志。真需要时，直接解析、画图。</p>
+<div class="code"><div class="cap">python · 写法示意</div><pre>log.info(json.dumps({"event": "search",
+                     "input_bytes": n,        <span class="cm"># 输入多大</span>
+                     "pattern_len": len(p),   <span class="cm"># 模式多长</span>
+                     "us": elapsed}))         <span class="cm"># 用了多少微秒。以后直接拿去画图</span></pre></div>
+<p class="like"><b>打个比方</b>像搬家前就给每个箱子贴好标签。现在多花一分钟，以后找东西就不用把箱子全拆开。</p>
+<p>讲师说，你要是知道以后会做性能分析，就别等。早点把相关的数<strong>记进日志</strong>。比如输入多大、函数用了多久、内部的图有多大。尽量用结构化的形式。等到真需要时，信息已经在日志里了。直接解析、画图，就能看出潜在问题。比如“扩展性悬崖”。</p>
+<div class="callout bad"><div class="ct">为什么会在这里踩坑</div>
+<p>日志只写一句话，比如 “search took a while”。出了性能问题想回头分析。这才发现没记输入大小，也没记耗时。只能补上日志，再等问题重现一次。</p></div>
+
+<!-- ============================================================ -->
+<h2 id="s17" data-nav="一页带走" data-t="1:12:48">一页带走：本讲结论都在这几行里 <span class="ts">1:12:48</span></h2>
+<p class="lead">把本讲浓缩成几行命令。每行的注释就是结论和考点。</p>
+<div class="code"><div class="cap">bash · 本讲速查（注释即考点）</div><pre>logging.basicConfig(level=logging.INFO)   <span class="cm"># 日志按级别过滤。配置放在最前面，不然会被忽略</span>
+b merge, len(left) == 2                   <span class="cm"># pdb 条件断点用逗号，gdb 用 if</span>
+<span class="cm"># 为什么要条件断点：前两次合并 i 等于 j，bug 不显现</span>
+watch students[1].id                      <span class="cm"># 观察点：值一变就停，回答“谁改了它”</span>
+rr record ./prog; rr replay               <span class="cm"># 录一次，随便倒着放。只支持 Linux</span>
+(rr) reverse-continue                     <span class="cm"># 倒放命中观察点时，New value 才是更早的值</span>
+strace -f ./prog 2&gt;&amp;1 | less              <span class="cm"># -f 跟子进程。追踪写在 stderr，要先 2&gt;&amp;1</span>
+gcc -fsanitize=address -g prog.c          <span class="cm"># ASan：运行时抓越界和 use-after-free</span>
+time ./prog                               <span class="cm"># real 2.0 s，user 0.1 s：在等，加 CPU 没用</span>
+strace -T ./prog                          <span class="cm"># 接着查它在等什么：看哪个系统调用耗时长</span>
+hyperfine --warmup 3 'a' 'b'              <span class="cm"># 快 1.8 ± 0.6 倍：误差太大，别急着下结论</span>
+perf record -g ./prog; perf report        <span class="cm"># 采样找热点。Self 算自身，Children 连带子调用</span>
+<span class="cm"># 火焰图的宽度是时间占比，不是调用次数。要次数就用 callgrind 或 cProfile</span></pre></div>
+<ul class="keys">
+<li>print 调试仍然最常用。修好 bug 后，把 print 改成带级别的日志留下。结构化日志方便事后提取和画图。</li>
+<li>调试器能设断点，断点可以带条件。还能单步、看变量、看调用栈、设观察点。gdb 和 lldb 通用，pdb 这类是语言专用。</li>
+<li>rr 录一次就能确定性回放，还能<strong>倒着执行</strong>。配合观察点，直接找到谁改了它。它只支持 Linux，还要小心 Heisenbug。</li>
+<li>strace 看程序和内核的边界。要统计用 bpftrace，查网络用 tcpdump、Wireshark 和 mitmproxy。</li>
+<li>内存 bug 用 sanitizer，要重新编译但够快。Valgrind 不用重新编译，但很慢。</li>
+<li>性能先测量。time 分清 real、user、sys。基准测试多跑几次，看均值和 σ。perf 加火焰图找热点，callgrind 求精确。最后把数据画出来。</li>
+</ul>
+<div class="callout key"><div class="ct">在整门课里的位置 · 下一步</div>
+<p>前三讲给了你 shell、命令行环境和编辑器。这一讲教你在程序不听话或太慢时，怎么看清它。下一讲是版本控制与 Git，会讲到 <code>git bisect</code>。它在历史里二分查找引入 bug 的那次提交。这又是一种调试手段。现在去做<a href="labs/lab04.html">本讲练习的可视化笔记</a>。</p></div>
+
+</article></main>
+<script src="assets/vz.js"></script>
+<script src="assets/viz/ch04-debug.js"></script>
+<script src="assets/viz/ch04-trace.js"></script>
+<script src="assets/viz/ch04-profile.js"></script>
+</body>
+</html>

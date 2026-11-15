@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>练习 04 · 调试与性能分析 · Missing Semester 2026</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="../assets/vz.css">
+<link rel="stylesheet" href="../assets/lab.css">
+<script>window.PAGE = { key: 'lab04', ch: 'ch04', type: 'lab', base: '../' };</script>
+<script src="../assets/course.js"></script>
+<script src="../assets/dg.js"></script>
+<script src="../assets/app.js"></script>
+<script src="data/lab04.js"></script>
+</head>
+<body>
+<main><article class="doc">
+
+<header class="lab-head">
+  <div class="k">LAB 04 · 对应 <a href="../ch04.html">第 4 讲 · 调试与性能分析</a></div>
+  <h1>练习可视化笔记 · 调试与性能分析</h1>
+  <p class="lede">讲义第 4 讲一共 10 道练习，调试 5 道，性能分析 5 道。这里逐题讲。每题先亮结论，再给真跑的代码和输出。接着打个比方讲原理，最后指出坑在哪。考点都写在代码注释里。官方不给答案，题解是笔记作者写的。<strong>所有输出都由脚本在本机真跑后自动收集</strong>。生成时间是 <b id="labGen">…</b>。本讲很多工具只能在 Linux 上跑。每一处都写明了没实测的原因，以及本机的替代做法。</p>
+  <div class="lab-prog" id="labProg"><span class="t"></span><div class="bar"><div class="f"></div></div><button class="btn sm" id="labGo" type="button">定位到第一道未完成的题</button></div>
+  <div class="lab-legend">
+    <span><span class="wb gb">Git Bash 5.3 · Windows 本机</span> 真跑</span>
+    <span><span class="ec na">未实测</span> 本机没有对应环境，写明原因</span>
+    <span><span class="ann" style="display:inline-flex;margin:0;padding:1px 8px"><span class="ar">L3</span></span> 注释层（不可选中，复制不会带上）</span>
+  </div>
+</header>
+
+<h2 id="env" data-nav="环境检查">环境检查：本机是 Windows，Linux 工具大多跑不了</h2>
+<p class="lead">本页命令都在 Windows 的 Git Bash 里真跑。rr、perf 这类只能在 Linux 上跑的，标成了未实测。</p>
+<p>动手前先确认工具链。下面是生成本页时，在本机真跑的检查命令和输出：</p>
+<div data-env="gitbash"></div>
+<div class="callout warn"><div class="ct">本机限制与处理办法</div>
+<ul>
+<li><strong>没有 Linux</strong>：Docker Desktop 一启动就崩，WSL 里也没有可用的发行版。题目点名的这些工具全都跑不了：rr、Linux 版 strace、perf、bpftrace。还有 taskset、ss 和 hyperfine。这些命令标成<strong>未实测</strong>。旁边给出本机能真跑的等价实验。</li>
+<li><strong>有的工具</strong>：MinGW-w64 的 gcc 13、clang 17、gdb 14，但<strong>没有</strong> AddressSanitizer 运行时。Python 3.13，pdb 和 cProfile 都是标准库。Git Bash 自带的 MSYS 版 strace。Windows 自带的 netstat 和 <code>start /affinity</code>。</li>
+<li><strong>Git Bash 的 time 有坑</strong>。原生 Windows 程序，比如 gcc 编出的 exe 和 python，它算不准。报的 user、sys 几乎总是 0.015 s，只能看 real。性能 1 实测过。</li>
+<li><strong>数字会变</strong>：计时、CPU 百分比、PID 每次运行都不同。本机同时还有别的程序在跑，所以波动偏大。</li>
+</ul></div>
+<div class="callout tip"><div class="ct">怎么用这一页</div>
+<p>代码块右上角有个“复制”。它复制的是源文件的原始字节，不带行号和注释层。“注释”按钮能隐藏或显示所有注释。开关状态记在浏览器里。每道题标题右边可以勾“完成”。想自己验证，就按<a href="#selfcheck">页尾“自查”</a>的方法重跑。</p></div>
+
+<!-- ======================= 调试 1 ======================= -->
+<h2 id="d1" data-nav="调试 1 · 归并排序的 bug">调试 1 · 归并排序取错了下标，条件断点一停就看见 <label class="ex-done"><input type="checkbox" data-ex="d1">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">Git Bash 实测</span></div>
+<p class="q-orig"><b>原题</b>：下面的伪代码实现了归并排序，但有一个 bug。用你喜欢的语言实现它。再用调试器找到并修复 bug。gdb、lldb、pdb 或 IDE 的调试器都行。测试向量：<code>merge_sort([3, 1, 4, 1, 5, 9, 2, 6])</code> 应返回 <code>[1, 1, 2, 3, 4, 5, 6, 9]</code>。用断点单步执行 merge 函数，找出是在哪里选错了元素。</p>
+<p class="lead">bug 在第 18 行：从 right 取元素，却用了 left 的下标 <code>i</code>。条件断点停在两边各 2 个元素的那次合并。打印一下下标就看见了。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>调试器的基本命令，见<a href="../ch04.html#s3">第 4 讲第 3 节</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：把伪代码逐行翻译成 Python</div><div data-file="d1/msort.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：先看现象</div><div data-run="d1-a"></div>
+<p>结果里 4 和 5 各出现两次，2 和第二个 1 却不见了。有元素被重复取，也有元素被漏掉。下一步用调试器看合并过程。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理：断点设在哪</div>
+<p>8 个元素会调用 merge 7 次。前两次是 1+1 的合并，此时 i 和 j 都是 0。就算代码用错了下标，结果也“碰巧正确”。所以直接 <code>b merge</code>，要按很多次 <code>c</code>。加上条件 <code>len(left) == 2 and len(right) == 2</code>，第一次停下就是 <code>merge([1, 3], [1, 4])</code>。把调试命令写进文件，用 <code>&lt;</code> 喂给 pdb，整个会话就能重放：</p>
+<div data-file="d1/step.pdb"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：单步走一遍</div><div data-run="d1-b"></div>
+<p><strong>输出怎么读</strong>：<code>&gt; msort.py(14)merge()</code> 表示停在第 14 行，在 merge 函数里。<code>-&gt;</code> 后面是<strong>即将执行</strong>的那行。关键在倒数第 4 行。停在第 18 行时，输出是 <code>(1, 0, 4, 1)</code>。也就是 i=1、j=0。应该取 <code>right[j]</code>=1，代码却取了 <code>right[i]</code>=4。再下一步，<code>result</code> 就成了 <code>[1, 4]</code>。为了好读，命令用 sed 去掉了 pdb 打印的 Windows 绝对路径前缀。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：更快的办法，条件断点直接盯住 i ≠ j</div><div data-run="d1-c"></div>
+<p>断点设在可疑的第 18 行，条件是 <code>i != j</code>。只有下标不同时，用错下标才会产生错误结果。<code>w</code> 打印的调用栈从下往上读。从 <code>&lt;module&gt;</code> 开始，到第 26 行的 merge_sort。再到第 5 行递归，第 7 行调用 merge。最后停在第 18 行。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>修：只改一个字母</div><div data-file="d1/msort_fixed.py" data-new="18"></div>
+<p>再写一个和 Python 内置 <code>sorted</code> 对拍的随机测试。防止只对一个测试向量“碰巧正确”：</p><div data-file="d1/test_msort.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="d1-e"></div></div>
+<p class="like"><b>打个比方</b>i 和 j 像两个收银员，各管一条队。第 18 行让 j 那队的顾客，按 i 的号码去结账。两人号码碰巧一样时，看不出毛病。</p>
+<p>第 4 讲第 3 节有个调试器演示（<a href="../ch04.html#s3">去看</a>）。它的第 1 幕把这次单步画成了动画。调用栈、下标指针和结果数组都在里面。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：把 gdb 的条件写法用在 pdb 里</div>
+<div data-run="d1-d"></div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>b 18 if i != j</code>，这是 gdb 的写法</div></div>
+<div class="row"><b>真实报错</b><div><code>*** The specified object '18 if i != j' is not a function or was not found along sys.path.</code>。断点根本没设上，程序直接跑完。之后的 <code>p i, j</code> 在模块作用域里执行，报 NameError。</div></div>
+<div class="row good"><b>正确写法</b><div>pdb 用逗号：<code>b 18, i != j</code>。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>b merge, len(left) == 2 and len(right) == 2   <span class="cm"># 条件断点：跳过前两次 1+1 的合并</span>
+<span class="cm"># 前两次 merge 为什么是对的：两边各 1 个元素，走到 else 时 i = 0 = j</span>
+<span class="cm"># 于是 right[i] 碰巧等于 right[j]。bug 只在 i ≠ j 时显现</span>
+<span class="cm"># 所以一个测试向量不够，要和 sorted 随机对拍</span></pre></div>
+
+<!-- ======================= 调试 2 ======================= -->
+<h2 id="d2" data-nav="调试 2 · 谁改了 id">调试 2 · 循环多跑一圈，越界写进了下一个 id <label class="ex-done"><input type="checkbox" data-ex="d2">完成</label></h2>
+<div class="ex-meta"><span class="tag lnx">rr 未实测</span><span class="tag gb">gdb 观察点实测</span></div>
+<p class="q-orig"><b>原题</b>：安装 <a href="https://rr-project.org/" target="_blank" rel="noopener">rr</a>，用反向调试找一个内存破坏 bug。把讲义的程序存成 <code>corruption.c</code>，用 <code>gcc -g corruption.c -o corruption</code> 编译运行。学生 1 的 id 被改坏了，可改坏它的函数只碰了学生 0。用 <code>rr record ./corruption</code> 和 <code>rr replay</code> 找出凶手。对 <code>students[1].id</code> 设观察点。在损坏发生后 <code>reverse-continue</code>，找到究竟是哪一行覆盖了它。</p>
+<p class="lead"><code>curve_scores</code> 的循环跑到了 i = 3。<code>scores[3]</code> 越界，正好落在 <code>students[1].id</code> 上。gdb 观察点正着跑就能抓到，不一定要 rr。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>rr 与反向调试，见<a href="../ch04.html#s4">第 4 讲第 4 节</a>。gdb 的 watch 与重跑，见同一节的学生提问。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>讲义的程序（逐字）</div><div data-file="d2/corruption.c"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：现象</div><div data-run="d2-a"></div></div>
+<div class="blk why"><div class="bh"><i>?</i>原理：内存布局</div>
+<figure class="fig"><script>
+DG('flow', { nodeH: 46, cols: [
+  [ { id: 'a', l: 'id = 1001', s: '+0', tone: 'data', mono: true } ], [ { id: 'b', l: 'scores[0..2]', s: '+4 +8 +12', tone: 'data', mono: true } ],
+  [ { id: 'c', l: 'id = 1002', s: '+16 = scores[3]?!', tone: 'bad', mono: true } ], [ { id: 'd', l: 'scores[0..2]', s: '+20 +24 +28', tone: 'teal', mono: true } ]
+], edges: [ ['a', 'b'], ['b', 'c', 'i = 3 越界', 'bad'], ['c', 'd'] ] });
+</script><figcaption>students[2] 是连续的 8 个 int。students[0].scores[3] 的地址，正好是 students[1].id</figcaption></figure></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：rr 版，题目要求的做法</div><div data-run="d2-rr"></div>
+<p>在 Linux 上，<code>rr replay</code> 会进入 gdb 界面。然后依次输入下面的命令。它们未实测，是按讲义和视频的用法写的：</p>
+<div class="code"><div class="cap">rr replay 里的命令（未实测）</div><pre>(rr) break 40                  <span class="cm"># 停在 if (students[1].id != 1002)：此时已经坏了</span>
+(rr) continue
+(rr) watch -l students[1].id   <span class="cm"># -l：按地址盯住这 4 个字节</span>
+(rr) reverse-continue          <span class="cm"># 倒着执行，直到它的值变化</span></pre></div>
+<p>预期会停在 curve_scores 第 24 行附近，i = 3 的那次 <code>+=</code>。倒放时 Old 和 New 是反的，New 是更早的 1002。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>本机替代：gdb 观察点，正着跑同样能抓到</div><div data-file="d2/watch.gdb"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="d2-b"></div>
+<p><strong>输出怎么读</strong>：<code>Hardware watchpoint 2</code> 说明 gdb 用的是 CPU 的调试寄存器。这几乎不拖慢程序。命中时打印 Old value = 1002、New value = 1007。程序停在<strong>写入之后</strong>的那条语句，也就是第 23 行的 <code>i++</code>。<code>p i</code> 得 3，两个地址都是 <code>&lt;students+16&gt;</code>。程序自己的 printf 输出全挤在最后。因为 stdout 接的是管道，会被整块缓冲，到退出才刷出。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>修：循环上界改成 3</div><div data-run="d2-c"></div></div>
+<p class="like"><b>打个比方</b>观察点像在保险柜上装了警报。谁动了柜子，警报当场就响，还告诉你是谁的手。你不用守着，也不用猜。</p>
+<p>第 4 讲第 3 节有演示（<a href="../ch04.html#s3">去看</a>）。它的第 2 幕逐步画出了这次观察点。第 4 节的演示，是视频里 rr 倒放的版本。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>watch -l students[1].id   <span class="cm"># -l 按地址盯住这 4 个字节，谁写它就停</span>
+<span class="cm"># 这题的 bug 每次都复现，正着跑 gdb 观察点就够了</span>
+<span class="cm"># rr 的优势一：偶发 bug 只要录到一次，就能无限次确定性重放</span>
+<span class="cm"># rr 的优势二：从“发现损坏”处倒着走，不用事先猜断点（视频 17:53–18:25）</span></pre></div>
+
+<!-- ======================= 调试 3 ======================= -->
+<h2 id="d3" data-nav="调试 3 · ASan 与 use-after-free">调试 3 · free 之后再写，程序照常跑，ASan 才报错 <label class="ex-done"><input type="checkbox" data-ex="d3">完成</label></h2>
+<div class="ex-meta"><span class="tag lnx">ASan 未实测</span><span class="tag gb">编译期检查实测</span></div>
+<p class="q-orig"><b>原题</b>：把讲义的程序存成 <code>uaf.c</code>。先不加 sanitizer 编译运行：<code>gcc uaf.c -o uaf &amp;&amp; ./uaf</code>。它可能看起来正常。再加上 AddressSanitizer：<code>gcc -fsanitize=address -g uaf.c -o uaf &amp;&amp; ./uaf</code>。读错误报告。ASan 找到了什么 bug？修复它。</p>
+<p class="lead">第 12 行往已释放的内存写了一个字节。不开检查时，这一写通常“成功”。ASan 会当场拦下，报 heap-use-after-free。本机没有 ASan，靠 gcc 的编译期警告也能发现。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>sanitizer 与 Valgrind，见<a href="../ch04.html#s8">第 4 讲第 8 节</a>。那里的演示画了 ASan 的影子内存。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>讲义的程序（逐字）</div><div data-file="d3/uaf.c"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：不加检查</div><div data-run="d3-a"></div>
+<p>果然“看起来正常”。free 只是把内存还给分配器，字节还在。往里写，也不会立刻出事。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：题目要求的 ASan 版</div><div data-run="d3-asan"></div>
+<p>本机为什么不行？下面是真实的链接错误，工具链路径已替换成 <code>&lt;mingw64&gt;</code>：</p><div data-run="d3-b"></div></div>
+<div class="blk why"><div class="bh"><i>?</i>原理：ASan 会报什么</div>
+<p>ASan 给每 8 字节内存配 1 字节“影子”。free 之后，它把这块的影子标成“已释放”。还把内存放进隔离区，暂时不复用。编译器在每次读写前插入检查。于是第 12 行 <code>greeting[0] = 'J'</code> 一执行，就会被拦下。报告写的是 <strong>heap-use-after-free</strong>，并给出三段调用栈。第一段是非法写入发生在哪，也就是 WRITE of size 1。第二段是这块内存在哪里被 free。第三段是它最初在哪里被 malloc。报告格式见 ASan 文档，这是补充，本机未实测。视频里 heap overflow 的报告也是这样的结构（<span class="ts" data-v="8VYT9TcUmKs">48:28</span>）。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：本机能做的，编译期就发现</div><div data-run="d3-c"></div><div data-run="d3-d"></div>
+<p>gcc 12 起有 <code>-Wuse-after-free</code>，它包含在 -Wall 里。它和 <code>-fanalyzer</code> 静态分析，都指出了第 12、13 行。区别在于覆盖面。编译期分析只能抓住编译器“看得出来”的路径。ASan 在运行时检查每一次真实的访问。指针在函数之间传来传去，它也能抓住。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>修：先用、后释放</div><div data-file="d3/uaf_fixed.c" data-new="7,11-15"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：-Wall 与 -fanalyzer 都不再报警</div><div data-run="d3-e"></div></div>
+<p class="like"><b>打个比方</b>退了房的房卡，门锁有时还没换。你刷一下，门照样开。可那间房也许已经住进了别人。ASan 就是退房后立刻换锁的前台。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>free(greeting); greeting = NULL;   <span class="cm">// 释放后置 NULL：再误用会当场崩在 NULL 上</span>
+<span class="cm">// ASan 为什么要隔离已释放的内存？</span>
+<span class="cm">// 马上复用的话，这块的影子又被标成“可访问”，悬空指针再写进去就查不出来</span>
+<span class="cm">// 隔离区让刚释放的内存一碰就报错（补充，见 ASan 文档）</span></pre></div>
+
+<!-- ======================= 调试 4 ======================= -->
+<h2 id="d4" data-nav="调试 4 · strace">调试 4 · ls -l 比 ls 多做了 lstat 和读时区文件 <label class="ex-done"><input type="checkbox" data-ex="d4">完成</label></h2>
+<div class="ex-meta"><span class="tag lnx">Linux strace 未实测</span><span class="tag gb">MSYS strace 实测</span></div>
+<p class="q-orig"><b>原题</b>：用 <code>strace</code>（Linux）或 <code>dtruss</code>（macOS）追踪 <code>ls -l</code> 这类命令的系统调用。它都做了哪些调用？再追踪一个更复杂的程序，看看它打开了哪些文件。</p>
+<p class="lead">加了 -l，ls 要对每个文件取一次元数据。它还要去读时区文件。Linux 上是 statx，本机 MSYS 里是 lstat。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>strace、<code>-e</code> 过滤、<code>-f</code> 跟随子进程，见<a href="../ch04.html#s5">第 4 讲第 5 节</a>。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：题目要求的 Linux 版</div><div data-run="d4-linux"></div>
+<p>在 Linux 上你会看到下面这些，依据是视频 27:22–33:43。开头是 execve 和加载共享库。然后 openat 打开当前目录，getdents64 读目录项。因为加了 -l，每个文件做一次 statx 和 listxattr。还会打开时区文件。<code>strace -c</code> 则在结束时打印汇总，列出每种调用的次数和耗时。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>原理：本机替代</div><p>Git Bash 自带的 <code>strace</code> 是 Cygwin/MSYS 版。它追踪的是 MSYS 运行时里的 POSIX 层调用，运行时就是 msys-2.0.dll。它不追踪 Windows 内核调用。<code>-m syscall</code> 只保留这一类消息。原始输出一行一个内部函数，非常啰嗦。所以写个 awk 脚本，只挑出 POSIX 层的调用。再去掉路径，压成一条时间线：</p>
+<div data-file="d4/calls.awk"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：ls</div><div data-run="d4-a"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：ls -l</div><div data-run="d4-b"></div>
+<p><strong>输出怎么读</strong>：ls -l 一上来就去找翻译文件。找的是“时间格式”的翻译。三种 locale 名各试一次，都返回 -1，表示不存在。然后 lstat 目录本身。读目录时，每读出一个要显示的文件，就 lstat 一次。拿的是大小、权限和时间。最后打开时区文件 <code>/usr/share/zoneinfo/UTC</code>。这个文件不存在，ls 退回内置的 UTC，写出 102 字节。这和视频在 Linux 上看到的现象一一对应。-l 让程序多做了 stat 和时区相关的工作。</p></div>
+<div data-vz="lab04-strace"></div>
+<p class="like"><b>打个比方</b>ls 像只报菜名的服务员。ls -l 像还要报价格、产地和上菜时间的服务员。多报一样，就得多跑一趟后厨。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>strace -o t.trace -m syscall ls d   <span class="cm"># MSYS 版：只看 POSIX 层，写进文件慢慢看</span>
+<span class="cm"># 不带 -l 也要 readdir 到 . 和 ..：它们也是目录项，读出来再由 ls 决定显不显示</span>
+<span class="cm"># 系统调用层面看到的是“读了什么”，不是“显示了什么”</span>
+ls -a d                             <span class="cm"># 推理：readdir 次数不变，变的是 write 的字节数（未实测）</span></pre></div>
+
+<!-- ======================= 调试 5 ======================= -->
+<h2 id="d5" data-nav="调试 5 · 让 LLM 解释报错">调试 5 · LLM 解释报错很快，对不对要拿编译器核对 <label class="ex-done"><input type="checkbox" data-ex="d5">完成</label></h2>
+<div class="ex-meta"><span class="tag gb">报错本机实测</span><span class="tag ai">LLM 对话未实测</span></div>
+<p class="q-orig"><b>原题</b>：用 LLM 帮你调试一条难懂的报错。找一条编译器报错，尤其是 C++ 模板或 Rust 的。让它解释，并给出修复。也试试把 strace 或 AddressSanitizer 的输出交给它。</p>
+<p class="lead">贴完整的代码和报错，问“哪一行是我的错”。拿到回答后，用 <code>rustc --explain</code> 和重新编译去核对。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>AI 辅助调试的长处与局限，见<a href="../ch04.html#s9">第 4 讲第 9 节</a>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>准备两条真实的“难懂报错”</div><div data-file="d5/borrow.rs"></div><div data-file="d5/sort_map.cpp"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="d5-a"></div><div data-run="d5-b"></div>
+<p>C++ 版共 26 行。真正的原因是第 7 行把 map 的迭代器交给了 sort。它埋在标准库头文件的深处。这正是讲义说 LLM 擅长解释的那类报错。</p></div>
+<div class="blk why"><div class="bh"><i>?</i>怎么问：提问模板</div><div data-file="d5/prompt.txt"></div>
+<p>要点有四条。贴<strong>完整</strong>的代码和报错，不要只贴最后一行。问“哪一行是我自己的错”。要求它说明如何验证。允许它反问。strace 和 ASan 的输出也一样，连同你运行的命令一起贴上。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>核对：编译器自己的官方解释</div><div data-run="d5-c"></div></div>
+<div class="callout extra"><div class="ct">未实测部分与判断标准</div>
+<p>本页没有真的去调用某个 LLM。那需要联网账户，回答也每次不同。所以这里不写“我问了之后它说……”。你自己做时，可以用下面几条判断它靠不靠谱：</p>
+<ul>
+<li>Rust：它应该指出第 3 行的不可变借用一直活到第 5 行。这和第 4 行的 <code>push</code> 冲突。push 要可变借用，还可能导致重新分配。正确改法有两种。把 <code>push</code> 挪到最后一次使用 <code>first</code> 之后。或者复制出值，写成 <code>let first = scores[0];</code>。和上面 <code>rustc --explain E0502</code> 的说法对得上，才算对。</li>
+<li>C++：它应该说出两点。map 已经按键有序，不能也不需要用 std::sort。sort 要随机访问迭代器。想按值排序，正确做法是先拷进 <code>std::vector&lt;std::pair&lt;…&gt;&gt;</code> 再排。改完要<strong>重新编译</strong>验证。</li>
+<li>危险信号（讲义）：报错消失了，程序的含义却变了。比如 Rust 里到处 <code>clone()</code>，C++ 里强制类型转换。或者编出不存在的编译器选项、函数。</li>
+</ul></div>
+<p class="like"><b>打个比方</b>LLM 像一本会说话的错题集。它见过太多类似的错，一眼就认出是哪类。但答案对不对，还得翻到书后对一下标准答案。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>rustc --explain E0502   <span class="cm"># 官方解释：借用期间不能再可变借用。拿它核对 LLM 的回答</span>
+g++ -c sort_map.cpp     <span class="cm"># 26 行报错，真正原因在第 7 行：map 的迭代器不能交给 std::sort</span>
+<span class="cm"># LLM 为什么更擅长“找”而不是“修”：找 bug 靠见过大量类似模式</span>
+<span class="cm"># 修 bug 要懂这个程序的意图和约束，它容易只让症状消失（讲义 Limitations，视频 53:52）</span></pre></div>
+
+<!-- ======================= 性能 1 ======================= -->
+<h2 id="p1" data-nav="性能 1 · perf stat">性能 1 · perf stat 看 CPU 忙不忙、每周期跑几条指令 <label class="ex-done"><input type="checkbox" data-ex="p1">完成</label></h2>
+<div class="ex-meta"><span class="tag lnx">perf 未实测</span><span class="tag gb">time 实测</span></div>
+<p class="q-orig"><b>原题</b>：用 <code>perf stat</code> 获取你选的某个程序的基本性能统计。各个计数器是什么意思？</p>
+<p class="lead">task-clock 除以墙钟时间，就是用了几个 CPU。IPC 低于 1，往往是在等内存或分支预测失败。本机没有 perf，用 time 看 CPU 忙不忙。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>计时与 real、user、sys，见<a href="../ch04.html#s10b">第 4 讲第 10 节</a>。perf 见<a href="../ch04.html#s13">第 13 节</a>。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="p1-linux"></div></div>
+<div class="blk why"><div class="bh"><i>?</i>原理：讲义输出逐行解读</div>
+<div class="tbl-wrap"><table class="tbl">
+<tr><th>计数器（讲义输出）</th><th>含义</th></tr>
+<tr><td><code>3,210.45 msec task-clock · 0.998 CPUs utilized</code></td><td>进程实际占用 CPU 的时间。除以墙钟时间约等于 1，说明是单线程，而且一直在算</td></tr>
+<tr><td><code>12 context-switches</code></td><td>上下文切换：进程被换下 CPU 的次数。原因是等待 I/O 或时间片用完</td></tr>
+<tr><td><code>0 cpu-migrations</code></td><td>被调度器挪到另一个 CPU 核上的次数</td></tr>
+<tr><td><code>156 page-faults</code></td><td>缺页：访问的内存页还没映射，要内核去处理。第一次碰到新内存时常见</td></tr>
+<tr><td><code>cycles · 3.845 GHz</code></td><td>CPU 时钟周期数。除以 task-clock，得出运行频率</td></tr>
+<tr><td><code>instructions · 0.80 insn per cycle</code></td><td>执行的指令数。IPC 是每周期指令数。低于 1 往往意味着在等内存，或者分支预测失败</td></tr>
+<tr><td><code>branches</code> / <code>branch-misses · 1.00%</code></td><td>分支指令总数和预测失败的比例。失败一次就要清空流水线</td></tr>
+</table></div>
+<p>表中的解释是补充知识，不是视频内容。可以对照 <code>man perf-stat</code> 和 perf wiki。讲义这段输出的数字很整齐，比如 12,345,678,901。它们明显是示意用的。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：本机能做的，time</div><div data-run="p1-a"></div>
+<p>纯计算的 bash 循环，user 加 sys 约占 real 的 86%，CPU 一直在忙。sleep 则几乎全是等待。这两个都是 MSYS 程序，time 的数字可信。</p>
+<div data-run="p1-b"></div>
+<p><strong>坑</strong>：对原生 Windows 程序 python，Git Bash 的 time 报 user 0.015 s。而 Python 自己用 <code>time.process_time()</code> 测得 0.47 s。time 拿不到这类子进程的 CPU 时间。</p></div>
+<p class="like"><b>打个比方</b>perf stat 像汽车的行车电脑。它报油耗、转速、急刹次数。IPC 就像发动机每转一圈跑了多远。转得多却跑得少，多半是在堵车。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>perf stat ./prog   <span class="cm"># task-clock 3210 ms、墙钟只有 1600 ms，可能吗？可能</span>
+<span class="cm"># 多线程程序在两个核上同时跑，CPU 时间之和是墙钟的 2 倍</span>
+<span class="cm"># perf 会显示约 2.0 CPUs utilized。这和 time 里 user 大于 real 是一回事（视频 56:10）</span></pre></div>
+
+<!-- ======================= 性能 2 ======================= -->
+<h2 id="p2" data-nav="性能 2 · perf record 与火焰图">性能 2 · 采样一看，大头时间花在 sin 和 cos 上 <label class="ex-done"><input type="checkbox" data-ex="p2">完成</label></h2>
+<div class="ex-meta"><span class="tag lnx">perf 未实测</span><span class="tag gb">Python 两类 profiler 实测</span></div>
+<p class="q-orig"><b>原题</b>：把讲义的程序存成 <code>slow.c</code>，带调试符号编译：<code>gcc -g -O2 slow.c -o slow -lm</code>。运行 <code>perf record -g ./slow</code>，再用 <code>perf report</code> 看时间花在哪。试着用 flamegraph 脚本生成火焰图。</p>
+<p class="lead">sin 和 cos 各占四成多。追踪型的 cProfile 数得准，但把程序拖慢了 2.6 倍。自己写的采样器几乎不拖慢。可它看不见 C 写的内置函数。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>perf、火焰图、callgrind，见<a href="../ch04.html#s13">第 4 讲第 13 节</a>。那里的演示画了从采样到火焰图的过程。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>讲义的程序（逐字）</div><div data-file="p2/slow.c"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：编译运行</div><div data-run="p2-a"></div>
+<p>1 亿次 sin 加 1 亿次 cos，这一次用了约 18.5 秒。多次运行在 11–19 秒之间波动。user 0.015 s 又是 Git Bash time 的坑。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：题目要求的 perf 版</div><div data-run="p2-linux"></div>
+<p>视频里讲师对同一个程序得到了结果。perf report 的 Self 列，cos 43.6%，sin 43.2%。火焰图里，main 之上一半是 cos，一半是 sin。见视频 <span class="ts" data-v="8VYT9TcUmKs">1:03:08</span> 和 <span class="ts" data-v="8VYT9TcUmKs">1:05:25</span>。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>本机替代：Python 版加两种 profiler</div><div data-file="p2/slow.py"></div>
+<p>追踪型用标准库 cProfile。采样型自己写一个，弄明白“采样”到底在做什么：</p>
+<div data-file="p2/sampler.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：追踪型 cProfile</div><div data-run="p2-b"></div>
+<p><strong>输出怎么读</strong>：200 万次函数调用一次不落。<code>tottime</code> 是函数自身的时间，不含它调用的。<code>cumtime</code> 包括子调用的总时间。这正好对应 perf report 的 Self 和 Children 两列。sin 0.170 s，cos 0.165 s，和视频里“各占一半”的结论一致。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：采样型 sampler.py</div><div data-run="p2-c"></div>
+<p>输出就是 flamegraph.pl 要的 folded stacks 格式，写成 <code>外层;…;内层 样本数</code>。99.2% 的样本落在第 8 行。因为 sin、cos 是 C 写的内置函数，没有 Python 栈帧。采样器就“看不见”它们。perf 遇到没有调试符号、没有帧指针的代码，也会这样。讲义的 debug symbols 提示说的就是这个。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：两种 profiler 的代价</div><div data-run="p2-d"></div>
+<p>直接运行 0.40 s。cProfile 下 1.05 s，慢了 2.6 倍。采样器下 0.39 s，几乎不变。这就是讲义说“采样型开销小，生产环境首选”的原因。</p></div>
+<p class="like"><b>打个比方</b>cProfile 像给每次函数调用都开发票。账一笔不差，可开票本身就耽误时间。采样器像隔一会儿拍张照，几乎不打扰人。可没挂工牌的人，照片里就认不出来。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>gcc -g -O2 slow.c -o slow -lm   <span class="cm"># -g 保留函数名和行号，报告里才不是一堆地址</span>
+<span class="cm"># -O2 可能把 slow_computation 内联进 main，火焰图就少一层（补充推理，未实测）</span>
+gcc -g -O2 -fno-omit-frame-pointer slow.c -o slow -lm   <span class="cm"># 想要清晰的调用栈，再加这个</span></pre></div>
+
+<!-- ======================= 性能 3 ======================= -->
+<h2 id="p3" data-nav="性能 3 · 基准测试">性能 3 · git grep 快 1.82 ± 0.60 倍，误差不小 <label class="ex-done"><input type="checkbox" data-ex="p3">完成</label></h2>
+<div class="ex-meta"><span class="tag lnx">hyperfine 未实测</span><span class="tag gb">bench.py 实测</span></div>
+<p class="q-orig"><b>原题</b>：用 <a href="https://github.com/sharkdp/hyperfine" target="_blank" rel="noopener">hyperfine</a> 对同一任务的两种实现做基准测试。比如 <code>find</code> 和 <code>fd</code>，<code>grep</code> 和 <code>ripgrep</code>，或者你自己代码的两个版本。</p>
+<p class="lead">可信的基准测试要做四件事。预热，多次重复，报告均值和波动，给倍数附上误差。本机用自己写的迷你 hyperfine，比较了 grep -r 和 git grep。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>hyperfine 见<a href="../ch04.html#s11">第 4 讲第 11 节</a>。那里的演示手推了倍数的不确定度。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：题目要求的 hyperfine</div><div data-run="p3-linux"></div>
+<p>本机没装 fd，ripgrep 也不在 PATH 上。所以比较对象换成 <code>grep -r</code> 和 <code>git grep</code>。搜的是课程网站仓库的一份副本，关键词是 “debug”。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>写：一个迷你 hyperfine</div><div data-file="p3/bench.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="p3-a"></div>
+<p><strong>输出怎么读</strong>：两个均值相差近一倍。但 grep 的 σ 很大，有 43.1 ms，最慢一次 255 ms。所以“快 1.82 ± 0.60 倍”的误差也很大。手推一下：r = 147.8 / 81.3 = 1.82。误差是 <code>σᵣ = 1.82 × √((43.1/147.8)² + (12.2/81.3)²)</code> = 1.82 × 0.328 ≈ 0.60。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：先确认两者做的是同一件事</div><div data-run="p3-b"></div>
+<p>两者都找到 108 行，结果一致，比较才有意义。git grep 只搜 git 跟踪的文件，默认多线程。grep -r 要遍历目录树上的所有文件。这里用 <code>--exclude-dir=.git</code> 跳过了仓库内部数据，用 <code>-I</code> 跳过二进制文件。</p></div>
+<p class="like"><b>打个比方</b>比两个人谁跑得快，不能各跑一次就定。要都热好身，各跑二十趟。再看平均成绩，还有每趟成绩晃得多厉害。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：各 time 一次就下结论</div>
+<div class="pit-card"><div class="row bad"><b>误区</b><div>各 <code>time</code> 一次就下结论。</div></div>
+<div class="row"><b>实际</b><div>同一条 grep 命令跑 20 次，最快 104 ms，最慢 255 ms。差了两倍多。第一次运行还可能特别慢，因为文件还不在磁盘缓存里。所以要预热，也就是 <code>--warmup</code>。</div></div>
+<div class="row good"><b>正确做法</b><div>预热，多次重复，报告均值 ± σ。比较两个命令前，先确认它们输出相同。尽量在安静的机器上测。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>python p3/bench.py 3 20 'grep …' 'git grep …'   <span class="cm"># 预热 3 次，再各测 20 次</span>
+<span class="cm"># hyperfine 默认经由 shell 运行命令，它会先测空 shell 的启动耗时</span>
+<span class="cm"># 再从结果里扣掉这部分（补充，见 hyperfine 文档）</span>
+<span class="cm"># bench.py 用 shlex 切词后直接启动程序，不经过 shell，所以没有这个问题</span></pre></div>
+
+<!-- ======================= 性能 4 ======================= -->
+<h2 id="p4" data-nav="性能 4 · htop 与 taskset">性能 4 · 3 个进程挤 2 个核，合计最多 200% <label class="ex-done"><input type="checkbox" data-ex="p4">完成</label></h2>
+<div class="ex-meta"><span class="tag lnx">taskset / stress / htop 未实测</span><span class="tag gb">start /affinity 实测</span></div>
+<p class="q-orig"><b>原题</b>：运行一个占用大量资源的程序，同时用 <code>htop</code> 监视系统。试着用 <code>taskset</code> 限制进程能用的 CPU：<code>taskset --cpu-list 0,2 stress -c 3</code>。为什么 stress 用不满三个 CPU？</p>
+<p class="lead">不是 stress 不想用，是只给了它两个 CPU。进程被限制在哪些核上，最多就只能拿到那么多 CPU 时间。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>资源监控见<a href="../ch04.html#s12">第 4 讲第 12 节</a>。CPU 时间除以墙钟时间，见<a href="../ch04.html#s10b">第 10 节</a>。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：题目要求的 Linux 版</div><div data-run="p4-linux"></div></div>
+<div class="blk why"><div class="bh"><i>?</i>原理</div>
+<p><code>stress -c 3</code> 启动 3 个忙等的工作进程，各自都想吃满一个核。<code>taskset --cpu-list 0,2</code> 只允许它们在 CPU 0 和 CPU 2 上运行。3 个进程挤 2 个核，调度器只能让它们轮流跑。两个核满载，每个 stress 进程平均约 2/3 个核。答案是：<strong>不是 stress 不想用，是只给了它两个 CPU</strong>。</p>
+<p>Windows 上对应的工具是 <code>start /affinity 掩码</code>。掩码 5 是二进制 0101，也就是 CPU 0 和 CPU 2。子进程会继承这个掩码。用一个 Python 脚本代替 stress：</p>
+<div data-file="p4/burn.py"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：不限制</div><div data-run="p4-a"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：只允许 CPU 0 和 CPU 2</div><div data-run="p4-b"></div>
+<p><strong>输出怎么读</strong>：不限制时，三个 worker 各拿到 80% 多。没到 100%，是因为机器上还有别的负载。限制后合计只有 121%，远不到 300%。也没到理论上限 200%。这两个核上还有其他程序在抢。数字每次运行都会变，但“合计不超过 200%”不会变。</p></div>
+<div data-vz="lab04-cpu"></div>
+<p class="like"><b>打个比方</b>三个人抢两台电脑。谁也别想独占一台，只能轮流用。三人加起来，最多也就用满两台。</p>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>taskset --cpu-list 0,1 stress -c 3   <span class="cm"># 开了超线程的机器上，结果可能更差</span>
+<span class="cm"># 很多系统把同一物理核的两个超线程编成相邻的号，比如 0 和 1</span>
+<span class="cm"># 它们共享执行单元，两个忙等进程拿不到两个完整物理核的算力</span>
+<span class="cm"># 这是补充推理，具体编号因系统而异，未实测</span></pre></div>
+
+<!-- ======================= 性能 5 ======================= -->
+<h2 id="p5" data-nav="性能 5 · 谁占了端口">性能 5 · netstat 找到 PID，Git Bash 里要用 kill -W <label class="ex-done"><input type="checkbox" data-ex="p5">完成</label></h2>
+<div class="ex-meta"><span class="tag lnx">ss 未实测</span><span class="tag gb">netstat 实测</span></div>
+<p class="q-orig"><b>原题</b>：常见问题是，想监听的端口已经被别的进程占了。先运行 <code>python -m http.server 4444</code>，在 4444 端口起一个最小的 web 服务器。在另一个终端里运行 <code>ss -tlnp | grep 4444</code> 找到这个进程。再用 <code>kill &lt;PID&gt;</code> 结束它。</p>
+<p class="lead">Linux 上用 <code>ss -tlnp</code> 查端口对应的 PID，再 kill。本机用 netstat 查。Git Bash 内建的 kill 不认 Windows PID，要换 <code>/bin/kill -W</code>。</p>
+<div class="blk know"><div class="bh"><i>K</i>先回顾</div><p>资源监控里的 ss 和 lsof，见<a href="../ch04.html#s12">第 4 讲第 12 节</a>。信号与 kill 见第 2 讲。</p></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑：题目要求的 Linux 版</div><div data-run="p5-linux"></div>
+<p><code>ss -tlnp</code> 里，-t 只看 TCP，-l 只看监听。-n 不解析名字，-p 显示进程。看别人的进程要 sudo。</p></div>
+<div class="blk write"><div class="bh"><i>{}</i>本机版：用 netstat 找 PID</div><div data-file="p5/who_listens.sh"></div></div>
+<div class="blk run"><div class="bh"><i>▶</i>跑</div><div data-run="p5-a"></div>
+<p><strong>输出怎么读</strong>：netstat 那一行的最后一列是 PID。tasklist 确认它是 python.exe。第一次 <code>kill $PID</code> 失败了，报 No such process。换成 <code>/bin/kill -W</code> 才成功。最后再查一次，端口已经空闲。脚本的 teardown 还会再检查一遍，确保没有残留的服务器。</p></div>
+<div data-vz="lab04-port"></div>
+<p class="like"><b>打个比方</b>端口像一个门牌号。netstat 是物业的登记簿，查得到谁住在 4444 号。可 Git Bash 的 kill 拿的是另一本花名册。同一个人，在两本册子上编号不同。</p>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：Git Bash 的 kill 不认 Windows PID</div>
+<div class="pit-card"><div class="row bad"><b>错误写法</b><div><code>kill 21200</code>，PID 来自 netstat</div></div>
+<div class="row"><b>真实报错</b><div><code>kill: (21200) - No such process</code>，见上面 p5-a 的输出</div></div>
+<div class="row"><b>原因</b><div>bash 内建的 kill 用的是 Git Bash（MSYS）自己的进程号。netstat 和 tasklist 给的是 Windows 进程号。两者不是一回事。</div></div>
+<div class="row good"><b>正确写法</b><div><code>/bin/kill -W PID</code>，-W 表示 Windows PID。或者用 <code>taskkill //PID PID</code>。</div></div></div></div>
+<div class="blk pit"><div class="bh"><i>!</i>为什么会在这里踩坑：端口冲突在 Windows 上可能不报错</div>
+<div data-run="p5-b"></div>
+<div class="pit-card"><div class="row"><b>现象</b><div>同一个端口起第二个 http.server，没有报 Address already in use。netstat 里出现两行 LISTENING。</div></div>
+<div class="row"><b>原因</b><div>Python 的 HTTPServer 默认开着 <code>SO_REUSEADDR</code>，也就是 <code>allow_reuse_address = True</code>。这个选项在 Windows 上比 Linux 宽松。它允许另一个套接字绑定到同一端口。在 Linux 上，第二个服务器会直接报 <code>OSError: [Errno 98] Address already in use</code>。这一条是补充，未实测。</div></div>
+<div class="row good"><b>启示</b><div>排查端口冲突时，别只靠报错。直接查 netstat 或 ss，看有几个进程在监听。</div></div></div></div>
+<div class="code"><div class="cap">考点（答案写在注释里）</div><pre>python -m http.server 4444 --bind 127.0.0.1   <span class="cm"># 只接受本机连接，做实验更安全</span>
+<span class="cm"># 默认的 0.0.0.0 会在所有网卡上监听</span>
+<span class="cm"># 局域网里的其他机器，也能访问你当前目录的文件</span></pre></div>
+
+<!-- ======================= 自查 ======================= -->
+<h2 id="selfcheck" data-nav="自查">自查：自己重跑一遍</h2>
+<p class="lead">本页的代码和输出，都是生成笔记时在本机真跑收集的。想验证，就把题解复制到空目录，在 Git Bash 里重跑。</p>
+<p>生成脚本和题解源文件都已删除，<strong>代码以本页为准</strong>。代码块的“复制”按钮，拿到的是原文件的原始字节。生成时间见页头。计时、百分比和 PID 每次都会不同。第 4 讲演示里引用的数字，取自本页这次生成的结果。</p>
+<div class="code"><div class="cap">考点速查（注释里写着答案）</div><pre>j += 1                         <span class="cm"># msort.py 第 18 行改对、第 16 行误写成这样：输出 [1, 1, 1, 1, 1, 1, 1, 3]</span>
+<span class="cm"># 取了左边的元素却移动右下标，i 永远停在 0。笔记作者本机试过（调试 1）</span>
+watch students[1].id           <span class="cm"># 要在 run 之后设：程序装进内存，地址才确定（调试 2）</span>
+free(greeting); greeting = NULL;   <span class="cm"># 挪到第 11 行之前：往 NULL 写，Segmentation fault，退出码 139</span>
+<span class="cm"># 这比 use-after-free 好，错误当场暴露。笔记作者本机试过（调试 3）</span>
+ls -a d                        <span class="cm"># readdir 还是 5 次：. 和 .. 本来就会读出来（调试 4，推理）</span>
+sys.setswitchinterval(0.0005)  <span class="cm"># sampler.py 第 35 行。GIL 默认 5 ms 才让一次，调小后采样才接近 1 ms（性能 2）</span></pre></div>
+
+</article></main>
+<script src="../assets/vz.js"></script>
+<script src="../assets/viz/lab04-run.js"></script>
+<script src="../assets/lab.js"></script>
+</body>
+</html>
